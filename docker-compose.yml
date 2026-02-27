@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  controller:
+    build: ./infra/controller
+    ports:
+      - "8080:8080"
+
+  rl-agent:
+    build: ./rl_engine
+    depends_on:
+      - controller
+
+  twin:
+    build: ./digital_twin
+    depends_on:
+      - controller
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow
+    ports:
+      - "5000:5000"
