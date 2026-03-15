@@ -1,0 +1,36 @@
+name: NT549 CI
+
+on:
+  push:
+    branches:
+      - nt549-rl
+
+jobs:
+  test-rl:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install -r rl_engine/requirements.txt
+
+    - name: Run Environment Test
+      run: |
+        python -c "
+        from rl_engine.env import SDNEnv;
+        env = SDNEnv();
+        s = env.reset();
+        print('Env OK')
+        "
+
+    - name: Run Short Training
+      run: |
+        python rl_engine/train_dqn.py --episodes 5

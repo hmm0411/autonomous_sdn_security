@@ -1,2 +1,7 @@
 requests
 mlflow
+numpy
+pandas
+scikit-learn
+torch
+gym

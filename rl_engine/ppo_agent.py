@@ -3,17 +3,17 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 
-from rl_engine.config import GAMMA, LR
+from rl_engine.config import GAMMA, LR, STATE_DIM, ACTION_DIM
 
 
 class ActorCritic(nn.Module):
 
-    def __init__(self, state_dim, action_dim):
+    def __init__(self):
         super(ActorCritic, self).__init__()
 
         # shared feature extractor
         self.shared = nn.Sequential(
-            nn.Linear(state_dim, 128),
+            nn.Linear(STATE_DIM, 128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU()
@@ -21,7 +21,7 @@ class ActorCritic(nn.Module):
 
         # actor network (policy)
         self.actor = nn.Sequential(
-            nn.Linear(128, action_dim),
+            nn.Linear(128, ACTION_DIM),
             nn.Softmax(dim=-1)
         )
 
@@ -46,7 +46,7 @@ class PPOAgent:
         self.action_dim = action_dim
         self.clip_eps = clip_eps
 
-        self.model = ActorCritic(state_dim, action_dim)
+        self.model = ActorCritic()
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=LR)
 
