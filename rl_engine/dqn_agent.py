@@ -3,20 +3,20 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 
-from rl_engine.config import GAMMA, LR, TARGET_UPDATE
+from rl_engine.config import GAMMA, LR, TARGET_UPDATE, STATE_DIM, ACTION_DIM, EPS_START
 
 
 class QNetwork(nn.Module):
 
-    def __init__(self, state_dim, action_dim):
+    def __init__(self):
         super(QNetwork, self).__init__()
 
         self.net = nn.Sequential(
-            nn.Linear(state_dim, 128),
+            nn.Linear(STATE_DIM, 128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(128, action_dim)
+            nn.Linear(128, ACTION_DIM)
         )
 
     def forward(self, x):
@@ -25,29 +25,23 @@ class QNetwork(nn.Module):
 
 class DQNAgent:
 
-    def __init__(self, state_dim, action_dim):
+    def __init__(self):
 
-        self.state_dim = state_dim
-        self.action_dim = action_dim
-
-        self.q_net = QNetwork(state_dim, action_dim)
-        self.target_net = QNetwork(state_dim, action_dim)
+        self.q_net = QNetwork()
+        self.target_net = QNetwork()
 
         self.target_net.load_state_dict(self.q_net.state_dict())
 
         self.optimizer = optim.Adam(self.q_net.parameters(), lr=LR)
-
+        self.epsilon = EPS_START
         self.update_count = 0
 
     def select_action(self, state):
-
-        state = torch.FloatTensor(state).unsqueeze(0)
-
-        q_values = self.q_net(state)
-
-        action = torch.argmax(q_values).item()
-
-        return action
+        if np.random.random() < self.epsilon:
+            return np.random.randint(0, ACTION_DIM)
+        with torch.no_grad():
+            q = self.q_net(torch.FloatTensor(state).unsqueeze(0))
+            return q.argmax().item()
 
     def update(self, batch):
 

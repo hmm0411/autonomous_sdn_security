@@ -11,3 +11,13 @@ class DQNAgent:
 
     def update(self, state, action, reward, next_state):
         pass
+
+class PPOAgent:
+    def __init__(self, state_dim, action_dim):
+        pass
+
+    def select_action(self, state):
+        return random.choice([0, 1, 2])  # ví dụ: 0 = block, 1 = limit, 2 = allow
+
+    def update(self, state, action, reward, next_state):
+        pass

@@ -19,9 +19,9 @@ class SDNEnv(gym.Env):
         self.action_space = spaces.Discrete(ACTION_DIM)
         self.observation_space = spaces.Box(low=0, high=1, shape=(STATE_DIM,), dtype=np.float32)
 
-    def get_state(self):
-        r = requests.get("http://controller:8080/state")
-        return r.json()
+    # def get_state(self):
+    #     r = requests.get("http://controller:8080/state")
+    #     return r.json()
 
     def reset(self):
         raw = self.controller.get_state()
