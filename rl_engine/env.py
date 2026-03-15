@@ -6,7 +6,7 @@ from gym import spaces
 import numpy as np
 from rl_engine.controller_client import ControllerClient
 from rl_engine.state_builder import StateBuilder
-from rl_engine.reward_calculator import RewardCalculator
+from rl_engine.reward import RewardCalculator
 from rl_engine.config import STATE_DIM, ACTION_DIM
 
 class SDNEnv(gym.Env):

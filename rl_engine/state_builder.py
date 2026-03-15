@@ -27,6 +27,7 @@ class StateBuilder:
             byte_rate / 100000,
             flow_count / 100,
             latency / 100,
+            packet_loss,
             raw.get("controller_load", 0),
             raw.get("attack_flag", 0),
             self.prev_action
