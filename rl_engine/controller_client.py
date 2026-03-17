@@ -9,11 +9,10 @@ class ControllerClient:
 
     def get_state(self):
         if self.use_mock:
-            # Return a mock state for testing purposes
             return {
-                "packet_rate": np.random.rand(),
-                "byte_rate": np.random.rand(),
-                "flow_count": np.random.rand(),
+                "total_packets": np.random.randint(100, 1000),
+                "total_bytes": np.random.randint(1000, 10000),
+                "flow_count": np.random.randint(10, 100),
                 "latency": np.random.rand(),
                 "packet_loss": np.random.rand(),
                 "attack_indicator": np.random.randint(0, 2)

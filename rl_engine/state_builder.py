@@ -7,11 +7,11 @@ class StateBuilder:
         self.prev_action = 0
 
     def build(self, raw):
-        packets = raw["total_packets"]
-        bytes_ = raw["total_bytes"]
-        latency = raw["latency"]
-        flow_count = raw["flow_count"]
-
+        packets = raw.get("total_packets", 0)
+        bytes_ = raw.get("total_bytes", 0)
+        latency = raw.get("latency", 0)
+        flow_count = raw.get("flow_count", 0)
+        packet_loss = raw.get("packet_loss", 0)
         if self.prev_packets is None:
             packet_rate = 0
             byte_rate = 0
