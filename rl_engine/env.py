@@ -1,10 +1,5 @@
 # môi trường mô phỏng RL --> Đóng vai trò như một môi trường OpenAI Gym
 # Action -> áp vào hệ thống -> Quan sát kết quả (reward) -> Cập nhật policy
-from curses import raw
-
-from curses import raw
-from multiprocessing.util import info
-
 import requests
 import gymnasium as gym
 from gymnasium import spaces
@@ -24,10 +19,6 @@ class SDNEnv(gym.Env):
 
         self.action_space = spaces.Discrete(ACTION_DIM)
         self.observation_space = spaces.Box(low=0, high=1, shape=(STATE_DIM,), dtype=np.float32)
-
-    def get_state(self):
-        r = requests.get("http://controller:8080/state")
-        return r.json()
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
