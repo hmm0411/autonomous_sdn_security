@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 
-from rl_engine.config import GAMMA, LR, TARGET_UPDATE, STATE_DIM, ACTION_DIM, EPS_START
+from rl_engine.config import GAMMA, LR, TARGET_UPDATE, ACTION_DIM, EPS_START
 
 
 class QNetwork(nn.Module):
@@ -18,7 +18,6 @@ class QNetwork(nn.Module):
             nn.ReLU(),
             nn.Linear(128, action_dim)
         )
-        self.update_count = 0
 
     def forward(self, x):
         return self.net(x)
