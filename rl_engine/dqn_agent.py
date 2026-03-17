@@ -8,16 +8,19 @@ from rl_engine.config import GAMMA, LR, TARGET_UPDATE, STATE_DIM, ACTION_DIM, EP
 
 class QNetwork(nn.Module):
 
-    def __init__(self):
+    def __init__(self, state_dim, action_dim):
         super(QNetwork, self).__init__()
+        self.state_dim = state_dim
+        self.action_dim = action_dim
 
         self.net = nn.Sequential(
-            nn.Linear(STATE_DIM, 128),
+            nn.Linear(state_dim, 128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(128, ACTION_DIM)
+            nn.Linear(128, action_dim)
         )
+        self.update_count = 0
 
     def forward(self, x):
         return self.net(x)
@@ -25,10 +28,10 @@ class QNetwork(nn.Module):
 
 class DQNAgent:
 
-    def __init__(self):
+    def __init__(self, state_dim, action_dim):
 
-        self.q_net = QNetwork()
-        self.target_net = QNetwork()
+        self.q_net = QNetwork(state_dim, action_dim)
+        self.target_net = QNetwork(state_dim, action_dim    )
 
         self.target_net.load_state_dict(self.q_net.state_dict())
 
