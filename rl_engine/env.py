@@ -17,8 +17,8 @@ from rl_engine.config import STATE_DIM, ACTION_DIM
 
 class SDNEnv(gym.Env):
 
-    def __init__(self):
-        self.controller = ControllerClient()
+    def __init__(self, controller_url="http://controller:8080"):
+        self.controller = ControllerClient(controller_url=controller_url)
         self.state_builder = StateBuilder()
         self.reward_calc = Reward()
 
