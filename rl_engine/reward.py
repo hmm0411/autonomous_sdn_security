@@ -14,6 +14,8 @@ class Reward:
     def calculate(self, raw, action):
         latency = raw.get("latency", 0)
         packet_loss = raw.get("packet_loss", 0)
+        mitigation = raw.get("mitigation", 0)
+        false_positive = raw.get("false_positive", 0)
         attack_flag = raw.get("attack_flag", 0)
         reward = 0
 
