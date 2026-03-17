@@ -1,6 +1,7 @@
 import random
 import numpy as np
 
+from rl_engine import env
 from rl_engine.env import SDNEnv
 from rl_engine.dqn_agent import DQNAgent
 from rl_engine.replay_buffer import ReplayBuffer
@@ -30,7 +31,7 @@ def train():
 
     for episode in range(MAX_EPISODES):
 
-        state = env.reset()
+        state, _ = env.reset()
 
         total_reward = 0
         action_history = []
@@ -44,8 +45,8 @@ def train():
             else:
                 action = agent.select_action(state)
 
-            next_state, reward, done, info = env.step(action)
-
+            next_state, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
             buffer.add((state, action, reward, next_state, done))
 
             action_history.append(action)
