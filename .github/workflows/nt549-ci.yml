@@ -33,4 +33,4 @@ jobs:
 
     - name: Run Short Training
       run: |
-        python -m rl_engine.train_dqn.py --episodes 5
+        python -m rl_engine.train_dqn --episodes 5
