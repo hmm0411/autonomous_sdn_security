@@ -4,20 +4,22 @@ from rl_engine.config import STATE_DIM, ACTION_DIM
 
 class DQNAgent:
     def __init__(self, STATE_DIM, ACTION_DIM):
-        pass
+        self.state_dim = STATE_DIM
+        self.action_dim = ACTION_DIM
 
     def select_action(self, state):
-        return random.choice([0, 1, 2])  # ví dụ: 0 = block, 1 = limit, 2 = allow
+        return random.choice([i for i in range(self.action_dim)])
 
     def update(self, state, action, reward, next_state):
         pass
 
 class PPOAgent:
     def __init__(self, STATE_DIM, ACTION_DIM):
-        pass
+        self.state_dim = STATE_DIM
+        self.action_dim = ACTION_DIM
 
     def select_action(self, state):
-        return random.choice([0, 1, 2])  # ví dụ: 0 = block, 1 = limit, 2 = allow
+        return random.choice([i for i in range(self.action_dim)])
 
     def update(self, state, action, reward, next_state):
         pass
