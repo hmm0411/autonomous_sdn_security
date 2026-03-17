@@ -1,11 +1,10 @@
 # thêm agent.py để định nghĩa agent (DQN, PPO, v.v.) sẽ học từ môi trường SDNEnv và digital twin
 import random
-from rl_engine.config import STATE_DIM, ACTION_DIM
 
 class DQNAgent:
-    def __init__(self, STATE_DIM, ACTION_DIM):
-        self.state_dim = STATE_DIM
-        self.action_dim = ACTION_DIM
+    def __init__(self, state_dim, action_dim):
+        self.state_dim = state_dim
+        self.action_dim = action_dim
 
     def select_action(self, state):
         return random.choice([i for i in range(self.action_dim)])
@@ -14,9 +13,9 @@ class DQNAgent:
         pass
 
 class PPOAgent:
-    def __init__(self, STATE_DIM, ACTION_DIM):
-        self.state_dim = STATE_DIM
-        self.action_dim = ACTION_DIM
+    def __init__(self, state_dim, action_dim):
+        self.state_dim = state_dim
+        self.action_dim = action_dim
 
     def select_action(self, state):
         return random.choice([i for i in range(self.action_dim)])
