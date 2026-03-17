@@ -10,8 +10,6 @@ class QNetwork(nn.Module):
 
     def __init__(self, state_dim, action_dim):
         super(QNetwork, self).__init__()
-        self.state_dim = state_dim
-        self.action_dim = action_dim
 
         self.net = nn.Sequential(
             nn.Linear(state_dim, 128),
@@ -31,7 +29,7 @@ class DQNAgent:
     def __init__(self, state_dim, action_dim):
 
         self.q_net = QNetwork(state_dim, action_dim)
-        self.target_net = QNetwork(state_dim, action_dim    )
+        self.target_net = QNetwork(state_dim, action_dim)
 
         self.target_net.load_state_dict(self.q_net.state_dict())
 
