@@ -10,11 +10,14 @@ class ControllerClient:
     def get_state(self):
         if self.use_mock:
             return {
-                "total_packets": np.random.randint(100, 1000),
-                "total_bytes": np.random.randint(1000, 10000),
+                "packet_rate": np.random.randint(100, 1000),
+                "byte_rate": np.random.randint(1000, 10000),
                 "flow_count": np.random.randint(10, 100),
+                "src_ip_entropy": np.random.rand(),
                 "latency": np.random.rand(),
                 "packet_loss": np.random.rand(),
+                "queue_length": np.random.randint(0, 50),
+                "controller_cpu": np.random.rand(),
                 "attack_indicator": np.random.randint(0, 2)
             }
         
