@@ -14,9 +14,7 @@ class Reward:
     def calculate(self, raw, action):
         latency = raw.get("latency", 0)
         packet_loss = raw.get("packet_loss", 0)
-        mitigation = raw.get("mitigation", 0)
-        false_positive = raw.get("false_positive", 0)
-        attack_flag = raw.get("attack_flag", 0)
+        attack_flag = raw.get("attack_indicator", 0)
         reward = 0
 
         # QoS penalties
@@ -30,13 +28,13 @@ class Reward:
         # security reward
         if attack_flag == 1:
             # correct mitigation
-            if action in [0, 1]:
+            if action in [1, 2, 3, 4]:
                 reward += self.delta
             else:
                 reward -= self.delta
         else:
             # false positive
-            if action in [0, 1]:
+            if action in [1, 2, 3, 4]:
                 reward -= self.delta * 0.5
             else:                  
                 reward += self.delta * 0.2
