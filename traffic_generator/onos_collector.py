@@ -10,7 +10,7 @@ from requests.auth import HTTPBasicAuth
 
 class ONOSCollector:
 
-    def __init__(self, onos_ip="127.0.0.1", victim_ip="10.0.0.7"):
+    def __init__(self, onos_ip="127.0.0.1", victim_ip="10.0.0.8"):
 
         self.victim_ip = victim_ip
         self.url_flows = f"http://{onos_ip}:8181/onos/v1/flows"
