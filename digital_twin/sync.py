@@ -1,6 +1,6 @@
 import requests
 
-CONTROLLER_URL = "http://controller:8080"
+CONTROLLER_URL = "http://localhost:8181/onos/v1"  # URL của SDN controller
 
 def sync_from_controller():
     """
