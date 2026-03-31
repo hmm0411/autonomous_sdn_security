@@ -5,9 +5,7 @@ from topo import SDNResearchTopo
 from attack_manager import AttackManager
 import time
 
-
 def run_experiment():
-
     topo = SDNResearchTopo()
 
     net = Mininet(
@@ -18,12 +16,25 @@ def run_experiment():
 
     print("[*] Starting Mininet...")
     net.start()
+    print("[*] Enabling STP on OVS bridges to prevent Broadcast Storm...")
+    for sw in net.switches:
+        # Ra lệnh cho switch bật STP
+        sw.cmd('ovs-vsctl set bridge', sw.name, 'stp_enable=true')
 
-    print("[*] Waiting controller connection (5s)...")
-    time.sleep(5)
+    # ------------------------
+    print("[*] Waiting for STP Convergence (20s)...")
+    time.sleep(20)
+    print("[*] Connecting Root Namespace to Mininet (Fixing 500.0 Latency)...")
 
+    import os
+    os.system('sudo ip addr add 10.0.0.100/24 dev s1')
+    os.system('sudo ip link set dev s1 up')
+
+    print("[*] Initializing Attack Manager...")
     manager = AttackManager(net)
     net.manager = manager
+    print("[*] Waiting controller connection (5s)...")
+    time.sleep(5)
 
     print("="*40)
     print("SYSTEM READY")
@@ -38,10 +49,9 @@ def run_experiment():
     print("="*40)
 
     CLI(net)
-
+    os.system('sudo ip addr del 10.0.0.100/24 dev s1 2>/dev/null')
     print("[*] Stopping network...")
     net.stop()
-
 
 if __name__ == "__main__":
     run_experiment()
