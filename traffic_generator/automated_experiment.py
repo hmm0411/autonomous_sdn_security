@@ -7,11 +7,8 @@ import psutil
 import subprocess
 from requests.auth import HTTPBasicAuth
 
-
 class ONOSCollector:
-
     def __init__(self, onos_ip="127.0.0.1", victim_ip="10.0.0.7"):
-
         self.victim_ip = victim_ip
         self.url_flows = f"http://{onos_ip}:8181/onos/v1/flows"
         self.url_ports = f"http://{onos_ip}:8181/onos/v1/statistics/ports"
@@ -37,7 +34,6 @@ class ONOSCollector:
                 total_packets += port.get("packetsReceived", 0)
                 total_bytes += port.get("bytesReceived", 0)
                 total_drops += port.get("packetsDropped", 0)
-
         return total_packets, total_bytes, total_drops
 
     def _get_flow_count(self):
@@ -51,7 +47,6 @@ class ONOSCollector:
         return np.mean([float(x) for x in match]) if match else 0
 
     def get_state(self, attack_indicator=0):
-
         packet, byte, drop = self._get_port_stats()
         now = time.time()
         dt = max(now - self.prev_time, 1e-6)
