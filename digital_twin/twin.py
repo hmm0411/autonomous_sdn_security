@@ -17,10 +17,15 @@ class DigitalTwin:
             return None
 
         simulated_latency = self.current_state["latency"]
-
+        
+        # Giả sử các action có tác động như sau (đây chỉ là ví dụ, cần điều chỉnh theo thực tế):
         if action == "block":
             simulated_latency *= 0.8
         elif action == "limit":
             simulated_latency *= 0.9
+        elif action == "redirect":
+            simulated_latency *= 0.95
+        elif action == "isolate":
+            simulated_latency *= 0.7
 
         return simulated_latency
