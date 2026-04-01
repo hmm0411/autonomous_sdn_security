@@ -1,19 +1,12 @@
 import numpy as np
 
 from rl_engine.env import SDNEnv
-from rl_engine.ppo_agent import PPOAgent
+from rl_engine.agent.ppo_agent import PPOAgent
 from rl_engine.logger import Logger
-from rl_engine.config import STATE_DIM, ACTION_DIM
-
-
-MAX_EPISODES = 1000
-MAX_STEPS = 200
-
+from rl_engine.config import *
 
 def train():
-
     env = SDNEnv()
-
     agent = PPOAgent(
         state_dim=STATE_DIM,
         action_dim=ACTION_DIM
@@ -39,7 +32,7 @@ def train():
 
             action, log_prob = agent.select_action(state)
 
-            next_state, reward, done, info = env.step(action)
+            next_state, reward, done, truncated, info = env.step(action)
 
             states.append(state)
             actions.append(action)

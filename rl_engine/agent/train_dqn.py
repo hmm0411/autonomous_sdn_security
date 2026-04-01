@@ -3,16 +3,11 @@ import numpy as np
 
 from rl_engine import env
 from rl_engine.env import SDNEnv
-from rl_engine.dqn_agent import DQNAgent
+from rl_engine.agent.dqn_agent import DQNAgent
 from rl_engine.replay_buffer import ReplayBuffer
 from rl_engine.logger import Logger
 
 from rl_engine.config import *
-
-
-MAX_EPISODES = 1000
-MAX_STEPS = 200
-
 
 def train():
 
