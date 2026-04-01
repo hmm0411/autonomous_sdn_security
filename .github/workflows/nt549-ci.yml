@@ -34,3 +34,4 @@ jobs:
       - name: Run Short Training
         run: |
           python -m rl_engine.agent.train_dqn --episodes 5
+          python -m rl_engine.agent.train_ppo --episodes 5
