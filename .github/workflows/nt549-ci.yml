@@ -10,27 +10,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
 
-    - name: Install dependencies
-      run: |
-        pip install -r rl_engine/requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install -r rl_engine/requirements.txt
 
-    - name: Run Environment Test
-      run: |
-        python -c "
-        from rl_engine.env import SDNEnv;
-        env = SDNEnv();
-        s = env.reset();
-        print('Env OK')
-        "
+      - name: Run Environment Test
+        run: |
+          python -c "
+          from rl_engine.env import SDNEnv;
+          env = SDNEnv();
+          s = env.reset();
+          print('Env OK')
+          "
 
-    - name: Run Short Training
-      run: |
-        python -m rl_engine.train_dqn --episodes 5
+      - name: Run Short Training
+        run: |
+          python -m rl_engine.agent.train_dqn --episodes 5
