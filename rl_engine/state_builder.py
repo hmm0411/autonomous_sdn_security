@@ -18,6 +18,7 @@ class StateBuilder:
         queue_length = raw.get("queue_length", 0)
         controller_cpu = raw.get("controller_cpu", 0)
         attack_indicator = raw.get("attack_indicator", 0)
+
         if self.prev_packets is None:
             packet_rate = 0
             byte_rate = 0
