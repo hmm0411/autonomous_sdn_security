@@ -9,10 +9,11 @@ from rl_engine.controller_client import ControllerClient
 from rl_engine.state_builder import StateBuilder
 from rl_engine.reward import Reward
 from rl_engine.config import STATE_DIM, ACTION_DIM
+from typing import Any
 
 class SDNEnv(gym.Env):
 
-    def __init__(self, controller_url="http://controller:8080"):
+    def __init__(self, controller_url="http://localhost:8181/onos/v1"):
         self.controller = ControllerClient(use_mock=True)
         self.state_builder = StateBuilder()
         self.reward_calc = Reward()
@@ -20,7 +21,12 @@ class SDNEnv(gym.Env):
         self.action_space = spaces.Discrete(ACTION_DIM)
         self.observation_space = spaces.Box(low=0, high=1, shape=(STATE_DIM,), dtype=np.float32)
 
-    def reset(self, seed=None, options=None):
+    def reset(
+        self,
+        *,
+        seed: int | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> tuple[np.ndarray, dict[str, Any]]:
         super().reset(seed=seed)
         raw = self.controller.get_state()
         state = self.state_builder.build(raw)
