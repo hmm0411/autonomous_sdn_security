@@ -38,14 +38,21 @@ class ONOSCollector:
 
     def _measure_latency(self):
         try:
-            # Tìm PID của h7 và ping sang h8 (Bỏ sudo bên trong vì script chạy bằng sudo rồi)
-            pid = subprocess.getoutput("pgrep -f 'mininet:h7'").strip().split('\n')[0]
-            if not pid: return 500.0
+            # Tự động tìm PID của host h7 để "mượn" không gian mạng của nó
+            pid_cmd = "pgrep -f 'mininet:h7'"
+            pid = subprocess.getoutput(pid_cmd).strip().split('\n')[0]
             
-            cmd = f"mnexec -a {pid} ping -c 1 -W 1 {self.victim_ip}"
+            if not pid or not pid.isdigit():
+                return 500.0
+
+            # Dùng mnexec để thực hiện ping từ h7 tới h8
+            cmd = f"sudo mnexec -a {pid} ping -c 1 -W 1 10.0.0.8"
             output = subprocess.getoutput(cmd)
+
             match = re.findall(r"time=([\d.]+)", output)
-            return float(match[0]) if match else 500.0
+            if match:
+                return float(match[0])
+            return 500.0
         except:
             return 500.0
 
