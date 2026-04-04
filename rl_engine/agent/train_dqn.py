@@ -92,9 +92,13 @@ def train():
 
     logger.save_dqn()
 
-    os.makedirs("../../models", exist_ok=True)
-    torch.save(agent.q_net.state_dict(), "../../models/dqn_model.pth")
-    print("Đã lưu model DQN tại: ../../models/dqn_model.pth")
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    MODELS_DIR = os.path.join(ROOT_DIR, "models")
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    
+    save_path = os.path.join(MODELS_DIR, "dqn_model.pth")
+    torch.save(agent.q_net.state_dict(), save_path)
+    print(f"Đã lưu model DQN tại: {save_path}")
 
 
 if __name__ == "__main__":

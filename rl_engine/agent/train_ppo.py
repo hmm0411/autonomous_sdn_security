@@ -3,6 +3,8 @@ import os
 from pandas import pd
 
 import numpy as np
+import torch
+import torch
 
 from rl_engine.env import SDNEnv
 from rl_engine.data_processor import process_sdn_dataset
@@ -87,15 +89,16 @@ def train():
 
     logger.save_ppo()
 
-    os.makedirs("../../models", exist_ok=True)
-    # Tùy thuộc vào hàm lưu của custom PPOAgent, gọi hàm save hoặc dùng torch.save
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    MODELS_DIR = os.path.join(ROOT_DIR, "models")
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    
+    save_path = os.path.join(MODELS_DIR, "ppo_model.pth")
     if hasattr(agent, "save"):
-        agent.save("../../models/ppo_model.pth")
+        agent.save(save_path)
     else:
-        # Nếu chưa định nghĩa hàm save trong PPOAgent, có thể dùng torch.save lưu actor_critic
-        import torch
-        torch.save(agent.policy.state_dict(), "../../models/ppo_model.pth")
-    print("Đã lưu model PPO tại: ../../models/ppo_model.pth")
+        torch.save(agent.policy.state_dict(), save_path)
+    print(f"Đã lưu model PPO tại: {save_path}")
 
 if __name__ == "__main__":
     train()
