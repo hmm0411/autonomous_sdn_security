@@ -35,7 +35,7 @@ jobs:
 
       - name: Run Environment Test
         env:
-          PYTHONPATH: .
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python -c "
           import pandas as pd
@@ -55,7 +55,7 @@ jobs:
 
       - name: Run RL Training Test
         env:
-          PYTHONPATH: .
+          PYTHONPATH: ${{ github.workspace }}
           CI: "true"
         run: |
           cd experiments
