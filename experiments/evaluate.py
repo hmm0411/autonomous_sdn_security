@@ -59,7 +59,8 @@ def main():
 
     # 2. Khởi tạo môi trường trực tiếp bằng đường dẫn
     print(f"Khởi tạo môi trường với dữ liệu từ: {TEST_DATA_PATH}")
-    env = OfflineSDNEnv(dataset_path=TEST_DATA_PATH, max_steps_per_episode=1000)
+    df_test = pd.read_csv(TEST_DATA_PATH)
+    env = OfflineSDNEnv(dataframe=df_test, max_steps_per_episode=1000)
 
     # 3. Đánh giá DQN
     print("Evaluating DQN...")
