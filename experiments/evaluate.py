@@ -57,9 +57,10 @@ def evaluate_agent(env, agent, max_steps=1000):
 
 def main():
     # 1. Đường dẫn tương đối từ thư mục experiments/
-    TEST_DATA_PATH = "../data/processed/test_data.csv"
-    DQN_MODEL_PATH = "../models/dqn_model.pth"
-    PPO_MODEL_PATH = "../models/ppo_model.pth"
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    TEST_DATA_PATH = os.path.join(ROOT_DIR, "data", "processed", "test_data.csv")
+    DQN_MODEL_PATH = os.path.join(ROOT_DIR, "models", "dqn_model.pth")
+    PPO_MODEL_PATH = os.path.join(ROOT_DIR, "models", "ppo_model.pth")
 
     # 2. Khởi tạo môi trường trực tiếp bằng đường dẫn
     print(f"Khởi tạo môi trường với dữ liệu từ: {TEST_DATA_PATH}")
