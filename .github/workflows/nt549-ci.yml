@@ -39,9 +39,9 @@ jobs:
         run: |
           python -c "
           from rl_engine.env import SDNEnv
-          from rl_engine.offline_env import SDNOfflineSDNEnv
+          from rl_engine.offline_env import OfflineSDNEnv
           print('1. Testing Offline Env...')
-          offline_env = SDNOfflineEnv(dataset_path='data/processed/train_data.csv')
+          offline_env = OfflineSDNEnv(dataset_path='data/processed/train_data.csv')
           offline_env.reset()
           
           print('2. Testing Online Env (Mock Controller)...')
@@ -56,4 +56,5 @@ jobs:
           PYTHONPATH: .
           CI: "true"
         run: |
-          python -m rl_engine.agent.train_dqn --episodes 5
+          cd experiments
+          python evaluate.py
