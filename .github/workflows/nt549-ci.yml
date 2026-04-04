@@ -22,15 +22,50 @@ jobs:
         run: |
           pip install -r rl_engine/requirements.txt
 
+      - name: Create Data Directory
+        run: |
+          mkdir -p data/processed
+      
+      - name: Download Dataset
+        run: |
+          wget -q -O data/processed/train_data.csv "https://github.com/user-attachments/files/26481488/train_data.csv"
+          wget -q -O data/processed/test_data.csv "https://github.com/user-attachments/files/26481487/test_data.csv"
+
+          ls -la data/processed/
+
       - name: Run Environment Test
+        env:
+          PYTHONPATH: .
         run: |
           python -c "
-          from rl_engine.env import SDNEnv;
-          env = SDNEnv();
-          s = env.reset();
-          print('Env OK')
+          from rl_engine.env import SDNEnv
+          from rl_engine.offline_env import SDNOfflineSDNEnv
+          print('1. Testing Offline Env...')
+          offline_env = SDNOfflineEnv(dataset_path='data/processed/train_data.csv')
+          offline_env.reset()
+          
+          print('2. Testing Online Env (Mock Controller)...')
+          online_env = SDNEnv()
+          online_env.reset()
+          
+          print('Cả 2 Environment đều khởi tạo thành công!')
           "
 
-      - name: Run Short Training
+      - name: Run RL Training Test
+        env:
+          PYTHONPATH: .
+          CI: "true"
         run: |
-          python -m rl_engine.agent.train_dqn --episodes 5
+          cd rl_engine/agent
+          echo 'Training DQN...'
+          python train_dqn.py
+          echo 'Training PPO...'
+          python train_ppo.py
+      
+      - name: Run RL Evaluation Test
+        env:
+          PYTHONPATH: .
+        run: |
+          cd experiments
+          # Lưu ý: Sửa 'evaluate.py' thành tên file chính xác của bạn (ví dụ 'evaluate_agent.py' như phần trước)
+          python evaluate.py
