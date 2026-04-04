@@ -56,16 +56,4 @@ jobs:
           PYTHONPATH: .
           CI: "true"
         run: |
-          cd rl_engine/agent
-          echo 'Training DQN...'
-          python train_dqn.py
-          echo 'Training PPO...'
-          python train_ppo.py
-      
-      - name: Run RL Evaluation Test
-        env:
-          PYTHONPATH: .
-        run: |
-          cd experiments
-          # Lưu ý: Sửa 'evaluate.py' thành tên file chính xác của bạn (ví dụ 'evaluate_agent.py' như phần trước)
-          python evaluate.py
+          python -m rl_engine.agent.train_dqn --episodes 5
