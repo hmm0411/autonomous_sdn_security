@@ -1,6 +1,9 @@
+import os
 import random
 import numpy as np
 import pandas as pd
+import torch
+import torch
 
 from rl_engine import env
 from rl_engine.data_processor import process_sdn_dataset
@@ -12,7 +15,7 @@ from rl_engine.logger import Logger
 from rl_engine.config import *
 
 def train():
-    df = pd.read_csv("data/processed/train_data.csv")
+    df = pd.read_csv("../../data/processed/train_data.csv")
     env = OfflineSDNEnv(dataframe=df)
 
     agent = DQNAgent(
@@ -26,7 +29,9 @@ def train():
 
     epsilon = EPS_START
 
-    for episode in range(MAX_EPISODES):
+    total_episodes = 2 if os.getenv("CI") == "true" else MAX_EPISODES
+
+    for episode in range(total_episodes):
 
         state, _ = env.reset()
 
@@ -86,6 +91,10 @@ def train():
         )
 
     logger.save_dqn()
+
+    os.makedirs("../../models", exist_ok=True)
+    torch.save(agent.q_net.state_dict(), "../../models/dqn_model.pth")
+    print("Đã lưu model DQN tại: ../../models/dqn_model.pth")
 
 
 if __name__ == "__main__":
