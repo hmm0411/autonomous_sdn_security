@@ -2,10 +2,11 @@ import numpy as np
 
 class OfflineSDNEnv:
 
-    def __init__(self, dataframe):
+    def __init__(self, dataframe, max_steps_per_episode=1000):
         self.df = dataframe.reset_index(drop=True)
         self.idx = 0
         self.previous_action = 0
+        self.max_steps_per_episode = max_steps_per_episode
 
     def reset(self):
         self.idx = 0
