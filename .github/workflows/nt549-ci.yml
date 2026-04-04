@@ -41,7 +41,8 @@ jobs:
           from rl_engine.env import SDNEnv
           from rl_engine.offline_env import OfflineSDNEnv
           print('1. Testing Offline Env...')
-          offline_env = OfflineSDNEnv(dataset_path='data/processed/train_data.csv')
+          df_train = pd.read_csv('data/processed/train_data.csv')
+          offline_env = OfflineSDNEnv(dataframe=df_train)
           offline_env.reset()
           
           print('2. Testing Online Env (Mock Controller)...')
