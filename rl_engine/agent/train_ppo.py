@@ -1,12 +1,16 @@
+from turtle import pd
+
 import numpy as np
 
 from rl_engine.env import SDNEnv
 from rl_engine.agent.ppo_agent import PPOAgent
 from rl_engine.logger import Logger
 from rl_engine.config import *
+from rl_engine.offline_env import OfflineSDNEnv
 
 def train():
-    env = SDNEnv()
+    df = pd.read_csv("data/processed/train_data.csv")
+    env = OfflineSDNEnv(dataframe=df)
     agent = PPOAgent(
         state_dim=STATE_DIM,
         action_dim=ACTION_DIM
