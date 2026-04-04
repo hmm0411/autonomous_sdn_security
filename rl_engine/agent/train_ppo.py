@@ -1,6 +1,6 @@
 import os
 
-from pandas import pd
+import pandas as pd
 
 import numpy as np
 import torch
