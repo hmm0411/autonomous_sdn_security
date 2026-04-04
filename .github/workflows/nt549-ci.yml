@@ -38,6 +38,7 @@ jobs:
           PYTHONPATH: .
         run: |
           python -c "
+          import pandas as pd
           from rl_engine.env import SDNEnv
           from rl_engine.offline_env import OfflineSDNEnv
           print('1. Testing Offline Env...')
