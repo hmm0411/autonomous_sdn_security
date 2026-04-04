@@ -10,6 +10,8 @@ services:
     build: ./rl_engine
     depends_on:
       - controller
+    volumes:
+      - ./rl_engine:/app # Mount the rl_engine directory to /app in the container
 
   twin:
     build: ./digital_twin

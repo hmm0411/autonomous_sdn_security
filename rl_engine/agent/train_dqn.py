@@ -1,17 +1,19 @@
 import random
 import numpy as np
+import pandas as pd
 
 from rl_engine import env
+from rl_engine.data_processor import process_sdn_dataset
 from rl_engine.env import SDNEnv
 from rl_engine.agent.dqn_agent import DQNAgent
+from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.replay_buffer import ReplayBuffer
 from rl_engine.logger import Logger
-
 from rl_engine.config import *
 
 def train():
-
-    env = SDNEnv()
+    df = pd.read_csv("data/processed/train_data.csv")
+    env = OfflineSDNEnv(dataframe=df)
 
     agent = DQNAgent(
         state_dim=STATE_DIM,
