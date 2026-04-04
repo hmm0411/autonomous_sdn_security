@@ -20,11 +20,15 @@ def evaluate_agent(env, agent, max_steps=1000):
     while not done and steps < max_steps:
         # Xử lý cách lấy action tùy theo loại Agent
         if hasattr(agent, "predict"):
-            # Đối với Stable-Baselines3, predict trả về (action, _states)
-            action, _ = agent.predict(state, deterministic=True)
-        else:
-            # Đối với Custom Agent hoặc Rule-based
+            try:
+                action, _ = agent.predict(state, deterministic=True)
+            except TypeError:
+                result = agent.predict(state)
+                action = result[0] if isinstance(result, tuple) else result
+        elif hasattr(agent, "select_action"):
             action = agent.select_action(state)
+        else:
+            raise ValueError("Agent không có phương thức predict hoặc select_action.")
 
         # Chuyển kiểu action về int nếu cần thiết (để tránh lỗi kiểu dữ liệu NumPy)
         action = int(action)
@@ -53,13 +57,15 @@ def evaluate_agent(env, agent, max_steps=1000):
 
 def main():
     # 1. Đường dẫn tương đối từ thư mục experiments/
-    TEST_DATA_PATH = "../data/processed/test_data.csv"
-    DQN_MODEL_PATH = "../models/dqn_model.pth"
-    PPO_MODEL_PATH = "../models/ppo_model.pth"
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    TEST_DATA_PATH = os.path.join(ROOT_DIR, "data", "processed", "test_data.csv")
+    DQN_MODEL_PATH = os.path.join(ROOT_DIR, "models", "dqn_model.pth")
+    PPO_MODEL_PATH = os.path.join(ROOT_DIR, "models", "ppo_model.pth")
 
     # 2. Khởi tạo môi trường trực tiếp bằng đường dẫn
     print(f"Khởi tạo môi trường với dữ liệu từ: {TEST_DATA_PATH}")
-    env = OfflineSDNEnv(dataset_path=TEST_DATA_PATH, max_steps_per_episode=1000)
+    df_test = pd.read_csv(TEST_DATA_PATH)
+    env = OfflineSDNEnv(dataframe=df_test, max_steps_per_episode=1000)
 
     # 3. Đánh giá DQN
     print("Evaluating DQN...")
