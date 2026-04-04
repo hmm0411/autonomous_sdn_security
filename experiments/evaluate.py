@@ -20,11 +20,15 @@ def evaluate_agent(env, agent, max_steps=1000):
     while not done and steps < max_steps:
         # Xử lý cách lấy action tùy theo loại Agent
         if hasattr(agent, "predict"):
-            # Đối với Stable-Baselines3, predict trả về (action, _states)
-            action, _ = agent.predict(state, deterministic=True)
-        else:
-            # Đối với Custom Agent hoặc Rule-based
+            try:
+                action, _ = agent.predict(state, deterministic=True)
+            except TypeError:
+                result = agent.predict(state)
+                action = result[0] if isinstance(result, tuple) else result
+        elif hasattr(agent, "select_action"):
             action = agent.select_action(state)
+        else:
+            raise ValueError("Agent không có phương thức predict hoặc select_action.")
 
         # Chuyển kiểu action về int nếu cần thiết (để tránh lỗi kiểu dữ liệu NumPy)
         action = int(action)
