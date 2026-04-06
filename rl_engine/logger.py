@@ -18,7 +18,7 @@ class Logger:
         self.writer.add_scalar("Loss/Policy_Loss", policy_loss, episode)
         self.writer.add_scalar("Loss/Value_Loss", value_loss, episode)
         self.writer.add_scalar("Metrics/Entropy", entropy, episode)
-        self.writer.add_histogram("Actions", actions, episode)
+        self.writer.add_histogram("Actions", np.array(actions), episode)
 
     # DQN logging
     def log_dqn(self, episode, reward, loss, epsilon, actions):
@@ -26,7 +26,7 @@ class Logger:
         self.writer.add_scalar("Train/Total_Reward", reward, episode)
         self.writer.add_scalar("Loss/MSE_Loss", loss, episode)
         self.writer.add_scalar("Metrics/Epsilon", epsilon, episode)
-        self.writer.add_histogram("Actions", actions, episode)
+        self.writer.add_histogram("Actions", np.array(actions), episode)
 
     # Save PPO logs
     def save_ppo(self, filename="ppo_training_log.csv"):
