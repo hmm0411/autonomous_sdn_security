@@ -157,8 +157,10 @@ def run_single_seed(seed_value, df_train):
                 # Tùy hàm save của bạn, ví dụ:
                 if hasattr(agent, "save"):
                     agent.save(save_path)
+                    agent.save("../../models/ppo_model.pth")
                 else:
                     torch.save(agent.policy.state_dict(), save_path)
+                    torch.save(agent.policy.state_dict(), "../../models/ppo_model.pth")
                 
                 print(f"[Seed {seed_value}] Ep {episode}: Lưu Best Model mới với Avg Reward = {best_avg_reward:.2f}")
         
@@ -166,7 +168,14 @@ def run_single_seed(seed_value, df_train):
         
         if episode % 50 == 0:
             print(f"Seed {seed_value} | Ep {episode} | Reward: {episode_reward:.2f}")
-            
+
+        if os.getenv("CI") == "true":
+            save_path = "../../models/ppo_model.pth"
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            if hasattr(agent, "save"):
+                agent.save(save_path)
+            else:
+                torch.save(agent.policy.state_dict(), save_path)    
     return seed_reward_history
 
 def train_multi_seeds():
