@@ -92,9 +92,8 @@ def train():
             f"Loss: {avg_loss:.4f} | "
             f"Epsilon: {epsilon:.3f}"
         )
-
-    logger.save_dqn()
-
+    logger.close()
+    
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     MODELS_DIR = os.path.join(ROOT_DIR, "models")
     os.makedirs(MODELS_DIR, exist_ok=True)
