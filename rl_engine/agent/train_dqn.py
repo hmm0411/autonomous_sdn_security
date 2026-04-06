@@ -6,7 +6,6 @@ import torch
 import torch
 
 from rl_engine import env
-from rl_engine.data_processor import process_sdn_dataset
 from rl_engine.env import SDNEnv
 from rl_engine.agent.dqn_agent import DQNAgent
 from rl_engine.offline_env import OfflineSDNEnv
@@ -93,7 +92,7 @@ def train():
             f"Epsilon: {epsilon:.3f}"
         )
     logger.close()
-    
+
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     MODELS_DIR = os.path.join(ROOT_DIR, "models")
     os.makedirs(MODELS_DIR, exist_ok=True)

@@ -7,7 +7,6 @@ import torch
 import torch
 
 from rl_engine.env import SDNEnv    
-from rl_engine.data_processor import process_sdn_dataset
 from rl_engine.agent.ppo_agent import PPOAgent
 from rl_engine.logger import Logger
 from rl_engine.config import *
