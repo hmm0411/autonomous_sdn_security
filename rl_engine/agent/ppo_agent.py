@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from rl_engine.config import GAMMA, LR
 
@@ -63,7 +63,7 @@ class PPOAgent:
         state_dim: int = 10,
         action_dim: int = 5,
         clip_eps: float = 0.2,
-        entropy_coef: float = 0.01,
+        entropy_coef: float = 0.01, # tăng lên 0.05 nếu lúc nào agent cũng chọn đúng Action 1 mà không chịu dùng Action 4 dù mạng vẫn đang
         value_coef: float = 0.5,
         device: Optional[str] = None,
     ):

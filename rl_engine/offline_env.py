@@ -8,7 +8,10 @@ class OfflineSDNEnv:
         self.previous_action = 0
         self.max_steps_per_episode = max_steps_per_episode
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        if seed is not None:
+            np.random.seed(seed)
+        self.current_step = 0
         self.idx = 0
         self.previous_action = 0
         state = self._get_state()

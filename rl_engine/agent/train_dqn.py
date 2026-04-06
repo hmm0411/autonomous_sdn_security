@@ -6,15 +6,17 @@ import torch
 import torch
 
 from rl_engine import env
-from rl_engine.data_processor import process_sdn_dataset
 from rl_engine.env import SDNEnv
 from rl_engine.agent.dqn_agent import DQNAgent
 from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.replay_buffer import ReplayBuffer
 from rl_engine.logger import Logger
 from rl_engine.config import *
+from rl_engine.utils import set_seed
 
 def train():
+    SEED = 42
+    set_seed(SEED)
     df = pd.read_csv("../../data/processed/train_data.csv")
     env = OfflineSDNEnv(dataframe=df)
 
@@ -33,7 +35,7 @@ def train():
 
     for episode in range(total_episodes):
 
-        state, _ = env.reset()
+        state, _ = env.reset(seed=SEED if episode == 0 else None)  # Chỉ set seed cho episode đầu tiên để đảm bảo tính nhất quán trong CI
 
         total_reward = 0
         action_history = []
@@ -89,8 +91,7 @@ def train():
             f"Loss: {avg_loss:.4f} | "
             f"Epsilon: {epsilon:.3f}"
         )
-
-    logger.save_dqn()
+    logger.close()
 
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     MODELS_DIR = os.path.join(ROOT_DIR, "models")
