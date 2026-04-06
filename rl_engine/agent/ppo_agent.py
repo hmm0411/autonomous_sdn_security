@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from rl_engine.config import GAMMA, LR
 
