@@ -94,7 +94,6 @@ def train():
             f"Entropy: {metrics['entropy']:.4f}"
         )
 
-    logger.save_ppo()
     logger.close()
 
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
