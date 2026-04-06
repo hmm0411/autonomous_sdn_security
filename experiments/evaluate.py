@@ -96,8 +96,10 @@ def main():
     print("====== KẾT QUẢ ĐÁNH GIÁ ======")
     print("="*30)
     print(f"DQN   : {dqn_result}")
+    # print("Các hành động DQN đã chọn:", set(dqn_action_history))
     print(f"PPO   : {ppo_result}")
+    # print("Các hành động PPO đã chọn:", set(ppo_action_history))
     print(f"Rule  : {rule_result}")
-
+    # print("Các hành động Rule-based đã chọn:", set(rule_action_history))
 if __name__ == "__main__":
     main()
