@@ -1,39 +1,31 @@
 import csv
-
+import os
+from torch.utils.tensorboard import SummaryWriter
 
 class Logger:
 
-    def __init__(self):
-
-        self.ppo_logs = []
-        self.dqn_logs = []
+    def __init__(self, log_dir="runs/experiment"):
+        """Khởi tạo TensorBoard Writer"""
+        # Đảm bảo thư mục runs/ tồn tại
+        os.makedirs(log_dir, exist_ok=True)
+        self.writer = SummaryWriter(log_dir=log_dir)
 
     # PPO logging
     def log_ppo(self, episode, reward, policy_loss, value_loss, entropy, actions):
 
-        log = {
-            "episode": episode,
-            "reward": reward,
-            "policy_loss": policy_loss,
-            "value_loss": value_loss,
-            "entropy": entropy,
-            "actions": actions
-        }
-
-        self.ppo_logs.append(log)
+        self.writer.add_scalar("Train/Total_Reward", reward, episode)
+        self.writer.add_scalar("Loss/Policy_Loss", policy_loss, episode)
+        self.writer.add_scalar("Loss/Value_Loss", value_loss, episode)
+        self.writer.add_scalar("Metrics/Entropy", entropy, episode)
+        self.writer.add_histogram("Actions", actions, episode)
 
     # DQN logging
     def log_dqn(self, episode, reward, loss, epsilon, actions):
 
-        log = {
-            "episode": episode,
-            "reward": reward,
-            "loss": loss,
-            "epsilon": epsilon,
-            "actions": actions
-        }
-
-        self.dqn_logs.append(log)
+        self.writer.add_scalar("Train/Total_Reward", reward, episode)
+        self.writer.add_scalar("Loss/MSE_Loss", loss, episode)
+        self.writer.add_scalar("Metrics/Epsilon", epsilon, episode)
+        self.writer.add_histogram("Actions", actions, episode)
 
     # Save PPO logs
     def save_ppo(self, filename="ppo_training_log.csv"):
@@ -77,3 +69,7 @@ class Logger:
 
             for row in self.dqn_logs:
                 writer.writerow(row)
+
+    def close(self):
+        """Đóng writer khi kết thúc huấn luyện"""
+        self.writer.close()
