@@ -1,3 +1,5 @@
+import datetime
+
 import numpy as np
 import pandas as pd
 import torch
@@ -52,6 +54,7 @@ def evaluate_agent(env, agent, max_steps=1000):
         "total_reward": total_reward,
         "avg_reward": np.mean(rewards),
         "switching_rate": switching_rate,
+        "steps": steps,
         # "actions": action_history  # Có thể comment lại để log không bị quá dài khi in ra console
     }
 
@@ -62,17 +65,25 @@ def main():
     DQN_MODEL_PATH = os.path.join(ROOT_DIR, "models", "dqn_model.pth")
     PPO_MODEL_PATH = os.path.join(ROOT_DIR, "models", "ppo_model.pth")
 
+    RESULTS_DIR = os.path.join(ROOT_DIR, "results")
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+
     # 2. Khởi tạo môi trường trực tiếp bằng đường dẫn
     print(f"Khởi tạo môi trường với dữ liệu từ: {TEST_DATA_PATH}")
     df_test = pd.read_csv(TEST_DATA_PATH)
     env = OfflineSDNEnv(dataframe=df_test, max_steps_per_episode=1000)
 
+    all_results = []
+
     # 3. Đánh giá DQN
     print("Evaluating DQN...")
     dqn = DQNAgent(STATE_DIM, ACTION_DIM)
     if os.path.exists(DQN_MODEL_PATH):
-        dqn.q_net.load_state_dict(torch.load(DQN_MODEL_PATH))
-        dqn_result = evaluate_agent(env, dqn)
+        dqn.q_net.load_state_dict(torch.load(DQN_MODEL_PATH, map_location=torch.device('cpu')))
+        # dqn.q_net.load_state_dict(torch.load(DQN_MODEL_PATH))
+        res = evaluate_agent(env, dqn)
+        res['model'] = "DQN"
+        all_results.append(res)
     else:
         dqn_result = "Không tìm thấy model DQN."
 
@@ -82,24 +93,35 @@ def main():
     ppo = PPOAgent(STATE_DIM, ACTION_DIM)
     if os.path.exists(PPO_MODEL_PATH):
         ppo.load(PPO_MODEL_PATH)
-        ppo_result = evaluate_agent(env, ppo)
+        res = evaluate_agent(env, ppo)
+        res['model'] = "PPO"
+        all_results.append(res)
     else:
         ppo_result = "Không tìm thấy model PPO."
 
     # 5. Đánh giá Rule-based
     print("Evaluating Rule-based...")
     rule = BaselineRuleBasedAgent()
-    rule_result = evaluate_agent(env, rule)
+    res = evaluate_agent(env, rule)
+    res['model'] = "Rule-based"
+    all_results.append(res)
+
+    #6 Lưu kết quả vào file CSV để tiện cho việc vẽ biểu đồ sau này
+    results_df = pd.DataFrame(all_results)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_filename = f"evaluation_results_{timestamp}.csv"
+    results_csv_path = os.path.join(RESULTS_DIR, csv_filename)
+    results_df.to_csv(results_csv_path, index=False)
+    print(f"Đã lưu kết quả đánh giá vào: {results_csv_path}")
+
 
     # In kết quả tổng hợp
-    print("\n" + "="*30)
-    print("====== KẾT QUẢ ĐÁNH GIÁ ======")
-    print("="*30)
-    print(f"DQN   : {dqn_result}")
-    # print("Các hành động DQN đã chọn:", set(dqn_action_history))
-    print(f"PPO   : {ppo_result}")
-    # print("Các hành động PPO đã chọn:", set(ppo_action_history))
-    print(f"Rule  : {rule_result}")
-    # print("Các hành động Rule-based đã chọn:", set(rule_action_history))
+    print("\n" + "="*45)
+    print(f"{'MODEL':<15} | {'REWARD':<10} | {'SWITCH RATE':<12}")
+    print("-" * 45)
+    for r in all_results:
+        print(f"{r['model']:<15} | {r['total_reward']:<10.2f} | {r['switching_rate']:<12.4f}")
+    print("="*45)
+    
 if __name__ == "__main__":
     main()
