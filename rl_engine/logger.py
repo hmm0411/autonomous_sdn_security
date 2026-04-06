@@ -1,5 +1,6 @@
 import csv
 import os
+import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
 class Logger:
