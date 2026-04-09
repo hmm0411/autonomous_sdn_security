@@ -1,15 +1,18 @@
+import os
 import time
 from xml.parsers.expat import model
 import torch
 import numpy as np
+import random
 from collector import ONOSCollector
 from controller_client import ControllerClient
 from twin import DigitalTwin
 from safety import validate
 from transition_logger import TransitionLogger
 
-MODEL_DQN_PATH = "../../models/dqn_model.pth"
-MODEL_PPO_PATH = "../../models/ppo_model.pth"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_DQN_PATH = os.path.join(BASE_DIR, 'models', 'dqn_model.pth')
+MODEL_PPO_PATH = os.path.join(BASE_DIR, 'models', 'ppo_model.pth')
 ACTIVE_MODEL = "DQN"  # Hoặc "PPO"
 ATTACK_TYPE = "ddos"
 
