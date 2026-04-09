@@ -11,6 +11,8 @@ class Logger:
         os.makedirs(log_dir, exist_ok=True)
         self.writer = SummaryWriter(log_dir=log_dir)
 
+        self.llm_logs = []
+
     # PPO logging
     def log_ppo(self, episode, reward, policy_loss, value_loss, entropy, actions):
 
@@ -27,6 +29,29 @@ class Logger:
         self.writer.add_scalar("Loss/MSE_Loss", loss, episode)
         self.writer.add_scalar("Metrics/Epsilon", epsilon, episode)
         self.writer.add_histogram("Actions", np.array(actions), episode)
+
+    # LLM logging
+    def log_llm(self, episode, step, state, action, qos, explanation):
+
+        # parse SAFE / RISKY
+        safety = -1
+        if "SAFE" in explanation.upper():
+            safety = 1
+        elif "RISKY" in explanation.upper():
+            safety = 0
+
+        # TensorBoard
+        self.writer.add_scalar("LLM/Safety", safety, episode)
+
+        self.llm_logs.append({
+            "episode": episode,
+            "step": step,
+            "state": state.tolist() if hasattr(state, "tolist") else state,
+            "action": int(action),
+            "qos": qos,
+            "explanation": explanation,
+            "safety": safety
+        })
 
     # Save PPO logs
     def save_ppo(self, filename="ppo_training_log.csv"):
@@ -73,4 +98,29 @@ class Logger:
 
     def close(self):
         """Đóng writer khi kết thúc huấn luyện"""
+        self.writer.close()
+
+    # Save LLM
+    def save_llm(self, filename="llm_log.csv"):
+
+        with open(filename, "w", newline="", encoding="utf-8") as f:
+
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "episode",
+                    "step",
+                    "state",
+                    "action",
+                    "qos",
+                    "explanation",
+                    "safety"
+                ]
+            )
+
+            writer.writeheader()
+            for row in self.llm_logs:
+                writer.writerow(row)
+
+    def close(self):
         self.writer.close()
