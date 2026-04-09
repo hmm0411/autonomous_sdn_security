@@ -48,7 +48,7 @@ def load_model():
 
     # model.eval()
     # return model
-    state_dim = 9  # Số lượng features của state
+    state_dim = 10  # Số lượng features của state
     action_dim = 5  # Số lượng action (ví dụ: 0,1,2)
     model = QNetwork(state_dim, action_dim)
     state_dict = torch.load(MODEL_DQN_PATH)
