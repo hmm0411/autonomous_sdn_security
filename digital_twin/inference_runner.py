@@ -3,6 +3,7 @@ import time
 from xml.parsers.expat import model
 import torch
 import numpy as np
+import torch.nn as nn
 import random
 from collector import ONOSCollector
 from controller_client import ControllerClient
@@ -21,14 +22,37 @@ controller = ControllerClient()
 # twin = DigitalTwin("../../models/surrogate_model.pkl")
 logger = TransitionLogger("transition_dataset.csv")
 
-def load_model():
-    if ACTIVE_MODEL == "DQN":
-        model = torch.load(MODEL_DQN_PATH)
-    elif ACTIVE_MODEL == "PPO":
-        model = torch.load(MODEL_PPO_PATH)
-    else:
-        raise ValueError("ACTIVE_MODEL phải là 'DQN' hoặc 'PPO'")
+class QNetwork(nn.Module):
 
+    def __init__(self, state_dim, action_dim):
+        super(QNetwork, self).__init__()
+
+        self.net = nn.Sequential(
+            nn.Linear(state_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, action_dim)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+def load_model():
+    # if ACTIVE_MODEL == "DQN":
+    #     model = torch.load(MODEL_DQN_PATH)
+    # elif ACTIVE_MODEL == "PPO":
+    #     model = torch.load(MODEL_PPO_PATH)
+    # else:
+    #     raise ValueError("ACTIVE_MODEL phải là 'DQN' hoặc 'PPO'")
+
+    # model.eval()
+    # return model
+    state_dim = 9  # Số lượng features của state
+    action_dim = 5  # Số lượng action (ví dụ: 0,1,2)
+    model = QNetwork(state_dim, action_dim)
+    state_dict = torch.load(MODEL_DQN_PATH)
+    model.load_state_dict(state_dict)
     model.eval()
     return model
 
@@ -98,7 +122,7 @@ def run():
             # Để Twin học được nhiều tình huống, thỉnh thoảng (20%) ta ép nó làm 
             # hành động ngẫu nhiên để xem mạng bị ảnh hưởng thế nào (Exploration)
             if random.random() < 0.2:
-                action = random.choice([0, 1, 2]) # Giả sử bạn có 3 action: 0,1,2
+                action = random.choice([0, 1, 2, 3, 4]) # Giả sử bạn có 5 action: 0,1,2,3,4
 
             print(f"[RL] Hành động được chọn: {action}. Đang áp dụng xuống ONOS...")
 
