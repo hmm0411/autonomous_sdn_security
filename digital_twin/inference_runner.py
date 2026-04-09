@@ -56,9 +56,15 @@ def load_model():
     model.eval()
     return model
 
-def select_action(model, state):
-    # Đảm bảo state được chuẩn hóa trước khi đưa vào PyTorch
-    state_tensor = torch.FloatTensor(state).unsqueeze(0)
+def select_action(model, state, previous_action):
+    # 1. Chuyển state thành list
+    state_list = list(state)
+    
+    # 2. Thêm hành động trước đó vào làm feature thứ 10
+    state_list.append(float(previous_action)) 
+
+    # 3. Đưa vào PyTorch
+    state_tensor = torch.FloatTensor(state_list).unsqueeze(0)
     with torch.no_grad():
         action = model(state_tensor).argmax().item()
     return action
@@ -107,34 +113,31 @@ def run():
     model = load_model()
     print("=== CHẾ ĐỘ THU THẬP DỮ LIỆU CHO DIGITAL TWIN ===")
     
+    # Khởi tạo hành động mặc định ban đầu (0 = Bình thường)
+    previous_action = 0 
+    
     while True:
         try:
-            # 1. Lấy trạng thái mạng
             state = collector.get_state()
             if state is None:
                 continue
 
-            # 2. RL Ra quyết định (Lấy từ model)
-            state_tensor = torch.FloatTensor(state).unsqueeze(0)
-            with torch.no_grad():
-                action = model(state_tensor).argmax().item()
+            # Truyền previous_action vào để mô hình có ngữ cảnh
+            action = select_action(model, state, previous_action)
             
-            # Để Twin học được nhiều tình huống, thỉnh thoảng (20%) ta ép nó làm 
-            # hành động ngẫu nhiên để xem mạng bị ảnh hưởng thế nào (Exploration)
             if random.random() < 0.2:
-                action = random.choice([0, 1, 2, 3, 4]) # Giả sử bạn có 5 action: 0,1,2,3,4
+                action = random.choice([0, 1, 2, 3, 4]) 
 
             print(f"[RL] Hành động được chọn: {action}. Đang áp dụng xuống ONOS...")
 
-            # 3. ÉP THỰC THI THẲNG XUỐNG MẠNG (BỎ QUA TWIN)
             controller.apply_action(action)
             
-            # 4. Chờ mạng phản ứng và tính toán độ trễ, mất gói
+            # Cập nhật lại previous_action cho vòng lặp tiếp theo
+            previous_action = action 
+            
             time.sleep(3) 
             next_state = collector.get_state()
             
-            # 5. Ghi log vào file CSV
-            # Lưu ý: Cột cuối cùng (Attack Type) hiện để tạm là 'mixed'
             logger.log(state, action, next_state, "mixed")
             print(f"Đã ghi Log: Action={action} | Next Latency={next_state[4]}ms | Next Loss={next_state[5]}")
             
