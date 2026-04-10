@@ -1,4 +1,4 @@
-```markdown
+---
 # Autonomous SDN Security System
 
 An intelligent network defense system using **Software-Defined Networking (SDN)** and **Reinforcement Learning (RL)**.
@@ -20,7 +20,7 @@ An intelligent network defense system using **Software-Defined Networking (SDN)*
 
 This project models network defense as a **reinforcement learning problem**:
 
-```
+```bash
 
 State → RL Agent → Action → SDN Controller → Network → Feedback → Reward
 
@@ -34,7 +34,7 @@ The system continuously monitors network conditions and learns optimal policies 
 
 ### High-level
 
-```
+```bash
 
 Mininet → Controller → RL Agent → Action → Network
 ↓
@@ -48,7 +48,7 @@ Monitoring
 
 ### Layered Design
 
-```
+```bash
 
 Training & Evaluation   (experiments/)
 ↓
@@ -70,7 +70,7 @@ Network (Mininet + attacks)
 
 ## Project Structure
 
-```
+```bash
 
 autonomous_sdn_security/
 ├── infra/               # Mock SDN controller + Mininet
@@ -87,6 +87,8 @@ autonomous_sdn_security/
 
 ## Tech Stack
 
+```bash
+
 | Area | Technology |
 |------|-----------|
 | RL | PyTorch, Gymnasium |
@@ -97,8 +99,9 @@ autonomous_sdn_security/
 | Monitoring | Prometheus, Grafana |
 | Deployment | Docker, K3s |
 
----
+```
 
+---
 ## Getting Started
 
 ### 1. Clone repository
@@ -220,5 +223,3 @@ This project focuses on **real-world system design**, combining:
 * Intelligent decision-making
 * Observability and monitoring
 * Automation and deployment
-
----
