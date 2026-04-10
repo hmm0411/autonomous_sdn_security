@@ -87,19 +87,15 @@ autonomous_sdn_security/
 
 ## Tech Stack
 
-```bash
-
-| Area               | Technology                        |
-|--------------------|-----------------------------------|
-| RL Framework       | PyTorch, Gymnasium (OpenAI Gym)   |
-| Network Simulation | Mininet, OpenFlow 1.3             |
-| Attack Simulation  | hping3, Scapy                     |
-| SDN Controller     | ONOS                              |
-| ML Tracking        | MLflow                            |
-| Monitoring         | Prometheus, Grafana               |
-| Deployment         | Docker, K3s                       |
-
-```
+|  Area |  Technology |
+|--------|-------------|
+| **RL Framework** | PyTorch, Gymnasium |
+| **Network Simulation** | Mininet, OpenFlow 1.3 |
+| **Attack Simulation** | hping3, Scapy |
+| **SDN Controller** | ONOS |
+| **ML Tracking** | MLflow |
+| **Monitoring** | Prometheus, Grafana |
+| **Deployment** | Docker, K3s |
 
 ---
 ## Getting Started
