@@ -89,15 +89,15 @@ autonomous_sdn_security/
 
 ```bash
 
-| Area | Technology |
-|------|-----------|
-| RL | PyTorch, Gymnasium |
-| Network | Mininet, OpenFlow |
-| SDN Controller | ONOS |
-| Attack Simulation | hping3, Scapy |
-| MLOps | MLflow |
-| Monitoring | Prometheus, Grafana |
-| Deployment | Docker, K3s |
+| Area               | Technology                        |
+|--------------------|-----------------------------------|
+| RL Framework       | PyTorch, Gymnasium (OpenAI Gym)   |
+| Network Simulation | Mininet, OpenFlow 1.3             |
+| Attack Simulation  | hping3, Scapy                     |
+| SDN Controller     | ONOS                              |
+| ML Tracking        | MLflow                            |
+| Monitoring         | Prometheus, Grafana               |
+| Deployment         | Docker, K3s                       |
 
 ```
 
