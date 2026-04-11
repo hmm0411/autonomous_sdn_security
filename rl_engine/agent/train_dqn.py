@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch
+import mlflow
 
 from rl_engine import env
 from rl_engine.env import SDNEnv
@@ -13,6 +14,16 @@ from rl_engine.replay_buffer import ReplayBuffer
 from rl_engine.logger import Logger
 from rl_engine.config import *
 from rl_engine.utils import set_seed
+
+
+mlflow.set_tracking_uri("http://34.126.64.185:5000") # Dùng localhost nếu chạy network host
+mlflow.set_experiment("sdn-rl")
+
+# Đặt tên run để dễ nhìn trên UI
+with mlflow.start_run(run_name="DQN_Training"):
+    mlflow.log_param("algo", "DQN")
+    mlflow.log_metric("reward", total_reward)
+    mlflow.log_artifact("dqn._model.pth")
 
 def train():
     SEED = 42
@@ -32,6 +43,9 @@ def train():
     epsilon = EPS_START
 
     total_episodes = 2 if os.getenv("CI") == "true" else MAX_EPISODES
+    
+    with mlflow.start_run(run_name="DQN_Training"):
+        mlflow.log_param("algo", "DQN")
 
     for episode in range(total_episodes):
 
@@ -40,6 +54,11 @@ def train():
         total_reward = 0
         action_history = []
         losses = []
+
+        mlflow.log_metric("reward", total_reward, step=episode)
+            mlflow.log_metric("epsilon", epsilon, step=episode)
+            if len(losses) > 0:
+                mlflow.log_metric("loss", np.mean(losses), step=episode)
 
         for step in range(MAX_STEPS):
 
@@ -83,7 +102,7 @@ def train():
             avg_loss,
             epsilon,
             action_history
-        )
+        )        
 
         print(
             f"Episode {episode} | "
@@ -99,6 +118,7 @@ def train():
     
     save_path = os.path.join(MODELS_DIR, "dqn_model.pth")
     torch.save(agent.q_net.state_dict(), save_path)
+    mlflow.log_artiface(save_path)
     print(f"Đã lưu model DQN tại: {save_path}")
 
 
