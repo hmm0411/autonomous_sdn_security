@@ -5,6 +5,7 @@ import random
 import numpy as np
 import torch
 import torch
+import mlflow
 
 from rl_engine.env import SDNEnv    
 from rl_engine.agent.ppo_agent import PPOAgent
@@ -14,6 +15,14 @@ from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.utils import set_seed
 from torch.optim.lr_scheduler import LinearLR
 
+mlflow.set_tracking_uri("http://34.126.64.185:5000") # Dùng localhost nếu chạy network host
+mlflow.set_experiment("sdn-rl")
+
+# Đặt tên run để dễ nhìn trên UI
+with mlflow.start_run(run_name="DQN_Training"):
+    mlflow.log_param("algo", "DQN")
+    mlflow.log_metric("reward", total_reward)
+    mlflow.log_artifact("ppo_model.pth")
     
 def train():
     SEED = 42
