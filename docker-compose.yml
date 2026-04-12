@@ -16,6 +16,9 @@ services:
     build: ./rl_engine
     depends_on:
       - controller
+    ports:
+      - "8000:8000" # Port API của RL Agent
+      - "9000:9000" # Port để RL Agent expose metrics cho Prometheus
     networks:
       - sdn-net
     volumes:
@@ -30,6 +33,14 @@ services:
 
   mlflow:
     image: ghcr.io/mlflow/mlflow
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root /mlruns
+      --host 0.0.0.0
+    volumes:
+      - ./mlruns:/mlruns
+      - ./mlflow.db:/mlflow.db
     ports:
       - "5000:5000"
     networks:
@@ -45,4 +56,51 @@ services:
       - rl-agent
     networks: 
       - sdn-net
+<<<<<<< HEAD
         
+=======
+  
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+      - "8000:8000" # Port để RL Agent expose metrics
+    networks:
+      - sdn-net
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
+    
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - sdn-net
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    
+  alertmanager:
+    image: prom/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - sdn-net
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+  
+  auto-trigger:
+    build: ./mlops
+    depends_on:
+      - alertmanager
+    ports:
+      - "5001:5001"
+    networks:
+      - sdn-net
+    volumes:
+      - ./mlops:/app
+
+volumes:
+  grafana-storage:
+        
+>>>>>>> 98e4064 (feat(mlops): integrate MLflow, Prometheus and multi-seed training for DQN/PPO evaluation)

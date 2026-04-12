@@ -1,0 +1,10 @@
+groups:
+- name: sdn-security-alerts
+  rules:
+  - alert: LowReward
+    expr: rl_reward < 50
+    for: 30s
+    labels:
+      severity: critical
+    annotations:
+      summary: "RL Agent performance dropped"
