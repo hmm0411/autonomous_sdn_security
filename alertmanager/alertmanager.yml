@@ -1,0 +1,7 @@
+route:
+  receiver: 'autotrigger-webhook'
+
+receivers:
+- name: 'autotrigger-webhook'
+  webhook_configs:
+  - url: 'http://auto-trigger:5001/alert'

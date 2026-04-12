@@ -1,3 +1,4 @@
+import logging
 import os
 import collections
 import pandas as pd
@@ -14,16 +15,11 @@ from rl_engine.config import *
 from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.utils import set_seed
 from torch.optim.lr_scheduler import LinearLR
+from prometheus_client import start_http_server
 
 mlflow.set_tracking_uri("http://34.126.64.185:5000") # Dùng localhost nếu chạy network host
 mlflow.set_experiment("sdn-rl")
 
-# Đặt tên run để dễ nhìn trên UI
-with mlflow.start_run(run_name="DQN_Training"):
-    mlflow.log_param("algo", "DQN")
-    mlflow.log_metric("reward", total_reward)
-    mlflow.log_artifact("ppo_model.pth")
-    
 def train():
     SEED = 42
     set_seed(SEED)
@@ -103,6 +99,11 @@ def train():
         )
 
     logger.close()
+
+    with mlflow.start_run(run_name="DQN_Training"):
+        mlflow.log_param("algo", "DQN")
+        mlflow.log_metric("reward", total_reward)
+        mlflow.log_artifact("ppo_model.pth")
 
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     MODELS_DIR = os.path.join(ROOT_DIR, "models")
@@ -215,4 +216,7 @@ def train_multi_seeds():
     print("\nĐã lưu kết quả đa hạt giống vào thư mục results/")
 
 if __name__ == "__main__":
+    port = 9000
+    start_http_server(port)
+    logging.info(f"Đã khởi động Prometheus metrics server trên port {port}")
     train_multi_seeds()
