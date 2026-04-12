@@ -1,5 +1,9 @@
 version: "3.9"
 
+networks:
+  sdn-net:
+    driver: bridge
+
 services:
   controller:
     build: ./infra/controller
@@ -41,8 +45,4 @@ services:
       - rl-agent
     networks: 
       - sdn-net
-
-networks:
-  sdn-net:
-    driver: bridge
         
