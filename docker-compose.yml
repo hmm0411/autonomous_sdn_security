@@ -4,12 +4,16 @@ services:
   controller:
     build: ./infra/controller
     ports:
-      - "8080:8080"
+      - "8181:8181"
+    networks:
+      - sdn-net
 
   rl-agent:
     build: ./rl_engine
     depends_on:
       - controller
+    networks:
+      - sdn-net
     volumes:
       - ./rl_engine:/app # Mount the rl_engine directory to /app in the container
 
@@ -17,11 +21,15 @@ services:
     build: ./digital_twin
     depends_on:
       - controller
+    networks:
+      - sdn-net
 
   mlflow:
     image: ghcr.io/mlflow/mlflow
     ports:
       - "5000:5000"
+    networks:
+      - sdn-net
 
   control_loop:
     build:
@@ -33,4 +41,8 @@ services:
       - rl-agent
     networks: 
       - sdn-net
+
+networks:
+  sdn-net:
+    driver: bridge
         
