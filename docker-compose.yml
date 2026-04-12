@@ -22,3 +22,15 @@ services:
     image: ghcr.io/mlflow/mlflow
     ports:
       - "5000:5000"
+
+  control_loop:
+    build:
+      context: .
+      dockerfile: ./control_loop/Dockerfile
+    container_name: control_loop
+    depends_on:
+      - onos
+      - rl-agent
+    networks: 
+      - sdn-net
+        
