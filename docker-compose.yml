@@ -41,7 +41,7 @@ services:
       dockerfile: ./control_loop/Dockerfile
     container_name: control_loop
     depends_on:
-      - onos
+      - controller
       - rl-agent
     networks: 
       - sdn-net
