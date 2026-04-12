@@ -2,10 +2,10 @@ import requests
 import numpy as np
 
 class ControllerClient:
-    def __init__(self, controller_url="http://controller:8080", use_mock=True):
-        self.controller_url = controller_url
+    def __init__(self, onos_ip="34.126.64.185", port="8181", user="onos", pwd="rocks", use_mock=True):
+        self.controller_url = f"http://{onos_ip}:{port}"
+        self.auth = (user, pwd)
         self.use_mock = use_mock
-
 
     def get_state(self):
         if self.use_mock:
@@ -30,6 +30,7 @@ class ControllerClient:
             return {"status": "mock_action"}
         r = requests.post(
             f"{self.controller_url}/apply_action",
-            json={"action": action}
+            json={"action": action},
+            auth=self.auth
         )
         return r.json()

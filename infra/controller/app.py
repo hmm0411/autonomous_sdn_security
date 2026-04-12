@@ -19,4 +19,4 @@ def get_state():
     })
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    app.run(host="34.126.64.185", port=8181)
