@@ -1,7 +1,6 @@
 import random
 import numpy as np
 
-from rl_engine import env
 from rl_engine.env import SDNEnv
 from rl_engine.agent.dqn_agent import DQNAgent
 from rl_engine.replay_buffer import ReplayBuffer
