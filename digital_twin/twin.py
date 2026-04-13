@@ -1,31 +1,29 @@
+import numpy as np
+import joblib
+
 class DigitalTwin:
-    def __init__(self):
+    def __init__(self, model_path="../../models/surrogate_model.pkl"):
+        self.model = joblib.load(model_path)
         self.current_state = None
 
     def update_state(self, state):
-        """
-        Cập nhật state từ SDN thật
-        """
-        self.current_state = state
+        # Đảm bảo state là một list/array có 9 phần tử
+        self.current_state = np.array(state)
 
     def simulate(self, action):
-        """
-        Mô phỏng tác động của action
-        Ví dụ: nếu block flow → giảm packet rate
-        """
         if self.current_state is None:
             return None
 
-        simulated_latency = self.current_state["latency"]
+        # Ghép 9 features của state với 1 action -> 10 features khớp với lúc train
+        x = np.concatenate([self.current_state, [action]])
         
-        # Giả sử các action có tác động như sau (đây chỉ là ví dụ, cần điều chỉnh theo thực tế):
-        if action == "block":
-            simulated_latency *= 0.8
-        elif action == "limit":
-            simulated_latency *= 0.9
-        elif action == "redirect":
-            simulated_latency *= 0.95
-        elif action == "isolate":
-            simulated_latency *= 0.7
+        # Reshape thành mảng 2D cho sklearn predict
+        prediction = self.model.predict(x.reshape(1, -1))[0]
 
-        return simulated_latency
+        predicted_latency = prediction[0]
+        predicted_loss = prediction[1]
+
+        return {
+            "latency": predicted_latency,
+            "packet_loss": predicted_loss
+        }

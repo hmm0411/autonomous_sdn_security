@@ -1,0 +1,151 @@
+import os
+import time
+from xml.parsers.expat import model
+import torch
+import numpy as np
+import torch.nn as nn
+import random
+from collector import ONOSCollector
+from controller_client import ControllerClient
+from twin import DigitalTwin
+from safety import validate
+from transition_logger import TransitionLogger
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_DQN_PATH = os.path.join(BASE_DIR, 'models', 'dqn_model.pth')
+MODEL_PPO_PATH = os.path.join(BASE_DIR, 'models', 'ppo_model.pth')
+ACTIVE_MODEL = "DQN"  # Hoặc "PPO"
+ATTACK_TYPE = "ddos"
+
+collector = ONOSCollector()
+controller = ControllerClient()
+# twin = DigitalTwin("../../models/surrogate_model.pkl")
+logger = TransitionLogger("transition_dataset.csv")
+
+class QNetwork(nn.Module):
+
+    def __init__(self, state_dim, action_dim):
+        super(QNetwork, self).__init__()
+
+        self.net = nn.Sequential(
+            nn.Linear(state_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, action_dim)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+def load_model():
+    # if ACTIVE_MODEL == "DQN":
+    #     model = torch.load(MODEL_DQN_PATH)
+    # elif ACTIVE_MODEL == "PPO":
+    #     model = torch.load(MODEL_PPO_PATH)
+    # else:
+    #     raise ValueError("ACTIVE_MODEL phải là 'DQN' hoặc 'PPO'")
+
+    # model.eval()
+    # return model
+    state_dim = 10  # Số lượng features của state
+    action_dim = 5  # Số lượng action (ví dụ: 0,1,2)
+    model = QNetwork(state_dim, action_dim)
+    state_dict = torch.load(MODEL_DQN_PATH)
+    model.load_state_dict(state_dict)
+    model.eval()
+    return model
+
+def select_action(model, state, previous_action):
+    # 1. Chuyển state thành list
+    state_list = list(state)
+    
+    # 2. Thêm hành động trước đó vào làm feature thứ 10
+    state_list.append(float(previous_action)) 
+
+    # 3. Đưa vào PyTorch
+    state_tensor = torch.FloatTensor(state_list).unsqueeze(0)
+    with torch.no_grad():
+        action = model(state_tensor).argmax().item()
+    return action
+
+# def run():
+#     model = load_model()
+#     print("Khởi động hệ thống phòng vệ tự động SDN...")
+
+#     while True:
+#         try:
+#             # 1. Lấy trạng thái từ mạng thật (Mininet -> ONOS)
+#             state = collector.get_state()
+#             if state is None:
+#                 continue
+
+#             # 2. RL Suy luận hành động
+#             action = select_action(model, state)
+#             print(f"RL đề xuất hành động: {action}")
+
+#             # 3. Twin Mô phỏng (Policy Validator)
+#             twin.update_state(state)
+#             predicted = twin.simulate(action)
+#             print(f"Twin dự đoán QoS: {predicted}")
+
+#             # 4. Kiểm tra an toàn
+#             if validate(predicted):
+#                 print("Twin ACCEPT: Đang áp dụng luật xuống SDN...")
+#                 controller.apply_action(action)
+                
+#                 # Chờ mạng hội tụ trạng thái mới
+#                 time.sleep(2) 
+#                 next_state = collector.get_state()
+                
+#                 # Ghi log làm dữ liệu đánh giá
+#                 logger.log(state, action, next_state, ATTACK_TYPE)
+#             else:
+#                 print("Twin REJECT: Hành động bị hủy do rủi ro mạng.")
+
+#             time.sleep(3)
+            
+#         except Exception as e:
+#             print(f"Lỗi hệ thống: {e}")
+#             time.sleep(5)
+
+def run():
+    model = load_model()
+    print("=== CHẾ ĐỘ THU THẬP DỮ LIỆU CHO DIGITAL TWIN ===")
+    
+    # Khởi tạo hành động mặc định ban đầu (0 = Bình thường)
+    previous_action = 0 
+    
+    while True:
+        try:
+            state = collector.get_state()
+            if state is None:
+                continue
+
+            # Truyền previous_action vào để mô hình có ngữ cảnh
+            action = select_action(model, state, previous_action)
+            
+            if random.random() < 0.2:
+                action = random.choice([0, 1, 2, 3, 4]) 
+
+            print(f"[RL] Hành động được chọn: {action}. Đang áp dụng xuống ONOS...")
+
+            controller.apply_action(action)
+            
+            # Cập nhật lại previous_action cho vòng lặp tiếp theo
+            previous_action = action 
+            
+            time.sleep(3) 
+            next_state = collector.get_state()
+            
+            logger.log(state, action, next_state, "mixed")
+            print(f"Đã ghi Log: Action={action} | Next Latency={next_state[4]}ms | Next Loss={next_state[5]}")
+            
+            time.sleep(2)
+            
+        except Exception as e:
+            print(f"Lỗi: {e}")
+            time.sleep(5)
+
+if __name__ == "__main__":
+    run()

@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 5s
+
+rule_files:
+  - "alert.rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  - job_name: 'rl-agent'
+    static_configs:
+      - targets: ['rl-agent:9000']
