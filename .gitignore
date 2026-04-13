@@ -1,0 +1,9 @@
+# ignore data
+data/
+*.csv
+.env
+# ignore pycache
+__pycache__/
+*.pyc
+# ignore virtual environment
+venv/

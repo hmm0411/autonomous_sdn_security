@@ -13,8 +13,8 @@ from typing import Any
 
 class SDNEnv(gym.Env):
 
-    def __init__(self, controller_url="http://localhost:8181/onos/v1"):
-        self.controller = ControllerClient(use_mock=True)
+    def __init__(self, onos_ip="34.126.64.185", port="8181", user="onos", pwd="rocks"):
+        self.controller = ControllerClient(onos_ip=onos_ip, port=port, user=user, pwd=pwd, use_mock=True)
         self.state_builder = StateBuilder()
         self.reward_calc = Reward()
 
