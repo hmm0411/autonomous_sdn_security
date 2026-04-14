@@ -6,7 +6,7 @@ networks:
 
 services:
   controller:
-    build: onosproject/onos:2.7.0
+    image: onosproject/onos:2.7.0
     container_name: onos-controller
     ports:
       - "8181:8181" # Web GUI & REST API
@@ -30,6 +30,7 @@ services:
     volumes:
       - ./rl_engine:/app # Mount the rl_engine directory to /app in the container
       - ./models:/app/models # Mount the models directory to /app/models in the container
+    command: python3 -m rl_engine.agent.train_dqn
 
   # twin:
   #   build: ./digital_twin
@@ -44,7 +45,7 @@ services:
       - SERVICE_MODE=mlflow
     ports:
       - "5000:5000"
-    command: python main.py
+    command: python main.py --host 0.0.0.0 --port 5000
     networks:
       - sdn-net
     volumes:
