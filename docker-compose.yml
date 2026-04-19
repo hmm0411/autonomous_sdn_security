@@ -12,17 +12,37 @@ services:
     networks:
       - sdn-net
 
-  rl-agent:
+  # Container chạy DQN
+  rl-agent-dqn:
     build: ./rl_engine
+    container_name: rl-agent-dqn
     depends_on:
       - controller
     ports:
-      - "8000:8000" # Port API của RL Agent
-      - "9000:9000" # Port để RL Agent expose metrics cho Prometheus
+      - "8000:8000"
+      - "9000:9000"
     networks:
       - sdn-net
     volumes:
-      - ./rl_engine:/app # Mount the rl_engine directory to /app in the container
+      - ./rl_engine:/app
+      - ./models:/app/models
+    command: python3 -m rl_engine.agent.train_dqn
+
+  # Container chạy PPO
+  rl-agent-ppo:
+    build: ./rl_engine
+    container_name: rl-agent-ppo
+    depends_on:
+      - controller
+    ports:
+      - "8001:8000"
+      - "9001:9001"
+    networks:
+      - sdn-net
+    volumes:
+      - ./rl_engine:/app
+      - ./models:/app/models
+    command: python3 -m rl_engine.agent.train_ppo
 
   twin:
     build: ./digital_twin
@@ -53,21 +73,21 @@ services:
     container_name: control_loop
     depends_on:
       - controller
-      - rl-agent
-    networks: 
+      - rl-agent-dqn
+      - rl-agent-ppo
+    networks:
       - sdn-net
-        
+
   prometheus:
     image: prom/prometheus
     ports:
       - "9090:9090"
-      - "8000:8000" # Port để RL Agent expose metrics
     networks:
       - sdn-net
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
-    
+
   grafana:
     image: grafana/grafana
     ports:
@@ -76,7 +96,7 @@ services:
       - sdn-net
     volumes:
       - grafana-storage:/var/lib/grafana
-    
+
   alertmanager:
     image: prom/alertmanager
     ports:
@@ -85,7 +105,7 @@ services:
       - sdn-net
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
-  
+
   auto-trigger:
     build: ./mlops
     depends_on:
