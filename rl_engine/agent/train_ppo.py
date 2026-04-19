@@ -17,8 +17,17 @@ from rl_engine.utils import set_seed
 from torch.optim.lr_scheduler import LinearLR
 from prometheus_client import start_http_server
 
+<<<<<<< HEAD
 mlflow.set_tracking_uri("http://34.126.64.185:5000") # Dùng localhost nếu chạy network host
 mlflow.set_experiment("sdn-rl")
+=======
+# Cấu hình Logging & MLflow
+logging.basicConfig(level=logging.INFO)
+
+# ---> SỬA Ở ĐÂY: Dùng tên service của docker-compose thay vì IP Public
+mlflow.set_tracking_uri("http://mlflow:5000")
+mlflow.set_experiment("sdn-rl-ppo")
+>>>>>>> bb0bf96 (feat: refactor RL pipeline và ổn định quá trình train)
 
 def train():
     SEED = 42
@@ -147,9 +156,26 @@ def run_single_seed(seed_value, df_train):
             state = next_state
             if done or truncated: break
             
+<<<<<<< HEAD
         # Update agent sau mỗi episode (hoặc theo batch tùy code của bạn)
         # agent.update(...) 
         
+=======
+        # QUAN TRỌNG: CẬP NHẬT AGENT (mất dong này code cũ)
+        metrics = agent.update(states, actions, log_probs, rewards, dones)
+        
+        # Gọi logger.log_ppo() để chia sẻ thông số sang cho Prometheus
+        logger.log_ppo(
+            episode=episode,
+            reward=episode_reward,
+            policy_loss=metrics["policy_loss"],
+            value_loss=metrics["value_loss"],
+            entropy=metrics["entropy"],
+            actions=actions
+        )
+        
+        # Lưu lịch sử
+>>>>>>> bb0bf96 (feat: refactor RL pipeline và ổn định quá trình train)
         seed_reward_history.append(episode_reward)
         recent_rewards.append(episode_reward) # Thêm vào cửa sổ trượt
         if len(recent_rewards) == 10 and episode > 50:
@@ -216,7 +242,12 @@ def train_multi_seeds():
     print("\nĐã lưu kết quả đa hạt giống vào thư mục results/")
 
 if __name__ == "__main__":
+<<<<<<< HEAD
     port = 9000
     start_http_server(port)
     logging.info(f"Đã khởi động Prometheus metrics server trên port {port}")
+=======
+    port = 9001
+    start_http_server(port)
+>>>>>>> bb0bf96 (feat: refactor RL pipeline và ổn định quá trình train)
     train_multi_seeds()
