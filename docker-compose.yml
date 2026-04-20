@@ -6,11 +6,17 @@ networks:
 
 services:
   controller:
-    build: ./infra/controller
+    image: onosproject/onos:2.7.0
+    container_name: onos-controller
     ports:
-      - "8181:8181"
+      - "8181:8181" # Web GUI & REST API
+      - "6653:6653" # Port giao tiếp OpenFlow với Mininet
+      - "8101:8101" # Karaf SSH
     networks:
       - sdn-net
+    environment:
+      # Tự động kích hoạt các App cần thiết của ONOS khi khởi động
+      - ONOS_APPS=drivers,openflow,fwd,proxyarp,topology
 
   rl-agent:
     build: ./rl_engine
@@ -23,50 +29,38 @@ services:
       - sdn-net
     volumes:
       - ./rl_engine:/app # Mount the rl_engine directory to /app in the container
+      - ./models:/app/models # Mount the models directory to /app/models in the container
+    command: python3 -m rl_engine.agent.train_dqn
 
-  twin:
-    build: ./digital_twin
-    depends_on:
-      - controller
-    networks:
-      - sdn-net
+  # twin:
+  #   build: ./digital_twin
+  #   depends_on:
+  #     - controller
+  #   networks:
+  #     - sdn-net
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow
-    command: >
-      mlflow server
-      --backend-store-uri sqlite:///mlflow.db
-      --default-artifact-root /mlruns
-      --host 0.0.0.0
-    volumes:
-      - ./mlruns:/mlruns
-      - ./mlflow.db:/mlflow.db
+    build: ./mlops
+    environment:
+      - SERVICE_MODE=mlflow
     ports:
       - "5000:5000"
+    command: python main.py --host 0.0.0.0 --port 5000
     networks:
       - sdn-net
-
-  control_loop:
-    build:
-      context: .
-      dockerfile: ./control_loop/Dockerfile
-    container_name: control_loop
-    depends_on:
-      - controller
-      - rl-agent
-    networks: 
-      - sdn-net
+    volumes:
+      - ./mlruns:/mlruns # Mount mlruns directory for MLflow tracking data
+      - ./mlflow.db:/mlflow.db # Mount mlflow.db for MLflow metadata storage
         
   prometheus:
     image: prom/prometheus
     ports:
       - "9090:9090"
-      - "8000:8000" # Port để RL Agent expose metrics
     networks:
       - sdn-net
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
+      - ./mlops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./mlops/prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
     
   grafana:
     image: grafana/grafana
@@ -84,18 +78,19 @@ services:
     networks:
       - sdn-net
     volumes:
-      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./mlops/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
   
   auto-trigger:
     build: ./mlops
-    depends_on:
-      - alertmanager
+    environment:
+      - SERVICE_MODE=trigger
     ports:
       - "5001:5001"
+    command: python main.py
+    depends_on:
+      - alertmanager
     networks:
       - sdn-net
-    volumes:
-      - ./mlops:/app
 
 volumes:
   grafana-storage:
