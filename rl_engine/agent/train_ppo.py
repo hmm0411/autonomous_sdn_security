@@ -75,7 +75,12 @@ def run_single_seed(seed_value, df_train, parent_run=None):
                 best_avg_reward = avg_reward
                 save_path = f"../../models/best_ppo_seed_{seed_value}.pth"
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                agent.save(save_path) if hasattr(agent, "save") else torch.save(agent.policy.state_dict(), save_path)
+                if hasattr(agent, "save"):
+                    agent.save(save_path)
+                elif hasattr(agent, "policy"):
+                    torch.save(agent.policy.state_dict(), save_path)
+                else:
+                    torch.save(agent.state_dict(), save_path)
                 logging.info(f"[Seed {seed_value}] Ep {episode}: New Best Avg Reward: {best_avg_reward:.2f}")
 
         scheduler.step()
