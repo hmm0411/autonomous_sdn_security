@@ -7,6 +7,8 @@ import torch
 import mlflow
 from prometheus_client import start_http_server
 
+from rl_engine import env
+from rl_engine.env import SDNEnv
 from rl_engine.agent.dqn_agent import DQNAgent
 from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.replay_buffer import ReplayBuffer
@@ -15,7 +17,9 @@ from rl_engine.config import *
 from rl_engine.utils import set_seed
 
 logging.basicConfig(level=logging.INFO)
-mlflow.set_tracking_uri("http://34.126.64.185:5000")
+
+# ---> SỬA Ở ĐÂY: Dùng tên service mlflow trong docker thay vì IP Public
+mlflow.set_tracking_uri("http://mlflow:5000")
 mlflow.set_experiment("sdn-rl-dqn")
 
 def run_single_seed_dqn(seed_value, df_train):
@@ -25,6 +29,9 @@ def run_single_seed_dqn(seed_value, df_train):
     agent = DQNAgent(state_dim=STATE_DIM, action_dim=ACTION_DIM)
     buffer = ReplayBuffer(BUFFER_SIZE)
     
+    # ---> SỬA Ở ĐÂY: Khởi tạo Logger cho riêng DQN
+    logger = Logger(log_dir=f"../../runs/dqn_seed_{seed_value}")
+    
     epsilon = EPS_START
     seed_reward_history = []
     total_episodes = 2 if os.getenv("CI") == "true" else MAX_EPISODES
@@ -33,6 +40,9 @@ def run_single_seed_dqn(seed_value, df_train):
         state, _ = env.reset(seed=seed_value if episode == 0 else None)
         total_reward = 0
         losses = []
+        
+        # ---> SỬA Ở ĐÂY: Track list action để đẩy vô prometheus
+        actions_in_episode = []
 
         for step in range(MAX_STEPS):
             # Epsilon-greedy
@@ -40,6 +50,8 @@ def run_single_seed_dqn(seed_value, df_train):
                 action = random.randint(0, ACTION_DIM - 1)
             else:
                 action = agent.select_action(state)
+            
+            actions_in_episode.append(action)
 
             next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
@@ -58,9 +70,20 @@ def run_single_seed_dqn(seed_value, df_train):
         epsilon = max(EPS_END, epsilon - (EPS_START - EPS_END) / EPS_DECAY)
         seed_reward_history.append(total_reward)
 
+        # ---> SỬA Ở ĐÂY: Tính loss trung bình và đẩy lên logger
+        avg_loss = np.mean(losses) if len(losses) > 0 else 0.0
+        logger.log_dqn(
+            episode=episode,
+            reward=total_reward,
+            loss=avg_loss,
+            epsilon=epsilon,
+            actions=actions_in_episode
+        )
+
         if episode % 50 == 0:
             logging.info(f"Seed {seed_value} | Ep {episode} | Reward: {total_reward:.2f} | Eps: {epsilon:.3f}")
 
+    logger.close()
     return seed_reward_history
 
 def train_multi_seeds_dqn():
@@ -100,6 +123,5 @@ def train_multi_seeds_dqn():
         logging.info(f"Đã lưu kết quả DQN Multi-seed tại: {csv_path}")
 
 if __name__ == "__main__":
-    # Dùng port khác với PPO nếu chạy song song
     start_http_server(9000) 
     train_multi_seeds_dqn()

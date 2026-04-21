@@ -14,10 +14,104 @@ from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.utils import set_seed
 from torch.optim.lr_scheduler import LinearLR
 
-# Cấu hình Logging & MLflow
-logging.basicConfig(level=logging.INFO)
-mlflow.set_tracking_uri("http://34.126.64.185:5000")
-mlflow.set_experiment("sdn-rl-ppo")
+mlflow.set_tracking_uri("http://34.126.64.185:5000") # Dùng localhost nếu chạy network host
+mlflow.set_experiment("sdn-rl")
+
+def train():
+    SEED = 42
+    set_seed(SEED)
+    df = pd.read_csv("../../data/processed/train_data.csv")
+    env = OfflineSDNEnv(dataframe=df)
+    agent = PPOAgent(
+        state_dim=STATE_DIM,
+        action_dim=ACTION_DIM
+    )
+
+    log_dir = f"../../runs/ppo_seed_{SEED}"
+    logger = Logger(log_dir=log_dir)
+
+    total_episodes = 2 if os.getenv("CI") == "true" else MAX_EPISODES   
+
+    for episode in range(total_episodes):
+
+        state, _ = env.reset(seed=SEED if episode == 0 else None)  # Chỉ set seed cho episode đầu tiên để đảm bảo tính nhất quán trong CI
+
+        states = []
+        actions = []
+        rewards = []
+        log_probs = []
+        dones = []
+
+        action_history = []
+
+        total_reward = 0
+
+        for step in range(MAX_STEPS):
+
+            action, log_prob = agent.select_action(state)
+
+            next_state, reward, done, truncated, info = env.step(action)
+
+            done = done or truncated
+
+            states.append(state)
+            actions.append(action)
+            rewards.append(reward)
+            log_probs.append(log_prob)
+            dones.append(done)
+
+            action_history.append(action)
+
+            total_reward += reward
+
+            state = next_state
+
+            if done:
+                break
+            
+        for _ in range(3):  # PPO thường cập nhật nhiều lần trên cùng một batch - K-epochs để agent học lại batch dữ liệu đó 3 lần trước khi đi tiếp (PPO tái sử dụng dữ liệu)
+            metrics = agent.update(
+                states,
+                actions,
+                log_probs,
+                rewards,
+            dones
+            )
+
+        logger.log_ppo(
+            episode,
+            total_reward,
+            metrics["policy_loss"],
+            metrics["value_loss"],
+            metrics["entropy"],
+            action_history
+        )
+
+        print(
+            f"Episode {episode} | "
+            f"Reward: {total_reward:.3f} | "
+            f"PolicyLoss: {metrics['policy_loss']:.4f} | "
+            f"ValueLoss: {metrics['value_loss']:.4f} | "
+            f"Entropy: {metrics['entropy']:.4f}"
+        )
+
+    logger.close()
+
+    with mlflow.start_run(run_name="DQN_Training"):
+        mlflow.log_param("algo", "DQN")
+        mlflow.log_metric("reward", total_reward)
+        mlflow.log_artifact("ppo_model.pth")
+
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    MODELS_DIR = os.path.join(ROOT_DIR, "models")
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    
+    save_path = os.path.join(MODELS_DIR, "ppo_model.pth")
+    if hasattr(agent, "save"):
+        agent.save(save_path)
+    else:
+        torch.save(agent.policy.state_dict(), save_path)
+    print(f"Đã lưu model PPO tại: {save_path}")
 
 def run_single_seed(seed_value, df_train, parent_run=None):
     """Huấn luyện Agent với một Seed cụ thể"""
@@ -57,10 +151,9 @@ def run_single_seed(seed_value, df_train, parent_run=None):
             state = next_state
             if done or truncated: break
             
-        # --- QUAN TRỌNG: CẬP NHẬT AGENT (Mất dòng này ở code cũ) ---
-        metrics = agent.update(states, actions, log_probs, rewards, dones)
+        # Update agent sau mỗi episode (hoặc theo batch tùy code của bạn)
+        # agent.update(...) 
         
-        # Lưu lịch sử
         seed_reward_history.append(episode_reward)
         recent_rewards.append(episode_reward)
         
@@ -118,6 +211,7 @@ def train_multi_seeds():
         logging.info(f"Quá trình huấn luyện hoàn tất. Kết quả lưu tại {res_path}")
 
 if __name__ == "__main__":
-    port = 9001 # Tránh trùng với DQN nếu chạy song song
+    port = 9000
     start_http_server(port)
+    logging.info(f"Đã khởi động Prometheus metrics server trên port {port}")
     train_multi_seeds()
