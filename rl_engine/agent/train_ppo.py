@@ -13,7 +13,6 @@ from rl_engine.config import *
 from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.utils import set_seed
 from torch.optim.lr_scheduler import LinearLR
-from prometheus_client import start_http_server
 
 mlflow.set_tracking_uri("http://34.126.64.185:5000") # Dùng localhost nếu chạy network host
 mlflow.set_experiment("sdn-rl")
