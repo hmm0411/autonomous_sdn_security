@@ -27,7 +27,7 @@ def process_sdn_dataset():
     dfs = []
     for file, label in files.items():
         df = pd.read_csv(file)
-        df['label'] = label  # Thêm cột nhãn tương ứng với loại tấn công
+        df['label'] = label
         dfs.append(df)
         print(f"Đã nạp {file} - Shape: {df.shape}")
         
@@ -35,10 +35,8 @@ def process_sdn_dataset():
     print(f"\nTổng số mẫu dữ liệu (Total Samples): {master_df.shape[0]}")
 
     # 3. Bổ sung các Feature bị khuyết (Nội suy giả lập)
-    # Tách nhãn (label) để làm điều kiện nội suy
     labels = master_df['label'].values
     
-    # Khởi tạo các mảng trống
     entropy = np.zeros(len(master_df))
     queue = np.zeros(len(master_df))
     cpu = np.zeros(len(master_df))
@@ -57,19 +55,19 @@ def process_sdn_dataset():
         elif label == 2: # Packet_in: Bắn gói Packet-In liên tục -> CPU Controller quá tải
             entropy[i] = np.random.uniform(0.3, 0.5)
             queue[i] = np.random.uniform(0.5, 0.7)
-            cpu[i] = np.random.uniform(0.9, 1.0) # CPU cực cao
+            cpu[i] = np.random.uniform(0.9, 1.0)
             
         elif label == 3: # Flow_overflow: Bảng luồng của switch đầy -> Hàng đợi đầy
             entropy[i] = np.random.uniform(0.3, 0.5)
-            queue[i] = np.random.uniform(0.9, 1.0) # Queue cực cao
+            queue[i] = np.random.uniform(0.9, 1.0)
             cpu[i] = np.random.uniform(0.5, 0.7)
             
         elif label == 4: # Spoofing: IP giả mạo ngẫu nhiên liên tục -> Entropy cực cao
-            entropy[i] = np.random.uniform(0.8, 1.0) # Entropy cao nhất
+            entropy[i] = np.random.uniform(0.8, 1.0)
             queue[i] = np.random.uniform(0.3, 0.5)
             cpu[i] = np.random.uniform(0.4, 0.6)
             
-        elif label == 5: # Port_scan: Quét port -> Ít ảnh hưởng queue/cpu, phát hiện qua flow_count
+        elif label == 5: # Port_scan: Quét port -> Ít ảnh hưởng queue/cpu
             entropy[i] = np.random.uniform(0.2, 0.4)
             queue[i] = np.random.uniform(0.1, 0.3)
             cpu[i] = np.random.uniform(0.2, 0.4)
@@ -78,27 +76,10 @@ def process_sdn_dataset():
     master_df['queue_length'] = queue
     master_df['controller_cpu'] = cpu
 
-    # Đổi tên cột drop_rate thành packet_loss cho đúng định nghĩa State của bạn
+    # Đổi tên cột drop_rate thành packet_loss
     master_df.rename(columns={'drop_rate': 'packet_loss'}, inplace=True)
 
-    train_frames = []
-    test_frames = []
-
-    for label, group_df in master_df.groupby('label'):
-        # Shuffle dữ liệu của nhóm
-        group_df = group_df.sample(frac=1, random_state=42).reset_index(drop=True)
-        
-        # Chia 80% train, 20% test
-        split_idx = int(0.8 * len(group_df))
-        train_frames.append(group_df.iloc[:split_idx])
-        test_frames.append(group_df.iloc[split_idx:])
-    
-    train_df = pd.concat(train_frames).reset_index(drop=True)
-    test_df = pd.concat(test_frames).reset_index(drop=True)
-    print(f"\nKích thước tập Train: {train_df.shape}, Tập Test: {test_df.shape}")
-
-    # 4. Sắp xếp lại thứ tự cột cho khớp với State S
-    # State = [packet_rate, byte_rate, flow_count, src_ip_entropy, latency, packet_loss, queue_length, controller_cpu]
+    # 4. Sắp xếp lại thứ tự cột cho khớp với State
     feature_cols = [
         'packet_rate', 'byte_rate', 'flow_count', 'src_ip_entropy', 
         'latency', 'packet_loss', 'queue_length', 'controller_cpu'
@@ -113,18 +94,31 @@ def process_sdn_dataset():
     # Tạo DataFrame mới từ dữ liệu đã chuẩn hóa
     processed_df = pd.DataFrame(scaled_features, columns=feature_cols)
     
-    # Gắn lại nhãn attack_indicator (tương ứng với label)
-    processed_df['attack_indicator'] = master_df['label']
-
-    train_df['attack_indicator'] = train_df['label'] / 5.0
-    test_df['attack_indicator'] = test_df['label'] / 5.0
-
-    final_cols = feature_cols + ['attack_indicator']
-    train_df = train_df[final_cols]
-    test_df = test_df[final_cols]
+    # Thêm attack_indicator (normalized: 0-1)
+    processed_df['attack_indicator'] = master_df['label'].values / 5.0
     
-    # 6. Lưu ra file CSV tổng hợp để dùng cho Môi trường Gym
-    print("\nBước 5: Lưu dữ liệu đầu ra và Model Scaler...")
+    # Thêm previous_action feature (khởi tạo = 0)
+    processed_df['previous_action'] = 0.0
+    
+    # Split train/test trên dữ liệu đã chuẩn hóa
+    train_frames = []
+    test_frames = []
+
+    for label in range(6):
+        group_df = processed_df[processed_df['attack_indicator'] == label / 5.0].copy()
+        group_df = group_df.sample(frac=1, random_state=42).reset_index(drop=True)
+        
+        split_idx = int(0.8 * len(group_df))
+        train_frames.append(group_df.iloc[:split_idx])
+        test_frames.append(group_df.iloc[split_idx:])
+    
+    train_df = pd.concat(train_frames, ignore_index=True)
+    test_df = pd.concat(test_frames, ignore_index=True)
+    
+    print(f"\nKích thước tập Train: {train_df.shape}, Tập Test: {test_df.shape}")
+
+    # 6. Lưu ra file CSV
+    print("\nBước 6: Lưu dữ liệu đầu ra và Model Scaler...")
     train_path = os.path.join(PROCESSED_DATA_DIR, "train_data.csv")
     test_path = os.path.join(PROCESSED_DATA_DIR, "test_data.csv")
     scaler_path = os.path.join(MODELS_DIR, "scaler.pkl")
@@ -134,7 +128,8 @@ def process_sdn_dataset():
     joblib.dump(scaler, scaler_path)
 
     print(f"Dữ liệu đã được lưu tại: {train_path} và {test_path}")
-    print(f"Scaler đã được lưu tại: {scaler_path}")  
+    print(f"Scaler đã được lưu tại: {scaler_path}")
+    print(f"Các cột trong dữ liệu: {list(train_df.columns)}")
 
 if __name__ == "__main__":
     process_sdn_dataset()

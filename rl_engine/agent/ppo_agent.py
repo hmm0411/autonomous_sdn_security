@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from typing import Optional
+from typing import Optional, Tuple
 
 from rl_engine.config import GAMMA, LR
 
@@ -63,7 +63,7 @@ class PPOAgent:
         state_dim: int = 10,
         action_dim: int = 5,
         clip_eps: float = 0.2,
-        entropy_coef: float = 0.01, # tăng lên 0.05 nếu lúc nào agent cũng chọn đúng Action 1 mà không chịu dùng Action 4 dù mạng vẫn đang
+        entropy_coef: float = 0.01,
         value_coef: float = 0.5,
         device: Optional[str] = None,
     ):
@@ -111,9 +111,10 @@ class PPOAgent:
             "Unsupported state type. Expected dict, list, tuple, or np.ndarray."
         )
 
-    def select_action(self, state):
+    def select_action(self, state) -> Tuple[int, float]:
         """
         Stochastic action selection for training
+        Returns: (action, log_prob)
         """
         state = self._parse_state(state)
         state_tensor = torch.tensor(
@@ -127,10 +128,10 @@ class PPOAgent:
         action = dist.sample()
         log_prob = dist.log_prob(action)
 
-        self.last_action = action.item()
-        return action.item(), log_prob.item()
+        self.last_action = int(action.item())
+        return self.last_action, float(log_prob.item())
 
-    def select_greedy_action(self, state):
+    def select_greedy_action(self, state) -> int:
         """
         Deterministic action selection for evaluation/inference
         """
@@ -142,7 +143,7 @@ class PPOAgent:
         with torch.no_grad():
             policy, _ = self.model(state_tensor)
 
-        action = torch.argmax(policy, dim=-1).item()
+        action = int(torch.argmax(policy, dim=-1).item())
         self.last_action = action
         return action
 
@@ -204,7 +205,7 @@ class PPOAgent:
             "entropy": float(entropy.item()),
         }
 
-    def save(self, path: str):
+    def save(self, path: str) -> None:
         torch.save(
             {
                 "model_state_dict": self.model.state_dict(),
@@ -216,7 +217,7 @@ class PPOAgent:
             path,
         )
 
-    def load(self, path: str):
+    def load(self, path: str) -> None:
         checkpoint = torch.load(path, map_location=self.device)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
