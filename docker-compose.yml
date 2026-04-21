@@ -18,19 +18,37 @@ services:
       # Tự động kích hoạt các App cần thiết của ONOS khi khởi động
       - ONOS_APPS=drivers,openflow,fwd,proxyarp,topology
 
-  rl-agent:
+  # Container chạy DQN
+  rl-agent-dqn:
     build: ./rl_engine
+    container_name: rl-agent-dqn
     depends_on:
       - controller
     ports:
-      - "8000:8000" # Port API của RL Agent
-      - "9000:9000" # Port để RL Agent expose metrics cho Prometheus
+      - "8000:8000"
+      - "9000:9000"
+    networks:
+      - sdn-net
+    volumes:
+      - ./rl_engine:/app
+      - ./models:/app/models
+    command: python3 -m rl_engine.agent.train_dqn
+
+  # Container chạy PPO
+  rl-agent-ppo:
+    build: ./rl_engine
+    container_name: rl-agent-ppo
+    depends_on:
+      - controller
+    ports:
+      - "8001:8000"
+      - "9001:9001"
     networks:
       - sdn-net
     volumes:
       - ./rl_engine:/app # Mount the rl_engine directory to /app in the container
       - ./models:/app/models # Mount the models directory to /app/models in the container
-    command: python3 -m rl_engine.agent.train_dqn
+    command: python3 -m rl_engine.agent.train_ppo
 
   # twin:
   #   build: ./digital_twin
@@ -48,9 +66,18 @@ services:
     command: python main.py --host 0.0.0.0 --port 5000
     networks:
       - sdn-net
-    volumes:
-      - ./mlruns:/mlruns # Mount mlruns directory for MLflow tracking data
-      - ./mlflow.db:/mlflow.db # Mount mlflow.db for MLflow metadata storage
+
+  control_loop:
+    build:
+      context: .
+      dockerfile: ./control_loop/Dockerfile
+    container_name: control_loop
+    depends_on:
+      - controller
+      - rl-agent-dqn
+      - rl-agent-ppo
+    networks: 
+      - sdn-net
         
   prometheus:
     image: prom/prometheus
@@ -59,8 +86,8 @@ services:
     networks:
       - sdn-net
     volumes:
-      - ./mlops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./mlops/prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
     
   grafana:
     image: grafana/grafana
@@ -70,7 +97,7 @@ services:
       - sdn-net
     volumes:
       - grafana-storage:/var/lib/grafana
-    
+
   alertmanager:
     image: prom/alertmanager
     ports:
@@ -78,7 +105,7 @@ services:
     networks:
       - sdn-net
     volumes:
-      - ./mlops/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
   
   auto-trigger:
     build: ./mlops
