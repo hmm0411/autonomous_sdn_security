@@ -16,7 +16,9 @@ services:
       - sdn-net
     environment:
       # Tự động kích hoạt các App cần thiết của ONOS khi khởi động
-      - ONOS_APPS=drivers,openflow,fwd,proxyarp,topology
+      - ONOS_APPS=drivers,openflow,gui2,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher
+      - ONOS_AUTO_START=true
+    restart: always
 
   # Container chạy DQN
   rl-agent-dqn:
