@@ -14,7 +14,7 @@ from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.utils import set_seed
 from torch.optim.lr_scheduler import LinearLR
 
-mlflow.set_tracking_uri("http://34.126.64.185:5000") # Dùng localhost nếu chạy network host
+mlflow.set_tracking_uri("http://34.126.64.185:5000")
 mlflow.set_experiment("sdn-rl")
 
 def train():
@@ -30,11 +30,13 @@ def train():
     log_dir = f"../../runs/ppo_seed_{SEED}"
     logger = Logger(log_dir=log_dir)
 
-    total_episodes = 2 if os.getenv("CI") == "true" else MAX_EPISODES   
+    total_episodes = 2 if os.getenv("CI") == "true" else MAX_EPISODES
+    
+    total_reward = 0
+    metrics = {}
 
     for episode in range(total_episodes):
-
-        state, _ = env.reset(seed=SEED if episode == 0 else None)  # Chỉ set seed cho episode đầu tiên để đảm bảo tính nhất quán trong CI
+        state, _ = env.reset(seed=SEED if episode == 0 else None)
 
         states = []
         actions = []
@@ -43,13 +45,10 @@ def train():
         dones = []
 
         action_history = []
-
-        total_reward = 0
+        episode_reward = 0
 
         for step in range(MAX_STEPS):
-
             action, log_prob = agent.select_action(state)
-
             next_state, reward, done, truncated, info = env.step(action)
 
             done = done or truncated
@@ -61,57 +60,59 @@ def train():
             dones.append(done)
 
             action_history.append(action)
-
-            total_reward += reward
+            episode_reward += reward
 
             state = next_state
 
             if done:
                 break
             
-        for _ in range(3):  # PPO thường cập nhật nhiều lần trên cùng một batch - K-epochs để agent học lại batch dữ liệu đó 3 lần trước khi đi tiếp (PPO tái sử dụng dữ liệu)
+        for _ in range(3):  # K-epochs
             metrics = agent.update(
                 states,
                 actions,
                 log_probs,
                 rewards,
-            dones
+                dones
             )
+        
+        total_reward = episode_reward
 
         logger.log_ppo(
             episode,
-            total_reward,
-            metrics["policy_loss"],
-            metrics["value_loss"],
-            metrics["entropy"],
+            episode_reward,
+            metrics.get("policy_loss", 0),
+            metrics.get("value_loss", 0),
+            metrics.get("entropy", 0),
             action_history
         )
 
         print(
             f"Episode {episode} | "
-            f"Reward: {total_reward:.3f} | "
-            f"PolicyLoss: {metrics['policy_loss']:.4f} | "
-            f"ValueLoss: {metrics['value_loss']:.4f} | "
-            f"Entropy: {metrics['entropy']:.4f}"
+            f"Reward: {episode_reward:.3f} | "
+            f"PolicyLoss: {metrics.get('policy_loss', 0):.4f} | "
+            f"ValueLoss: {metrics.get('value_loss', 0):.4f} | "
+            f"Entropy: {metrics.get('entropy', 0):.4f}"
         )
 
     logger.close()
 
-    with mlflow.start_run(run_name="DQN_Training"):
-        mlflow.log_param("algo", "DQN")
+    with mlflow.start_run(run_name="PPO_Training"):
+        mlflow.log_param("algo", "PPO")
         mlflow.log_metric("reward", total_reward)
-        mlflow.log_artifact("ppo_model.pth")
+        if os.path.exists("ppo_model.pth"):
+            mlflow.log_artifact("ppo_model.pth")
 
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     MODELS_DIR = os.path.join(ROOT_DIR, "models")
     os.makedirs(MODELS_DIR, exist_ok=True)
     
     save_path = os.path.join(MODELS_DIR, "ppo_model.pth")
-    if hasattr(agent, "save"):
+    try:
         agent.save(save_path)
-    else:
-        torch.save(agent.policy.state_dict(), save_path)
-    print(f"Đã lưu model PPO tại: {save_path}")
+        print(f"Đã lưu model PPO tại: {save_path}")
+    except Exception as e:
+        logging.error(f"Failed to save model: {e}")
 
 def run_single_seed(seed_value, df_train, parent_run=None):
     """Huấn luyện Agent với một Seed cụ thể"""
@@ -126,13 +127,11 @@ def run_single_seed(seed_value, df_train, parent_run=None):
     total_episodes = 2 if os.getenv("CI") == "true" else MAX_EPISODES
     scheduler = LinearLR(agent.optimizer, start_factor=1.0, end_factor=0.05, total_iters=total_episodes)
 
-    # Khởi tạo Logger riêng cho từng seed nếu cần (hoặc dùng chung)
     logger = Logger(log_dir=f"../../runs/ppo_seed_{seed_value}")
 
     for episode in range(total_episodes):
         state, _ = env.reset(seed=seed_value if episode == 0 else None)
         
-        # Buffer tạm thời để chứa quỹ đạo (Trajectory) của 1 episode
         states, actions, rewards, log_probs, dones = [], [], [], [], []
         episode_reward = 0
         
@@ -140,7 +139,6 @@ def run_single_seed(seed_value, df_train, parent_run=None):
             action, log_prob = agent.select_action(state)
             next_state, reward, done, truncated, _ = env.step(action)
             
-            # Lưu dữ liệu vào buffer để update
             states.append(state)
             actions.append(action)
             rewards.append(reward)
@@ -149,32 +147,35 @@ def run_single_seed(seed_value, df_train, parent_run=None):
 
             episode_reward += reward
             state = next_state
-            if done or truncated: break
+            if done or truncated: 
+                break
             
-        # Update agent sau mỗi episode (hoặc theo batch tùy code của bạn)
-        # agent.update(...) 
+        metrics = agent.update(states, actions, log_probs, rewards, dones)
         
         seed_reward_history.append(episode_reward)
         recent_rewards.append(episode_reward)
         
-        # Log metrics (MLflow lồng trong Parent Run)
+        # Log metrics directly to parent run
         if parent_run:
-            mlflow.log_metric(f"reward_seed_{seed_value}", episode_reward, step=episode)
+            try:
+                mlflow.log_metric(f"reward_seed_{seed_value}", episode_reward, step=episode)
+                if metrics and isinstance(metrics, dict):
+                    mlflow.log_metric(f"policy_loss_seed_{seed_value}", metrics.get("policy_loss", 0), step=episode)
+                    mlflow.log_metric(f"value_loss_seed_{seed_value}", metrics.get("value_loss", 0), step=episode)
+            except Exception as e:
+                logging.warning(f"Failed to log metrics: {e}")
 
-        # Cơ chế lưu Best Model
         if len(recent_rewards) == 10:
             avg_reward = np.mean(recent_rewards)
             if avg_reward > best_avg_reward and episode > 20:
                 best_avg_reward = avg_reward
                 save_path = f"../../models/best_ppo_seed_{seed_value}.pth"
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                if hasattr(agent, "save"):
+                try:
                     agent.save(save_path)
-                elif hasattr(agent, "policy"):
-                    torch.save(agent.policy.state_dict(), save_path)
-                else:
-                    torch.save(agent.state_dict(), save_path)
-                logging.info(f"[Seed {seed_value}] Ep {episode}: New Best Avg Reward: {best_avg_reward:.2f}")
+                    logging.info(f"[Seed {seed_value}] Ep {episode}: New Best Avg Reward: {best_avg_reward:.2f}")
+                except Exception as e:
+                    logging.error(f"Failed to save model: {e}")
 
         scheduler.step()
         
@@ -185,7 +186,7 @@ def run_single_seed(seed_value, df_train, parent_run=None):
     return seed_reward_history
 
 def train_multi_seeds():
-    seeds = [42, 101, 123] # Rút ngắn để test, tăng lên khi chạy thật
+    seeds = [42, 101, 123]
     all_results = []
     df_train = pd.read_csv("../../data/processed/train_data.csv")
     
@@ -198,12 +199,10 @@ def train_multi_seeds():
             history = run_single_seed(s, df_train, parent_run=True)
             all_results.append(history)
         
-        # Tính Mean & Std để vẽ biểu đồ bóng mờ (Shaded line plot)
         all_results = np.array(all_results)
         mean_rewards = np.mean(all_results, axis=0)
         std_rewards = np.std(all_results, axis=0)
         
-        # Lưu kết quả
         output_df = pd.DataFrame({
             'episode': range(len(mean_rewards)),
             'mean_reward': mean_rewards,
