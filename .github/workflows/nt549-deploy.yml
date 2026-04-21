@@ -3,24 +3,42 @@ name: Deploy NT549
 on:
   push:
     branches:
-      - main
+      - nt549
+  workflow_dispatch:
+
+concurrency:
+  group: nt549-deploy
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Deploy on GCP VM over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_PORT }}
+          script: |
+            set -euo pipefail
 
-    # - name: SSH to EC2 and Deploy
-    #   uses: appleboy/ssh-action@v1.0.0
-    #   with:
-    #     host: ${{ secrets.EC2_HOST }}
-    #     username: ubuntu
-    #     key: ${{ secrets.EC2_SSH_KEY }}
-    #     script: |
-    #       cd autonomous_sdn_security
-    #       git pull origin main
-    #       docker compose down
-    #       docker compose up -d --build
+            APP_DIR="$HOME/autonomous_sdn_security"
+            BRANCH="nt549"
+
+            if [ -d "$APP_DIR/.git" ]; then
+              cd "$APP_DIR"
+              git fetch origin
+              git checkout "$BRANCH"
+              git reset --hard "origin/$BRANCH"
+            else
+              git clone -b "$BRANCH" https://github.com/${{ github.repository }}.git "$APP_DIR"
+              cd "$APP_DIR"
+            fi
+
+            cd mlops
+            docker compose down
+            docker compose up -d --build
+            docker compose ps
