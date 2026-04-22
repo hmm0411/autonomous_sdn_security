@@ -6,9 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir -r requirements.txt
-
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 ENV PYTHONUNBUFFERED=1
@@ -17,3 +16,5 @@ ENV PYTHONPATH=/app:$PYTHONPATH
 EXPOSE 5001
 
 CMD ["python", "main.py"]
+
+
