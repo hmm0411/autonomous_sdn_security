@@ -56,6 +56,7 @@ def metrics():
     return generate_latest()
 
 @app.route('/', methods=['GET'])
+
 def index():
     """Root endpoint"""
     return jsonify({
