@@ -6,10 +6,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY mlops/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY mlops/ .
+COPY requirements.txt .
+COPY . .
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app:$PYTHONPATH
