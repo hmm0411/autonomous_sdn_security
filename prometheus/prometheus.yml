@@ -1,0 +1,49 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: "sdn-rl-monitor"
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alert.rules.yml"
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: [ "localhost:9090" ]
+
+  # ONOS Controller
+  - job_name: "onos"
+    static_configs:
+      - targets: [ "controller:8181" ]
+    metrics_path: "/onos/v1/metrics"
+    basic_auth:
+      username: "onos"
+      password: "rocks"
+
+  # MLflow
+  - job_name: "mlflow"
+    static_configs:
+      - targets: [ "mlflow:5000" ]
+
+  # DQN Agent (Prometheus metrics)
+  - job_name: "dqn-agent"
+    static_configs:
+      - targets: [ "rl-agent-dqn:9000" ]
+    scrape_interval: 10s
+
+  # PPO Agent (Prometheus metrics)
+  - job_name: "ppo-agent"
+    static_configs:
+      - targets: [ "rl-agent-ppo:9001" ]
+    scrape_interval: 10s

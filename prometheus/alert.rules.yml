@@ -1,0 +1,43 @@
+groups:
+  - name: sdn_rl_alerts
+    interval: 30s
+    rules:
+      # High training loss alert
+      - alert: HighTrainingLoss
+        expr: rate(training_loss[5m]) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High training loss detected"
+          description: "Training loss is above 1.0 for {{ $labels.agent }}"
+
+      # Low reward alert
+      - alert: LowReward
+        expr: rate(episode_reward[5m]) < 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low episode reward"
+          description: "Episode reward is negative for {{ $labels.agent }}"
+
+      # Controller down
+      - alert: ControllerDown
+        expr: up{job="onos"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ONOS Controller is down"
+          description: "ONOS Controller has been unreachable for 1 minute"
+
+      # Agent down
+      - alert: TrainingAgentDown
+        expr: up{job=~"dqn-agent|ppo-agent"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Training agent is down"
+          description: "{{ $labels.job }} has been unreachable for 2 minutes"
