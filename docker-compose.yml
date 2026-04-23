@@ -16,14 +16,9 @@ services:
       - sdn-net
     environment:
       # Tự động kích hoạt các App cần thiết của ONOS khi khởi động
-      - ONOS_APPS=drivers,openflow,gui,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher
+      - ONOS_APPS=drivers,openflow,gui,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher, prometheus
       - ONOS_AUTO_START=true
     restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181/onos/v1/apps"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # Container chạy DQN
   rl-agent-dqn:
@@ -32,10 +27,8 @@ services:
       dockerfile: Dockerfile
     container_name: rl-agent-dqn
     depends_on:
-      mlflow:
-        condition: service_healthy
-      controller:
-        condition: service_healthy
+      - mlflow
+      - controller
     ports:
       - "9000:9000"
     networks:
@@ -61,10 +54,8 @@ services:
       dockerfile: Dockerfile
     container_name: rl-agent-ppo
     depends_on:
-      mlflow:
-        condition: service_healthy
-      controller:
-        condition: service_healthy
+      - mlflow
+      - controller
     ports:
       - "9001:9000"
     networks:
@@ -98,16 +89,11 @@ services:
     volumes:
       - mlflow_data:/mlflow
     environment:
-      - BACKEND_STORE_URI=file:///mlflow/backend
+      - BACKEND_STORE_URI=sqlite:////mlflow/mlflow.db
       - DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
     command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri file:///mlflow/backend
     networks:
       - sdn-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # Control Loop
   control_loop:

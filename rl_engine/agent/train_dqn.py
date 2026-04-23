@@ -149,7 +149,7 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=None):
 
 def train_multi_seeds_dqn():
     """Train DQN with multiple seeds and log all metrics"""
-    seeds = [42, 101, 123, 456, 789]
+    seeds = [42, 123, 456]
     data_path = "./data/processed/train_data.csv"
     if not os.path.exists(data_path):
         data_path = "../../data/processed/train_data.csv"
