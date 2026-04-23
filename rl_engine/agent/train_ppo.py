@@ -215,7 +215,6 @@ def train_multi_seeds():
         logging.info(f"Quá trình huấn luyện hoàn tất. Kết quả lưu tại {res_path}")
 
 if __name__ == "__main__":
-    port = 9000
-    start_http_server(port)
+    start_http_server(9001)
     logging.info(f"Đã khởi động Prometheus metrics server trên port {port}")
     train_multi_seeds()

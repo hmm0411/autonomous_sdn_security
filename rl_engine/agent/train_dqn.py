@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 import mlflow
-from prometheus_client import start_http_server
+from prometheus_client import start_http_server, Gauge
 import collections
 
 from rl_engine.env import SDNEnv
@@ -15,6 +15,10 @@ from rl_engine.replay_buffer import ReplayBuffer
 from rl_engine.logger import Logger
 from rl_engine.config import *
 from rl_engine.utils import set_seed
+
+PROM_REWARD = Gauge('episode_reward', 'Phần thưởng của Episode', ['agent'])
+PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
+PROM_STEPS = Gauge('episode_steps', 'Số bước sống sót trong episode', ['agent'])
 
 logging.basicConfig(level=logging.INFO)
 
@@ -136,7 +140,11 @@ def train_multi_seeds_dqn():
     
     with mlflow.start_run(run_name="DQN_MultiSeed_Analysis"):
         mlflow.log_param("algo", "DQN")
-        mlflow.log_param("num_seeds", len(seeds))
+	mlflow.log_param("algo", "DQN") # hoặc "PPO"
+	mlflow.log_param("state_dim", STATE_DIM)
+	mlflow.log_param("action_dim", ACTION_DIM)
+        
+	mlflow.log_param("num_seeds", len(seeds))
         mlflow.log_param("seeds", str(seeds))
         mlflow.log_param("buffer_size", BUFFER_SIZE)
         mlflow.log_param("batch_size", BATCH_SIZE)
@@ -144,6 +152,12 @@ def train_multi_seeds_dqn():
         mlflow.log_param("eps_end", EPS_END)
         mlflow.log_param("eps_decay", EPS_DECAY)
         
+        mlflow.pytorch.log_model(model, "dqn_model")
+       
+        run_id = mflow.active_run().info.run_id
+	model_uri = f"runs:/{run_id}/dqn_model"
+	mlflow.register_model(model_uri, "SDN_DQN_Model")
+
         for s in seeds:
             logging.info(f"\n--- BẮT ĐẦU DQN SEED: {s} ---")
             history = run_single_seed_dqn(s, df_train, parent_run=True)
@@ -223,7 +237,6 @@ def train_multi_seeds_dqn():
         logging.info(f"Best Mean Reward: {np.max(mean_rewards):.2f}")
 
 if __name__ == "__main__":
-    port = 9000
-    start_http_server(port)
+    start_http_server(9000)
     logging.info(f"Đã khởi động Prometheus metrics server trên port {port}")
     train_multi_seeds_dqn()
