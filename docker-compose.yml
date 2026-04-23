@@ -1,4 +1,4 @@
-version: "3.9"
+version: "3.8"
 
 networks:
   sdn-net:
@@ -19,38 +19,69 @@ services:
       - ONOS_APPS=drivers,openflow,gui,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher
       - ONOS_AUTO_START=true
     restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/onos/v1/apps"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Container chạy DQN
   rl-agent-dqn:
-    build: ./rl_engine
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: rl-agent-dqn
     depends_on:
-      - controller
+      mlflow:
+        condition: service_healthy
+      controller:
+        condition: service_healthy
     ports:
-      - "8000:8000"
       - "9000:9000"
     networks:
       - sdn-net
     volumes:
-      - ./rl_engine:/app
+      - .:/app
+      - ./results:/app/results
       - ./models:/app/models
-    command: python3 -m rl_engine.agent.train_dqn
+      - ./logs:/app/logs
+      - ./mlruns:/app/mlruns
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - CI=false
+    command: python -m rl_engine.agent.train_dqn
+    restart: on-failure
 
   # Container chạy PPO
   rl-agent-ppo:
-    build: ./rl_engine
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: rl-agent-ppo
     depends_on:
-      - controller
+      mlflow:
+        condition: service_healthy
+      controller:
+        condition: service_healthy
     ports:
-      - "8001:8000"
-      - "9001:9001"
+      - "9001:9000"
     networks:
       - sdn-net
     volumes:
-      - ./rl_engine:/app # Mount the rl_engine directory to /app in the container
-      - ./models:/app/models # Mount the models directory to /app/models in the container
-    command: python3 -m rl_engine.agent.train_ppo
+      - .:/app
+      - ./results:/app/results
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./mlruns:/app/mlruns
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - CI=false
+    command: python -m rl_engine.agent.train_ppo
+    restart: on-failure
 
   # twin:
   #   build: ./digital_twin
@@ -60,15 +91,25 @@ services:
   #     - sdn-net
 
   mlflow:
-    build: ./mlops
-    environment:
-      - SERVICE_MODE=mlflow
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow
     ports:
       - "5000:5000"
-    command: python main.py --host 0.0.0.0 --port 5000
+    volumes:
+      - mlflow_data:/mlflow
+    environment:
+      - BACKEND_STORE_URI=file:///mlflow/backend
+      - DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri file:///mlflow/backend
     networks:
       - sdn-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # Control Loop
   control_loop:
     build:
       context: .
@@ -78,11 +119,17 @@ services:
       - controller
       - rl-agent-dqn
       - rl-agent-ppo
-    networks: 
+      - mlflow
+    networks:
       - sdn-net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
         
+  # Prometheus
   prometheus:
-    image: prom/prometheus
+    image: prom/prometheus:latest
+    container_name: prometheus
     ports:
       - "9090:9090"
     networks:
@@ -90,36 +137,63 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
     
+  # Grafana
   grafana:
-    image: grafana/grafana
+    image: grafana/grafana:latest
+    container_name: grafana
     ports:
       - "3000:3000"
     networks:
       - sdn-net
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
     volumes:
-      - grafana-storage:/var/lib/grafana
+      - grafana_data:/var/lib/grafana
+      - ./grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - ./grafana/dashboard.yml:/etc/grafana/provisioning/dashboards/dashboard.yml:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
 
+  # AlertManager
   alertmanager:
-    image: prom/alertmanager
+    image: prom/alertmanager:latest
+    container_name: alertmanager
     ports:
       - "9093:9093"
     networks:
       - sdn-net
     volumes:
-      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    restart: unless-stopped
   
+  # Auto Trigger (MLOps)
   auto-trigger:
-    build: ./mlops
-    environment:
-      - SERVICE_MODE=trigger
+    build:
+      context: ./mlops
+      dockerfile: Dockerfile
+    container_name: auto-trigger
     ports:
       - "5001:5001"
+    networks:
+      - sdn-net
+    environment:
+      - SERVICE_MODE=trigger
+      - PYTHONUNBUFFERED=1
     command: python main.py
     depends_on:
       - alertmanager
-    networks:
-      - sdn-net
+    restart: on-failure
 
 volumes:
-  grafana-storage:
+  mlflow_data:
+  prometheus_data:
+  grafana_data:
