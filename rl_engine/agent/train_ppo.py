@@ -1,133 +1,60 @@
-import logging
 import os
+import logging
 import collections
-import pandas as pd
 import numpy as np
-import torch
+import pandas as pd
 import mlflow
-from prometheus_client import start_http_server
-
-from rl_engine.agent.ppo_agent import PPOAgent
-from rl_engine.logger import Logger
-from rl_engine.config import *
-from rl_engine.offline_env import OfflineSDNEnv
-from rl_engine.utils import set_seed
+import mlflow.pytorch
+from prometheus_client import start_http_server, Gauge
 from torch.optim.lr_scheduler import LinearLR
 
-mlflow.set_tracking_uri("http://34.126.64.185:5000")
-mlflow.set_experiment("sdn-rl")
+# --- IMPORT TỪ REPO CỦA BẠN ---
+from rl_engine.env import SDNEnv
+from rl_engine.offline_env import OfflineSDNEnv
+from rl_engine.agent.ppo_agent import PPOAgent
+from rl_engine.logger import Logger
+from rl_engine.utils import set_seed
+from rl_engine.config import *
+# Bổ sung nếu chưa có trong config: 
+# STATE_DIM = 7; ACTION_DIM = 5; WINDOW_SIZE = 50; MAX_EPISODES = 500; MAX_STEPS = 1000;
 
-def train():
-    SEED = 42
-    set_seed(SEED)
-    df = pd.read_csv("../../data/processed/train_data.csv")
-    env = OfflineSDNEnv(dataframe=df)
-    agent = PPOAgent(
-        state_dim=STATE_DIM,
-        action_dim=ACTION_DIM
-    )
+# ==========================================
+# CẤU HÌNH PROMETHEUS METRICS
+# ==========================================
+PROM_REWARD = Gauge('episode_reward', 'Phần thưởng thô của Episode', ['agent'])
+PROM_REWARD_MEAN = Gauge('episode_reward_mean', 'Phần thưởng trung bình', ['agent'])
+PROM_REWARD_STD = Gauge('episode_reward_std', 'Độ lệch chuẩn phần thưởng', ['agent'])
+PROM_REWARD_BEST = Gauge('episode_reward_best', 'Kỷ lục phần thưởng tốt nhất', ['agent'])
+PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
 
-    log_dir = f"../../runs/ppo_seed_{SEED}"
-    logger = Logger(log_dir=log_dir)
+# ==========================================
+# CẤU HÌNH MLOPS & CI/CD
+# ==========================================
+IS_CI = os.getenv("CI", "false").lower() == "true"
 
-    total_episodes = 2 if os.getenv("CI") == "true" else MAX_EPISODES
-    
-    total_reward = 0
-    metrics = {}
+if not IS_CI:
+    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    mlflow.set_tracking_uri(mlflow_uri)
+    mlflow.set_experiment("SDN_Autonomous_Security")
 
-    for episode in range(total_episodes):
-        state, _ = env.reset(seed=SEED if episode == 0 else None)
-
-        states = []
-        actions = []
-        rewards = []
-        log_probs = []
-        dones = []
-
-        action_history = []
-        episode_reward = 0
-
-        for step in range(MAX_STEPS):
-            action, log_prob = agent.select_action(state)
-            next_state, reward, done, truncated, info = env.step(action)
-
-            done = done or truncated
-
-            states.append(state)
-            actions.append(action)
-            rewards.append(reward)
-            log_probs.append(log_prob)
-            dones.append(done)
-
-            action_history.append(action)
-            episode_reward += reward
-
-            state = next_state
-
-            if done:
-                break
-            
-        for _ in range(3):  # K-epochs
-            metrics = agent.update(
-                states,
-                actions,
-                log_probs,
-                rewards,
-                dones
-            )
-        
-        total_reward = episode_reward
-
-        logger.log_ppo(
-            episode,
-            episode_reward,
-            metrics.get("policy_loss", 0),
-            metrics.get("value_loss", 0),
-            metrics.get("entropy", 0),
-            action_history
-        )
-
-        print(
-            f"Episode {episode} | "
-            f"Reward: {episode_reward:.3f} | "
-            f"PolicyLoss: {metrics.get('policy_loss', 0):.4f} | "
-            f"ValueLoss: {metrics.get('value_loss', 0):.4f} | "
-            f"Entropy: {metrics.get('entropy', 0):.4f}"
-        )
-
-    logger.close()
-
-    with mlflow.start_run(run_name="PPO_Training"):
-        mlflow.log_param("algo", "PPO")
-        mlflow.log_metric("reward", total_reward)
-        if os.path.exists("ppo_model.pth"):
-            mlflow.log_artifact("ppo_model.pth")
-
-    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    MODELS_DIR = os.path.join(ROOT_DIR, "models")
-    os.makedirs(MODELS_DIR, exist_ok=True)
-    
-    save_path = os.path.join(MODELS_DIR, "ppo_model.pth")
-    try:
-        agent.save(save_path)
-        print(f"Đã lưu model PPO tại: {save_path}")
-    except Exception as e:
-        logging.error(f"Failed to save model: {e}")
-
-def run_single_seed(seed_value, df_train, parent_run=None):
-    """Huấn luyện Agent với một Seed cụ thể"""
+def run_single_seed_ppo(seed_value, df_train, parent_run=None):
+    """Huấn luyện PPO với một Seed cụ thể"""
     set_seed(seed_value)
     env = OfflineSDNEnv(dataframe=df_train)
     agent = PPOAgent(state_dim=STATE_DIM, action_dim=ACTION_DIM)
     
-    seed_reward_history = []
-    best_avg_reward = -float('inf')
-    recent_rewards = collections.deque(maxlen=10)
-    
-    total_episodes = 2 if os.getenv("CI") == "true" else MAX_EPISODES
-    scheduler = LinearLR(agent.optimizer, start_factor=1.0, end_factor=0.05, total_iters=total_episodes)
-
     logger = Logger(log_dir=f"../../runs/ppo_seed_{seed_value}")
+    
+    # Các mảng lưu trữ kết quả cho seed này để xuất CSV
+    seed_rewards = []
+    seed_losses = []
+    seed_lrs = [] # PPO dùng Learning Rate thay vì Epsilon như DQN
+    
+    recent_rewards = collections.deque(maxlen=WINDOW_SIZE)
+    best_reward_so_far = float('-inf')
+
+    total_episodes = 2 if IS_CI else MAX_EPISODES
+    scheduler = LinearLR(agent.optimizer, start_factor=1.0, end_factor=0.05, total_iters=total_episodes)
 
     for episode in range(total_episodes):
         state, _ = env.reset(seed=seed_value if episode == 0 else None)
@@ -137,84 +64,198 @@ def run_single_seed(seed_value, df_train, parent_run=None):
         
         for step in range(MAX_STEPS):
             action, log_prob = agent.select_action(state)
-            next_state, reward, done, truncated, _ = env.step(action)
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
             
             states.append(state)
             actions.append(action)
             rewards.append(reward)
             log_probs.append(log_prob)
-            dones.append(done or truncated)
+            dones.append(done)
 
             episode_reward += reward
             state = next_state
-            if done or truncated: 
-                break
             
+            if done: 
+                break
+                
+        # Cập nhật mô hình PPO sau mỗi episode
         metrics = agent.update(states, actions, log_probs, rewards, dones)
         
-        seed_reward_history.append(episode_reward)
-        recent_rewards.append(episode_reward)
-        
-        # Log metrics directly to parent run
-        if parent_run:
-            try:
-                mlflow.log_metric(f"reward_seed_{seed_value}", episode_reward, step=episode)
-                if metrics and isinstance(metrics, dict):
-                    mlflow.log_metric(f"policy_loss_seed_{seed_value}", metrics.get("policy_loss", 0), step=episode)
-                    mlflow.log_metric(f"value_loss_seed_{seed_value}", metrics.get("value_loss", 0), step=episode)
-            except Exception as e:
-                logging.warning(f"Failed to log metrics: {e}")
+        policy_loss = metrics.get("policy_loss", 0.0) if metrics else 0.0
+        value_loss = metrics.get("value_loss", 0.0) if metrics else 0.0
+        total_loss = policy_loss + value_loss
 
-        if len(recent_rewards) == 10:
-            avg_reward = np.mean(recent_rewards)
-            if avg_reward > best_avg_reward and episode > 20:
-                best_avg_reward = avg_reward
-                save_path = f"../../models/best_ppo_seed_{seed_value}.pth"
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                try:
-                    agent.save(save_path)
-                    logging.info(f"[Seed {seed_value}] Ep {episode}: New Best Avg Reward: {best_avg_reward:.2f}")
-                except Exception as e:
-                    logging.error(f"Failed to save model: {e}")
+        # Thống kê
+        recent_rewards.append(episode_reward)
+        mean_reward = np.mean(recent_rewards)
+        std_reward = np.std(recent_rewards) if len(recent_rewards) > 1 else 0.0
+        
+        if episode_reward > best_reward_so_far:
+            best_reward_so_far = episode_reward
+
+        current_lr = scheduler.get_last_lr()[0]
+        
+        # Lưu vào mảng xuất CSV
+        seed_rewards.append(episode_reward)
+        seed_losses.append(total_loss)
+        seed_lrs.append(current_lr)
+
+        # Bơm dữ liệu Prometheus
+        PROM_REWARD.labels(agent='ppo').set(episode_reward)
+        PROM_REWARD_MEAN.labels(agent='ppo').set(mean_reward)
+        PROM_REWARD_STD.labels(agent='ppo').set(std_reward)
+        PROM_REWARD_BEST.labels(agent='ppo').set(best_reward_so_far)
+        PROM_LOSS.labels(agent='ppo').set(total_loss)
+        
+        # Bơm dữ liệu MLflow
+        if not IS_CI and parent_run:
+            try:
+                mlflow.log_metric(f"reward_raw_seed_{seed_value}", episode_reward, step=episode)
+                mlflow.log_metric(f"reward_mean_seed_{seed_value}", mean_reward, step=episode)
+                mlflow.log_metric(f"reward_std_seed_{seed_value}", std_reward, step=episode)
+                mlflow.log_metric(f"reward_best_seed_{seed_value}", best_reward_so_far, step=episode)
+                mlflow.log_metric(f"loss_total_seed_{seed_value}", total_loss, step=episode)
+                mlflow.log_metric(f"loss_policy_seed_{seed_value}", policy_loss, step=episode)
+                mlflow.log_metric(f"loss_value_seed_{seed_value}", value_loss, step=episode)
+            except Exception: pass
+
+        # Log nội bộ
+        logger.log_ppo(
+            episode, 
+            episode_reward, 
+            policy_loss, 
+            value_loss, 
+            metrics.get("entropy", 0.0) if metrics else 0.0, 
+            actions
+        )
 
         scheduler.step()
         
-        if episode % 50 == 0:
-            logging.info(f"Seed {seed_value} | Ep {episode} | Reward: {episode_reward:.2f} | LR: {scheduler.get_last_lr()[0]:.6f}")
+        if episode % 20 == 0:
+            logging.info(f"PPO | Ep {episode} | R: {episode_reward:.1f} | Mean: {mean_reward:.1f} | Best: {best_reward_so_far:.1f}")
 
     logger.close()
-    return seed_reward_history
-
-def train_multi_seeds():
-    seeds = [42, 101, 123]
-    all_results = []
-    df_train = pd.read_csv("../../data/processed/train_data.csv")
     
-    with mlflow.start_run(run_name="PPO_MultiSeed_Analysis"):
+    return {
+        "rewards": seed_rewards,
+        "losses": seed_losses,
+        "lrs": seed_lrs
+    }, agent
+
+def train_multi_seeds_ppo():
+    """Train PPO with multiple seeds and log all metrics"""
+    seeds = [42, 101, 123, 456, 789]
+    data_path = "./data/processed/train_data.csv"
+    if not os.path.exists(data_path):
+        data_path = "../../data/processed/train_data.csv"
+        
+    if os.path.exists(data_path):
+        df_train = pd.read_csv(data_path)
+    else:
+        logging.error(f"Không tìm thấy file data tại {data_path}.")
+        df_train = None
+    
+    if not IS_CI:
+        mlflow.start_run(run_name="PPO_Production_Training")
         mlflow.log_param("algo", "PPO")
         mlflow.log_param("seeds", str(seeds))
+    
+    best_agent_overall = None
+    best_overall_mean = -float('inf')
+    
+    # Dictionary chứa kết quả tổng hợp
+    all_results = {"rewards": [], "losses": [], "lrs": []}
+    
+    for s in seeds:
+        logging.info(f"\n--- BẮT ĐẦU SEED (PPO): {s} ---")
+        seed_result, trained_agent = run_single_seed_ppo(s, df_train, parent_run=(not IS_CI))
         
-        for s in seeds:
-            logging.info(f"\n--- BẮT ĐẦU SEED: {s} ---")
-            history = run_single_seed(s, df_train, parent_run=True)
-            all_results.append(history)
+        all_results["rewards"].append(seed_result["rewards"])
+        all_results["losses"].append(seed_result["losses"])
+        all_results["lrs"].append(seed_result["lrs"])
         
-        all_results = np.array(all_results)
-        mean_rewards = np.mean(all_results, axis=0)
-        std_rewards = np.std(all_results, axis=0)
+        avg_final = np.mean(seed_result["rewards"][-WINDOW_SIZE:])
+        if avg_final > best_overall_mean:
+            best_overall_mean = avg_final
+            best_agent_overall = trained_agent
+            
+    # --- TÍNH TOÁN THỐNG KÊ TOÀN CỤC ---
+    np_rewards = np.array(all_results["rewards"])
+    np_losses = np.array(all_results["losses"])
+    
+    mean_rewards = np.mean(np_rewards, axis=0)
+    std_rewards = np.std(np_rewards, axis=0)
+    mean_losses = np.mean(np_losses, axis=0)
+    std_losses = np.std(np_losses, axis=0)
+
+    # --- LƯU KẾT QUẢ VÀO CSV ---
+    try:
+        os.makedirs("../../results", exist_ok=True)
         
-        output_df = pd.DataFrame({
+        # 1. Summary statistics
+        summary_df = pd.DataFrame({
             'episode': range(len(mean_rewards)),
             'mean_reward': mean_rewards,
-            'std_reward': std_rewards
+            'std_reward': std_rewards,
+            'mean_loss': mean_losses,
+            'std_loss': std_losses
         })
-        res_path = "../../results/ppo_multi_seed_results.csv"
-        os.makedirs("../../results", exist_ok=True)
-        output_df.to_csv(res_path, index=False)
-        mlflow.log_artifact(res_path)
-        logging.info(f"Quá trình huấn luyện hoàn tất. Kết quả lưu tại {res_path}")
+        summary_path = "../../results/ppo_summary_results.csv"
+        summary_df.to_csv(summary_path, index=False)
+        if not IS_CI: mlflow.log_artifact(summary_path)
+
+        # 2. Individual seed results
+        for i, seed in enumerate(seeds):
+            seed_df = pd.DataFrame({
+                'episode': range(len(all_results["rewards"][i])),
+                'reward': all_results["rewards"][i],
+                'loss': all_results["losses"][i],
+                'learning_rate': all_results["lrs"][i]
+            })
+            seed_path = f"../../results/ppo_seed_{seed}_results.csv"
+            seed_df.to_csv(seed_path, index=False)
+            if not IS_CI: mlflow.log_artifact(seed_path)
+
+        # 3. Detailed aggregated metrics
+        metrics_df = pd.DataFrame({
+            'seed': seeds,
+            'final_reward': [all_results["rewards"][i][-1] for i in range(len(seeds))],
+            'best_reward': [max(all_results["rewards"][i]) for i in range(len(seeds))],
+            'mean_reward': [np.mean(all_results["rewards"][i]) for i in range(len(seeds))],
+            'final_loss': [all_results["losses"][i][-1] for i in range(len(seeds))],
+            'mean_loss': [np.mean(all_results["losses"][i]) for i in range(len(seeds))]
+        })
+        metrics_path = "../../results/ppo_metrics_by_seed.csv"
+        metrics_df.to_csv(metrics_path, index=False)
+        if not IS_CI: mlflow.log_artifact(metrics_path)
+
+        logging.info("Đã lưu toàn bộ CSV thống kê vào thư mục results/")
+
+    except Exception as e:
+        logging.error(f"Lỗi khi lưu CSV: {e}")
+
+    logging.info(f"\n✓ Đã hoàn thành PPO Multi-seed training")
+    logging.info(f"Final Mean Reward (Across Seeds): {mean_rewards[-1]:.2f} ± {std_rewards[-1]:.2f}")
+    logging.info(f"Best Mean Reward (Across Seeds): {np.max(mean_rewards):.2f}")
+
+    # Đăng ký model lên Registry
+    if not IS_CI and best_agent_overall is not None:
+        try:
+            # Nhớ sửa 'policy' thành đúng tên biến chứa mạng Neural Network của bạn
+            mlflow.pytorch.log_model(best_agent_overall.policy, "ppo_model")
+            run_id = mlflow.active_run().info.run_id
+            mlflow.register_model(f"runs:/{run_id}/ppo_model", "SDN_PPO_Model")
+            logging.info("Đã đăng ký SDN_PPO_Model lên MLflow Registry!")
+        except Exception as e:
+            logging.error(f"Lỗi đăng ký model: {e}")
+            
+    if not IS_CI:
+        mlflow.end_run()
 
 if __name__ == "__main__":
-    start_http_server(9001)
-    logging.info(f"Đã khởi động Prometheus metrics server trên port {port}")
-    train_multi_seeds()
+    PORT = 9001
+    start_http_server(PORT)
+    logging.getLogger().setLevel(logging.INFO)
+    logging.info(f"[PPO] Prometheus metrics server started on port {PORT}")
+    train_multi_seeds_ppo()
