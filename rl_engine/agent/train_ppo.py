@@ -9,7 +9,7 @@ from prometheus_client import start_http_server, Gauge
 from torch.optim.lr_scheduler import LinearLR
 
 # --- IMPORT TỪ REPO CỦA BẠN ---
-from rl_engine.env import SDNEnv
+from rl_engine.online_env import OnlineSDNEnv
 from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.agent.ppo_agent import PPOAgent
 from rl_engine.logger import Logger
@@ -48,7 +48,7 @@ def run_single_seed_ppo(seed_value, df_train, parent_run=None):
     env = OfflineSDNEnv(dataframe=df_train)
     agent = PPOAgent(state_dim=STATE_DIM, action_dim=ACTION_DIM)
     
-    logger = Logger(log_dir=f"../../runs/ppo_seed_{seed_value}")
+    logger = Logger(log_dir=os.path.join(BASE_DIR, f"runs/ppo_seed_{seed_value}"))
     
     # Các mảng lưu trữ kết quả cho seed này để xuất CSV
     seed_rewards = []
