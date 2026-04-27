@@ -16,7 +16,7 @@ services:
       - sdn-net
     environment:
       # Tự động kích hoạt các App cần thiết của ONOS khi khởi động
-      - ONOS_APPS=drivers,openflow,gui,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher, prometheus
+      - ONOS_APPS=drivers,openflow,gui,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher,prometheus
       - ONOS_AUTO_START=true
     restart: always
 
@@ -27,15 +27,8 @@ services:
       dockerfile: Dockerfile
     container_name: rl-agent-dqn
     depends_on:
-<<<<<<< HEAD
       - mlflow
       - controller
-=======
-      mlflow:
-        condition: service_started
-      controller:
-        condition: service_started
->>>>>>> 466ad63 (fix(pipeline): Add param)
     ports:
       - "9000:9000"
     networks:
@@ -61,17 +54,10 @@ services:
       dockerfile: Dockerfile
     container_name: rl-agent-ppo
     depends_on:
-<<<<<<< HEAD
       - mlflow
       - controller
-=======
-      mlflow:
-        condition: service_started
-      controller:
-        condition: service_started
->>>>>>> 466ad63 (fix(pipeline): Add param)
     ports:
-      - "9001:9000"
+      - "9001:9001"
     networks:
       - sdn-net
     volumes:
@@ -96,30 +82,29 @@ services:
   #     - sdn-net
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
+    image: ghcr.io/mlflow/mlflow:v3.0.0
     container_name: mlflow
     ports:
       - "5000:5000"
     volumes:
-      - mlflow_data:/mlflow
+      - ./mlruns:/mlruns
     environment:
-<<<<<<< HEAD
       - BACKEND_STORE_URI=sqlite:////mlflow/mlflow.db
-=======
-      - BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
->>>>>>> 466ad63 (fix(pipeline): Add param)
       - DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
-    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts --allowed-hosts "*"
+    #command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:////mlflow/mlflow.db --default-artifact-root /mlflow/artifacts --allowed-hosts "*"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlruns/mlflow.db
+      --default-artifact-root /mlruns/artifacts
     networks:
       - sdn-net
-<<<<<<< HEAD
-=======
     #healthcheck:
     #  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000')"]
     #  interval: 10s
     #  timeout: 5s
     #  retries: 5
->>>>>>> 466ad63 (fix(pipeline): Add param)
 
   # Control Loop
   control_loop:
@@ -166,6 +151,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_SECURITY_ADMIN_USER=admin
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/sdn_rl_dashboard.json
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro

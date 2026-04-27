@@ -7,3 +7,10 @@ __pycache__/
 *.pyc
 # ignore virtual environment
 venv/
+*.log
+results/
+*.csv
+*.json
+*.log
+tmp/
+*.tmp
