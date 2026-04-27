@@ -103,21 +103,21 @@ def run_single_seed_ppo(seed_value, df_train, parent_run=None):
 
         # Bơm dữ liệu Prometheus
         PROM_REWARD.labels(agent='ppo').set(episode_reward)
-        PROM_REWARD_MEAN.labels(agent='ppo').set(mean_reward)
-        PROM_REWARD_STD.labels(agent='ppo').set(std_reward)
-        PROM_REWARD_BEST.labels(agent='ppo').set(best_reward_so_far)
-        PROM_LOSS.labels(agent='ppo').set(total_loss)
-        
+        PROM_REWARD_MEAN.labels(agent='ppo').set(float(mean_reward))
+        PROM_REWARD_STD.labels(agent='ppo').set(float(std_reward))
+        PROM_REWARD_BEST.labels(agent='ppo').set(float(best_reward_so_far))
+        PROM_LOSS.labels(agent='ppo').set(float(total_loss))
+
         # Bơm dữ liệu MLflow
         if not IS_CI and parent_run:
             try:
                 mlflow.log_metric(f"reward_raw_seed_{seed_value}", episode_reward, step=episode)
-                mlflow.log_metric(f"reward_mean_seed_{seed_value}", mean_reward, step=episode)
-                mlflow.log_metric(f"reward_std_seed_{seed_value}", std_reward, step=episode)
-                mlflow.log_metric(f"reward_best_seed_{seed_value}", best_reward_so_far, step=episode)
-                mlflow.log_metric(f"loss_total_seed_{seed_value}", total_loss, step=episode)
-                mlflow.log_metric(f"loss_policy_seed_{seed_value}", policy_loss, step=episode)
-                mlflow.log_metric(f"loss_value_seed_{seed_value}", value_loss, step=episode)
+                mlflow.log_metric(f"reward_mean_seed_{seed_value}", float(mean_reward), step=episode)
+                mlflow.log_metric(f"reward_std_seed_{seed_value}", float(std_reward), step=episode)
+                mlflow.log_metric(f"reward_best_seed_{seed_value}", float(best_reward_so_far), step=episode)
+                mlflow.log_metric(f"loss_total_seed_{seed_value}", float(total_loss), step=episode)
+                mlflow.log_metric(f"loss_policy_seed_{seed_value}", float(policy_loss), step=episode)
+                mlflow.log_metric(f"loss_value_seed_{seed_value}", float(value_loss), step=episode)
             except Exception: pass
 
         # Log nội bộ
@@ -242,11 +242,18 @@ def train_multi_seeds_ppo():
     # Đăng ký model lên Registry
     if not IS_CI and best_agent_overall is not None:
         try:
-            # Nhớ sửa 'policy' thành đúng tên biến chứa mạng Neural Network của bạn
-            mlflow.pytorch.log_model(best_agent_overall.policy, "ppo_model")
-            run_id = mlflow.active_run().info.run_id
-            mlflow.register_model(f"runs:/{run_id}/ppo_model", "SDN_PPO_Model")
-            logging.info("Đã đăng ký SDN_PPO_Model lên MLflow Registry!")
+            # 1. Bỏ qua cảnh báo policy vì ta biết chắc Agent có thuộc tính này
+            mlflow.pytorch.log_model(best_agent_overall.policy, "ppo_model") # type: ignore
+            
+            # 2. Lấy active run an toàn
+            current_run = mlflow.active_run()
+            if current_run is not None:
+                run_id = current_run.info.run_id
+                mlflow.register_model(f"runs:/{run_id}/ppo_model", "SDN_PPO_Model")
+                logging.info("Đã đăng ký SDN_PPO_Model lên MLflow Registry!")
+            else:
+                logging.warning("Không có Active Run nào trên MLflow. Bỏ qua bước đăng ký Model.")
+                
         except Exception as e:
             logging.error(f"Lỗi đăng ký model: {e}")
             
