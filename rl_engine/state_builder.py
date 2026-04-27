@@ -38,7 +38,7 @@ class StateBuilder:
             src_ip_entropy,
             queue_length,
             controller_cpu,
-            attack_indicator,
+            # attack_indicator,
             self.prev_action
         ], dtype=np.float32)
 

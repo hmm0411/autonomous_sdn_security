@@ -4,7 +4,7 @@ import torch.optim as optim
 import numpy as np
 from typing import Optional, Tuple
 
-from rl_engine.config import GAMMA, LR
+from rl_engine.config import GAMMA, LR_PPO, clip_eps, entropy_coef, value_coef  
 
 
 ACTION_MAP = {
@@ -53,17 +53,17 @@ class PPOAgent:
         packet_loss,        # 5
         queue_length,       # 6
         controller_cpu,     # 7
-        attack_indicator,   # 8
-        previous_action     # 9
+        # attack_indicator,   # 8
+        previous_action     # 8
     ]
     """
 
     def __init__(
         self,
-        state_dim: int = 10,
+        state_dim: int = 9,
         action_dim: int = 5,
-        clip_eps: float = 0.2,
-        entropy_coef: float = 0.01,
+        clip_eps: float = 0.15,
+        entropy_coef: float = 0.02,
         value_coef: float = 0.5,
         device: Optional[str] = None,
     ):
@@ -78,7 +78,7 @@ class PPOAgent:
         )
 
         self.model = ActorCritic(state_dim, action_dim).to(self.device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=LR)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=LR_PPO)
 
         self.last_action = 0
 
@@ -96,7 +96,7 @@ class PPOAgent:
                 float(state.get("packet_loss", 0.0)),
                 float(state.get("queue_length", 0.0)),
                 float(state.get("controller_cpu", 0.0)),
-                float(state.get("attack_indicator", 0)),
+                # float(state.get("attack_indicator", 0)),
                 float(state.get("previous_action", self.last_action)),
             ], dtype=np.float32)
 

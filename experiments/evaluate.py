@@ -55,7 +55,7 @@ def evaluate_agent(env, agent, max_steps=1000):
         "avg_reward": np.mean(rewards),
         "switching_rate": switching_rate,
         "steps": steps,
-        # "actions": action_history  # Có thể comment lại để log không bị quá dài khi in ra console
+        "actions": action_history  
     }
 
 def main():

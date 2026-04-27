@@ -18,6 +18,11 @@ from rl_engine.config import *
 # Bổ sung nếu chưa có trong config: 
 # STATE_DIM = 7; ACTION_DIM = 5; WINDOW_SIZE = 50; MAX_EPISODES = 500; MAX_STEPS = 1000;
 
+# DIRECTORY STRUCTURE
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+RESULTS_DIR = os.path.join(BASE_DIR, "results")
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
 # ==========================================
 # CẤU HÌNH PROMETHEUS METRICS
 # ==========================================
@@ -201,7 +206,7 @@ def train_multi_seeds_ppo():
             'mean_loss': mean_losses,
             'std_loss': std_losses
         })
-        summary_path = "../../results/ppo_summary_results.csv"
+        summary_path = os.path.join(RESULTS_DIR, "ppo_summary_results.csv")
         summary_df.to_csv(summary_path, index=False)
         if not IS_CI: mlflow.log_artifact(summary_path)
 
@@ -213,7 +218,7 @@ def train_multi_seeds_ppo():
                 'loss': all_results["losses"][i],
                 'learning_rate': all_results["lrs"][i]
             })
-            seed_path = f"../../results/ppo_seed_{seed}_results.csv"
+            seed_path = os.path.join(RESULTS_DIR, f"ppo_seed_{seed}_results.csv")
             seed_df.to_csv(seed_path, index=False)
             if not IS_CI: mlflow.log_artifact(seed_path)
 
@@ -226,7 +231,7 @@ def train_multi_seeds_ppo():
             'final_loss': [all_results["losses"][i][-1] for i in range(len(seeds))],
             'mean_loss': [np.mean(all_results["losses"][i]) for i in range(len(seeds))]
         })
-        metrics_path = "../../results/ppo_metrics_by_seed.csv"
+        metrics_path = os.path.join(RESULTS_DIR, "ppo_metrics_by_seed.csv")
         metrics_df.to_csv(metrics_path, index=False)
         if not IS_CI: mlflow.log_artifact(metrics_path)
 
@@ -235,7 +240,7 @@ def train_multi_seeds_ppo():
     except Exception as e:
         logging.error(f"Lỗi khi lưu CSV: {e}")
 
-    logging.info(f"\n✓ Đã hoàn thành PPO Multi-seed training")
+    logging.info(f"\n Đã hoàn thành PPO Multi-seed training")
     logging.info(f"Final Mean Reward (Across Seeds): {mean_rewards[-1]:.2f} ± {std_rewards[-1]:.2f}")
     logging.info(f"Best Mean Reward (Across Seeds): {np.max(mean_rewards):.2f}")
 
