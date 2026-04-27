@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 
-from rl_engine.config import GAMMA, LR, TARGET_UPDATE, ACTION_DIM, EPS_START
+from rl_engine.config import GAMMA, LR_DQN, TARGET_UPDATE, ACTION_DIM, EPS_START
 
 
 class QNetwork(nn.Module):
@@ -32,7 +32,7 @@ class DQNAgent:
 
         self.target_net.load_state_dict(self.q_net.state_dict())
 
-        self.optimizer = optim.Adam(self.q_net.parameters(), lr=LR)
+        self.optimizer = optim.Adam(self.q_net.parameters(), lr=LR_DQN)
         self.epsilon = EPS_START
         self.update_count = 0
 
