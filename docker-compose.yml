@@ -27,8 +27,15 @@ services:
       dockerfile: Dockerfile
     container_name: rl-agent-dqn
     depends_on:
+<<<<<<< HEAD
       - mlflow
       - controller
+=======
+      mlflow:
+        condition: service_started
+      controller:
+        condition: service_started
+>>>>>>> 466ad63 (fix(pipeline): Add param)
     ports:
       - "9000:9000"
     networks:
@@ -54,8 +61,15 @@ services:
       dockerfile: Dockerfile
     container_name: rl-agent-ppo
     depends_on:
+<<<<<<< HEAD
       - mlflow
       - controller
+=======
+      mlflow:
+        condition: service_started
+      controller:
+        condition: service_started
+>>>>>>> 466ad63 (fix(pipeline): Add param)
     ports:
       - "9001:9000"
     networks:
@@ -89,11 +103,23 @@ services:
     volumes:
       - mlflow_data:/mlflow
     environment:
+<<<<<<< HEAD
       - BACKEND_STORE_URI=sqlite:////mlflow/mlflow.db
+=======
+      - BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
+>>>>>>> 466ad63 (fix(pipeline): Add param)
       - DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
-    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri file:///mlflow/backend
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts --allowed-hosts "*"
     networks:
       - sdn-net
+<<<<<<< HEAD
+=======
+    #healthcheck:
+    #  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000')"]
+    #  interval: 10s
+    #  timeout: 5s
+    #  retries: 5
+>>>>>>> 466ad63 (fix(pipeline): Add param)
 
   # Control Loop
   control_loop:

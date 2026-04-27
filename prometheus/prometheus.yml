@@ -47,3 +47,9 @@ scrape_configs:
     static_configs:
       - targets: [ "rl-agent-ppo:9001" ]
     scrape_interval: 10s
+ 
+  # Control Loop (Runtime metrics)
+  - job_name: "control_loop"
+    static_configs:
+      - targets: [ "control_loop:8000" ]
+    scrape_interval: 10s

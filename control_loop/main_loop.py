@@ -2,7 +2,7 @@ import time
 import numpy as np
 from rl_client import get_action
 from metrics import update_metrics
-
+from prometheus_client import start_http_server, Gauge
 # Import từ thư mục rl_engine của bạn
 from rl_engine.state_builder import StateBuilder
 from rl_engine.controller_client import ControllerClient
@@ -39,4 +39,5 @@ def main():
         time.sleep(2)
 
 if __name__ == "__main__":
+    start_http_server(8000)
     main()
