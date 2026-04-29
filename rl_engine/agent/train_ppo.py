@@ -171,6 +171,7 @@ def train_multi_seeds_ppo():
     
     best_agent_overall = None
     best_overall_mean = -float('inf')
+    trained_agent = None  # Biến tạm để lưu agent cuối cùng trong trường hợp không tìm được best agent nào
 
     # Dictionary chứa kết quả tổng hợp
     all_results = {"rewards": [], "losses": [], "lrs": []}
@@ -191,8 +192,7 @@ def train_multi_seeds_ppo():
     # ==== SAVE BEST PPO MODEL ====
     if best_agent_overall is not None:
         logging.warning("No best PPO agent found. Using last trained agent.")
-        raise RuntimeError("Training failed: No agent was trained.")
-
+        best_agent_overall = trained_agent  # Lấy agent cuối cùng làm fallback
     model_path = os.path.join(MODELS_DIR, "ppo_model.pth")
 
     assert best_agent_overall is not None # Đảm bảo có agent tốt nhất để lưu

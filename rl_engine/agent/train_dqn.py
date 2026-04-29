@@ -164,6 +164,7 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=None):
     }, agent
     
 
+
 def train_multi_seeds_dqn():
     """Train DQN with multiple seeds and log all metrics"""
     seeds = [42, 123, 456]
@@ -184,6 +185,7 @@ def train_multi_seeds_dqn():
     
     best_agent_overall = None
     best_overall_mean = -float('inf')
+    trained_agent = None  # Biến tạm để lưu agent cuối cùng trong trường hợp không tìm được best agent nào
     
     # Dictionary chứa kết quả tổng hợp
     all_results = {"rewards": [], "losses": [], "epsilons": []}
@@ -204,10 +206,11 @@ def train_multi_seeds_dqn():
 
     if best_agent_overall is None:
         logging.warning("No best agent found.")
-        raise RuntimeError("Training failed: No agent was trained.")
+        best_agent_overall = trained_agent  # Lấy agent cuối cùng làm fallback
 
     model_path = os.path.join(MODELS_DIR, "dqn_model.pth")
-
+    assert best_agent_overall is not None, "Best agent is None, cannot save model."
+    
     torch.save(
         {
             "model_state_dict": best_agent_overall.q_net.state_dict(),
