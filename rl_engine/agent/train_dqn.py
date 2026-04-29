@@ -32,7 +32,9 @@ PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
 # RESULTS_DIR = os.path.join(BASE_DIR, "results")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RUNS_DIR = os.path.join(BASE_DIR, "runs")
+MODELS_DIR = os.path.join(BASE_DIR, "models")
 
+os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(RUNS_DIR, exist_ok=True)
 
 # ==========================================
@@ -152,6 +154,8 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=None):
         # Đảm bảo luôn đóng Child Run
         if run_context:
             mlflow.end_run()
+    
+    agent.epsilon = epsilon  # Cập nhật epsilon cuối cùng vào agent trước khi trả về
 
     return {
         "rewards": seed_rewards,
@@ -181,19 +185,6 @@ def train_multi_seeds_dqn():
     best_agent_overall = None
     best_overall_mean = -float('inf')
     
-    if best_agent_overall is not None:
-        model_path = os.path.join(RUNS_DIR, "models", "dqn_model.pth")
-        torch.save(
-            {
-            "model_state_dict": best_agent_overall.q_net.state_dict(), # type: ignore
-            "target_model_state_dict": best_agent_overall.target_net.state_dict(), # type: ignore
-            "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
-            "epsilon": best_agent_overall.epsilon, # type: ignore
-            }, 
-            model_path,
-        )
-        logging.info(f"Saved best overall DQN model to: {model_path}")
-    
     # Dictionary chứa kết quả tổng hợp
     all_results = {"rewards": [], "losses": [], "epsilons": []}
 
@@ -210,6 +201,24 @@ def train_multi_seeds_dqn():
         if avg_final > best_overall_mean:
             best_overall_mean = avg_final
             best_agent_overall = trained_agent
+
+    if best_agent_overall is None:
+        logging.warning("No best agent found.")
+        raise RuntimeError("Training failed: No agent was trained.")
+
+    model_path = os.path.join(MODELS_DIR, "dqn_model.pth")
+
+    torch.save(
+        {
+            "model_state_dict": best_agent_overall.q_net.state_dict(),
+            "target_model_state_dict": best_agent_overall.target_net.state_dict(),
+            "optimizer_state_dict": best_agent_overall.optimizer.state_dict(),
+            "epsilon": best_agent_overall.epsilon,
+        },
+        model_path,
+    )
+
+    logging.info(f"Saved best overall DQN model to: {model_path}")
 
     # --- TÍNH TOÁN THỐNG KÊ TOÀN CỤC ---
     # Chuyển list of lists thành Numpy array để dễ tính mean/std theo cột
@@ -275,7 +284,7 @@ def train_multi_seeds_dqn():
     # Đăng ký model lên Registry
     if not IS_CI and best_agent_overall is not None:
         try:
-             mlflow.pytorch.log_model(best_agent_overall.q_network, "dqn_model") # type: ignore
+             mlflow.pytorch.log_model(best_agent_overall.q_net, "dqn_model") # type: ignore
              current_run = mlflow.active_run()
              if current_run is not None:
                  run_id = current_run.info.run_id

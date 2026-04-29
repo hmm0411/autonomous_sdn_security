@@ -9,7 +9,6 @@ from prometheus_client import start_http_server, Gauge
 import torch
 from torch.optim.lr_scheduler import LinearLR
 
-# --- IMPORT TỪ REPO CỦA BẠN ---
 from rl_engine.online_env import OnlineSDNEnv
 from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.agent.ppo_agent import PPOAgent
@@ -22,6 +21,9 @@ from rl_engine.config import *
 # DIRECTORY STRUCTURE
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RUNS_DIR = os.path.join(BASE_DIR, "runs")
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+
+os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(RUNS_DIR, exist_ok=True)
 
 # ==========================================
@@ -160,7 +162,7 @@ def train_multi_seeds_ppo():
         df_train = pd.read_csv(data_path)
     else:
         logging.error(f"Không tìm thấy file data tại {data_path}.")
-        df_train = None
+        raise FileNotFoundError(f"Data file not found at {data_path}")
     
     if not IS_CI:
         mlflow.start_run(run_name="PPO_Production_Training")
@@ -169,17 +171,6 @@ def train_multi_seeds_ppo():
     
     best_agent_overall = None
     best_overall_mean = -float('inf')
-
-    if best_agent_overall is not None:
-        model_path = os.path.join(RUNS_DIR, "ppo_model.pth")
-        torch.save(
-            {
-                "model_state_dict": best_agent_overall.model.state_dict(), # type: ignore
-                "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
-            },
-            model_path
-        )
-        logging.info(f"Saved best overall PPO model to: {model_path}")
 
     # Dictionary chứa kết quả tổng hợp
     all_results = {"rewards": [], "losses": [], "lrs": []}
@@ -197,19 +188,25 @@ def train_multi_seeds_ppo():
             best_overall_mean = avg_final
             best_agent_overall = trained_agent
 
+    # ==== SAVE BEST PPO MODEL ====
     if best_agent_overall is not None:
-        model_path = os.path.join(RUNS_DIR, "models", "ppo_model.pth")
+        logging.warning("No best PPO agent found. Using last trained agent.")
+        raise RuntimeError("Training failed: No agent was trained.")
 
-        torch.save(
-            {
-                "model_state_dict": best_agent_overall.model.state_dict(), # type: ignore
-                "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
-            },
-            model_path,
-        )
+    model_path = os.path.join(MODELS_DIR, "ppo_model.pth")
 
-        logging.info(f"Saved best overall PPO model to: {model_path}")
-            
+    assert best_agent_overall is not None # Đảm bảo có agent tốt nhất để lưu
+
+    torch.save(
+        {
+            "model_state_dict": best_agent_overall.model.state_dict(),
+            "optimizer_state_dict": best_agent_overall.optimizer.state_dict(),
+        },
+        model_path,
+    )
+
+    logging.info(f"Saved best overall PPO model to: {model_path}")
+
     # --- TÍNH TOÁN THỐNG KÊ TOÀN CỤC ---
     np_rewards = np.array(all_results["rewards"])
     np_losses = np.array(all_results["losses"])
