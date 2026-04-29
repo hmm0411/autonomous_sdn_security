@@ -9,11 +9,11 @@ class StateBuilder:
     def build(self, raw):
         packets = raw.get("total_packets", 0)
         bytes_ = raw.get("total_bytes", 0)
+
         latency = raw.get("latency", 0)
         flow_count = raw.get("flow_count", 0)
         packet_loss = raw.get("packet_loss", 0)
-        packets = raw.get("total_packets", 0)
-        bytes_ = raw.get("total_bytes", 0)
+
         src_ip_entropy = raw.get("src_ip_entropy", 0)
         queue_length = raw.get("queue_length", 0)
         controller_cpu = raw.get("controller_cpu", 0)
@@ -29,16 +29,19 @@ class StateBuilder:
         self.prev_packets = packets
         self.prev_bytes = bytes_
 
+        def norm(x, max_val):
+            return np.clip(x / max_val, 0, 1)
+
         state = np.array([
-            packet_rate / 20000,
-            byte_rate / 500000,
-            flow_count / 100,
-            latency / 100,
-            packet_loss,
-            src_ip_entropy,
-            queue_length,
-            controller_cpu,
-            # attack_indicator,
+            norm(packet_rate, 20000),
+            norm(byte_rate, 500000),
+            norm(flow_count, 100),
+            norm(latency, 100),
+            np.clip(packet_loss, 0, 1),
+            np.clip(src_ip_entropy, 0, 1),
+            np.clip(queue_length, 0, 1),
+            np.clip(controller_cpu, 0, 1),
+            np.clip(attack_indicator, 0, 1),
             self.prev_action
         ], dtype=np.float32)
 

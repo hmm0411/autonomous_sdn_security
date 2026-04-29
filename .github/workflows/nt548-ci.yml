@@ -1,0 +1,183 @@
+name: NT548 MLOps CI
+
+on:
+  push:
+    branches:
+      - nt548-mlops
+
+jobs:
+  test-mlops-system:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # ===== INSTALL =====
+      - name: Install dependencies
+        run: |
+          pip install -r rl_engine/requirements.txt
+          pip install flask requests prometheus_client mlflow torch
+
+      # ===== SETUP DIR =====
+      - name: Create directories
+        run: |
+          mkdir -p data/processed models results logs mlruns
+
+      # ===== MOCK DATA =====
+      - name: Create mock dataset
+        run: |
+          echo "packet_rate,byte_rate,flow_count,src_ip_entropy,latency,packet_loss,queue_length,controller_cpu,attack_indicator,previous_action" > data/processed/test.csv
+          echo "0.1,0.2,0.3,0.4,0.1,0.0,0.2,0.1,0,0" >> data/processed/test.csv
+
+      # ===== TEST STATE BUILDER =====
+      - name: Test StateBuilder
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<EOF
+          from rl_engine.state_builder import StateBuilder
+          raw = {
+              "total_packets": 1000,
+              "total_bytes": 2000,
+              "latency": 10,
+              "flow_count": 5,
+              "packet_loss": 0,
+              "src_ip_entropy": 0.5,
+              "queue_length": 0.2,
+              "controller_cpu": 0.3,
+              "attack_indicator": 0
+          }
+          sb = StateBuilder()
+          state = sb.build(raw)
+          print("State:", state)
+          assert len(state) > 0
+          EOF
+
+      # ===== TEST REWARD =====
+      - name: Test Reward
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<EOF
+          from rl_engine.reward import Reward
+          r = Reward()
+          raw = {
+              "latency": 10,
+              "packet_loss": 0.1,
+              "attack_indicator": 1
+          }
+          reward = r.calculate(raw, 1)
+          print("Reward:", reward)
+          EOF
+
+      # ===== TEST RL SERVING =====
+      - name: Test RL Serving API
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          echo "Starting mock RL server..."
+          python - <<EOF &
+          from flask import Flask, request, jsonify
+          app = Flask(__name__)
+
+          @app.route("/predict", methods=["POST"])
+          def predict():
+              return jsonify({"action": 1})
+
+          app.run(port=9000)
+          EOF
+
+          sleep 3
+
+          curl -X POST http://localhost:9000/predict \
+          -H "Content-Type: application/json" \
+          -d '{"state":[0.1,0.2,0.3,0.4,0.5,0.1,0.2,0.3,0,0]}'
+
+      # ===== TEST CONTROL LOOP (DRY RUN) =====
+      - name: Test Control Loop Logic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<EOF
+          import numpy as np
+          from rl_engine.state_builder import StateBuilder
+          from rl_engine.reward import Reward
+
+          sb = StateBuilder()
+          r = Reward()
+
+          raw = {
+              "total_packets": 1000,
+              "total_bytes": 2000,
+              "latency": 10,
+              "flow_count": 5,
+              "packet_loss": 0,
+              "src_ip_entropy": 0.5,
+              "queue_length": 0.2,
+              "controller_cpu": 0.3,
+              "attack_indicator": 0
+          }
+
+          state = sb.build(raw)
+          action = 1
+          reward = r.calculate(raw, action)
+
+          print("State:", state)
+          print("Reward:", reward)
+          EOF
+
+      # ===== TEST PROMETHEUS METRICS =====
+      - name: Test Metrics Export
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<EOF &
+          from prometheus_client import start_http_server, Gauge
+          import time
+
+          g = Gauge('test_metric', 'test')
+          start_http_server(9001)
+
+          for i in range(3):
+              g.set(i)
+              time.sleep(1)
+          EOF
+
+          sleep 3
+          curl http://localhost:9001/metrics | head -20
+
+      # ===== TEST MLFLOW =====
+      - name: Test MLflow Tracking
+        run: |
+          python - <<EOF
+          import mlflow
+
+          mlflow.set_tracking_uri("file:./mlruns")
+
+          mlflow.set_experiment("nt548-test")
+
+          with mlflow.start_run():
+            mlflow.log_param("test", 1)
+            mlflow.log_metric("score", 0.9)
+
+          print("MLflow test done")
+          EOF
+
+      # ===== ARTIFACT =====
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nt548-results-${{ github.run_id }}
+          path: |
+            results/
+            models/
+            mlruns/
+            logs/
+          retention-days: 30
