@@ -28,9 +28,12 @@ PROM_REWARD_BEST = Gauge('episode_reward_best', 'Kỷ lục phần thưởng t�
 PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
 
 # DIRECTORY STRUCTURE
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
-RESULTS_DIR = os.path.join(BASE_DIR, "results")
-os.makedirs(RESULTS_DIR, exist_ok=True)
+# BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+# RESULTS_DIR = os.path.join(BASE_DIR, "results")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+RUNS_DIR = os.path.join(BASE_DIR, "runs")
+
+os.makedirs(RUNS_DIR, exist_ok=True)
 
 # ==========================================
 # CẤU HÌNH MLOPS & CI/CD
@@ -49,7 +52,7 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=None):
     agent = DQNAgent(state_dim=STATE_DIM, action_dim=ACTION_DIM)
     buffer = ReplayBuffer(BUFFER_SIZE)
     
-    logger = Logger(log_dir=f"../../runs/dqn_seed_{seed_value}")
+    logger = Logger(log_dir=os.path.join(RUNS_DIR, f"dqn_seed_{seed_value}"))
     
     epsilon = EPS_START
     
@@ -179,7 +182,7 @@ def train_multi_seeds_dqn():
     best_overall_mean = -float('inf')
     
     if best_agent_overall is not None:
-        model_path = os.path.join(RESULTS_DIR, "models", "dqn_model.pth")
+        model_path = os.path.join(RUNS_DIR, "models", "dqn_model.pth")
         torch.save(
             {
             "model_state_dict": best_agent_overall.q_net.state_dict(), # type: ignore
@@ -220,7 +223,7 @@ def train_multi_seeds_dqn():
 
     # --- LƯU KẾT QUẢ VÀO CSV ---
     try:
-        os.makedirs(os.path.join(RESULTS_DIR, "models"), exist_ok=True)
+        os.makedirs(os.path.join(RUNS_DIR, "models"), exist_ok=True)
         
         # 1. Summary statistics
         summary_df = pd.DataFrame({
@@ -230,7 +233,7 @@ def train_multi_seeds_dqn():
             'mean_loss': mean_losses,
             'std_loss': std_losses
         })
-        summary_path = os.path.join(RESULTS_DIR, "models", "dqn_summary_results.csv")
+        summary_path = os.path.join(RUNS_DIR, "models", "dqn_summary_results.csv")
         summary_df.to_csv(summary_path, index=False)
         if not IS_CI: mlflow.log_artifact(summary_path)
         logging.info(f"Saved summary results to: {summary_path}")
@@ -243,10 +246,10 @@ def train_multi_seeds_dqn():
                 'loss': all_results["losses"][i],
                 'epsilon': all_results["epsilons"][i]
             })
-            seed_path = os.path.join(RESULTS_DIR, "models", f"dqn_seed_{seed}_results.csv")
+            seed_path = os.path.join(RUNS_DIR, "models", f"dqn_seed_{seed}_results.csv")
             seed_df.to_csv(seed_path, index=False)
             if not IS_CI: mlflow.log_artifact(seed_path)
-        logging.info(f"Saved individual seed results to {RESULTS_DIR}/models/dqn_seed_*.csv")
+        logging.info(f"Saved individual seed results to {RUNS_DIR}/models/dqn_seed_*.csv")
 
         # 3. Detailed aggregated metrics
         metrics_df = pd.DataFrame({
@@ -257,7 +260,7 @@ def train_multi_seeds_dqn():
             'final_loss': [all_results["losses"][i][-1] for i in range(len(seeds))],
             'mean_loss': [np.mean(all_results["losses"][i]) for i in range(len(seeds))]
         })
-        metrics_path = os.path.join(RESULTS_DIR, "models", "dqn_metrics_by_seed.csv")
+        metrics_path = os.path.join(RUNS_DIR, "models", "dqn_metrics_by_seed.csv")
         metrics_df.to_csv(metrics_path, index=False)
         if not IS_CI: mlflow.log_artifact(metrics_path)
         logging.info(f"Saved detailed metrics to: {metrics_path}")

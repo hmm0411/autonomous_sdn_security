@@ -20,9 +20,9 @@ from rl_engine.config import *
 # STATE_DIM = 7; ACTION_DIM = 5; WINDOW_SIZE = 50; MAX_EPISODES = 500; MAX_STEPS = 1000;
 
 # DIRECTORY STRUCTURE
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
-RESULTS_DIR = os.path.join(BASE_DIR, "results")
-os.makedirs(RESULTS_DIR, exist_ok=True)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+RUNS_DIR = os.path.join(BASE_DIR, "runs")
+os.makedirs(RUNS_DIR, exist_ok=True)
 
 # ==========================================
 # CẤU HÌNH PROMETHEUS METRICS
@@ -49,7 +49,7 @@ def run_single_seed_ppo(seed_value, df_train, parent_run=None):
     env = OfflineSDNEnv(dataframe=df_train)
     agent = PPOAgent(state_dim=STATE_DIM, action_dim=ACTION_DIM)
     
-    logger = Logger(log_dir=os.path.join(BASE_DIR, f"runs/ppo_seed_{seed_value}"))
+    logger = Logger(log_dir=os.path.join(RUNS_DIR, f"ppo_seed_{seed_value}"))
     
     # Các mảng lưu trữ kết quả cho seed này để xuất CSV
     seed_rewards = []
@@ -171,7 +171,7 @@ def train_multi_seeds_ppo():
     best_overall_mean = -float('inf')
 
     if best_agent_overall is not None:
-        model_path = os.path.join(RESULTS_DIR, "ppo_model.pth")
+        model_path = os.path.join(RUNS_DIR, "ppo_model.pth")
         torch.save(
             {
                 "model_state_dict": best_agent_overall.model.state_dict(), # type: ignore
@@ -198,7 +198,7 @@ def train_multi_seeds_ppo():
             best_agent_overall = trained_agent
 
     if best_agent_overall is not None:
-        model_path = os.path.join(RESULTS_DIR, "models", "ppo_model.pth")
+        model_path = os.path.join(RUNS_DIR, "models", "ppo_model.pth")
 
         torch.save(
             {
@@ -221,7 +221,7 @@ def train_multi_seeds_ppo():
 
     # --- LƯU KẾT QUẢ VÀO CSV ---
     try:
-        os.makedirs(os.path.join(RESULTS_DIR, "models"), exist_ok=True)
+        os.makedirs(os.path.join(RUNS_DIR, "models"), exist_ok=True)
         
         # 1. Summary statistics
         summary_df = pd.DataFrame({
@@ -231,7 +231,7 @@ def train_multi_seeds_ppo():
             'mean_loss': mean_losses,
             'std_loss': std_losses
         })
-        summary_path = os.path.join(RESULTS_DIR, "models", "ppo_summary_results.csv")
+        summary_path = os.path.join(RUNS_DIR, "models", "ppo_summary_results.csv")
         summary_df.to_csv(summary_path, index=False)
         if not IS_CI: mlflow.log_artifact(summary_path)
 
@@ -243,7 +243,7 @@ def train_multi_seeds_ppo():
                 'loss': all_results["losses"][i],
                 'learning_rate': all_results["lrs"][i]
             })
-            seed_path = os.path.join(RESULTS_DIR, "models", f"ppo_seed_{seed}_results.csv")
+            seed_path = os.path.join(RUNS_DIR, "models", f"ppo_seed_{seed}_results.csv")
             seed_df.to_csv(seed_path, index=False)
             if not IS_CI: mlflow.log_artifact(seed_path)
 
@@ -256,7 +256,7 @@ def train_multi_seeds_ppo():
             'final_loss': [all_results["losses"][i][-1] for i in range(len(seeds))],
             'mean_loss': [np.mean(all_results["losses"][i]) for i in range(len(seeds))]
         })
-        metrics_path = os.path.join(RESULTS_DIR, "models", "ppo_metrics_by_seed.csv")
+        metrics_path = os.path.join(RUNS_DIR, "models", "ppo_metrics_by_seed.csv")
         metrics_df.to_csv(metrics_path, index=False)
         if not IS_CI: mlflow.log_artifact(metrics_path)
 
