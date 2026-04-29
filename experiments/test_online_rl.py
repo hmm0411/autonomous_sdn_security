@@ -12,12 +12,12 @@ env = OnlineSDNEnv(
 
 # ===== Load DQN =====
 dqn_agent = DQNAgent(STATE_DIM, ACTION_DIM)
-dqn_agent.load("models/train_dqn.pth")
+dqn_agent.load("models/dqn_model.pth")
 dqn_agent.epsilon = 0.0
 
 # ===== Load PPO =====
 ppo_agent = PPOAgent(STATE_DIM, ACTION_DIM)
-ppo_agent.load("models/train_ppo.pth")
+ppo_agent.load("models/ppo_model.pth")
 
 print("\n========== DQN ONLINE TEST ==========\n")
 
