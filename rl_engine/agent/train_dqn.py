@@ -8,6 +8,8 @@ import mlflow.pytorch
 from prometheus_client import start_http_server, Gauge
 import collections
 
+import torch
+
 # Giả sử các module này đã được định nghĩa đúng trong source code của bạn
 # from rl_engine.agent.train_ppo import run_single_seed, train_multi_seeds # (Bỏ dòng này nếu không cần thiết trong file DQN)
 from rl_engine.online_env import OnlineSDNEnv
@@ -175,6 +177,19 @@ def train_multi_seeds_dqn():
     
     best_agent_overall = None
     best_overall_mean = -float('inf')
+    
+    if best_agent_overall is not None:
+        model_path = os.path.join(RESULTS_DIR, "dqn_model.pth")
+        torch.save(
+            {
+            "model_state_dict": best_agent_overall.q_net.state_dict(), # type: ignore
+            "target_model_state_dict": best_agent_overall.target_net.state_dict(), # type: ignore
+            "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
+            "epsilon": best_agent_overall.epsilon, # type: ignore
+            }, 
+            model_path,
+        )
+        logging.info(f"Saved best overall DQN model to: {model_path}")
     
     # Dictionary chứa kết quả tổng hợp
     all_results = {"rewards": [], "losses": [], "epsilons": []}

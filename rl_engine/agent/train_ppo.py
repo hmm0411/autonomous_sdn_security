@@ -6,6 +6,7 @@ import pandas as pd
 import mlflow
 import mlflow.pytorch
 from prometheus_client import start_http_server, Gauge
+import torch
 from torch.optim.lr_scheduler import LinearLR
 
 # --- IMPORT TỪ REPO CỦA BẠN ---
@@ -168,7 +169,18 @@ def train_multi_seeds_ppo():
     
     best_agent_overall = None
     best_overall_mean = -float('inf')
-    
+
+    if best_agent_overall is not None:
+        model_path = os.path.join(RESULTS_DIR, "ppo_model.pth")
+        torch.save(
+            {
+                "model_state_dict": best_agent_overall.policy_net.state_dict(), # type: ignore
+                "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
+            },
+            model_path
+        )
+        logging.info(f"Saved best overall PPO model to: {model_path}")
+
     # Dictionary chứa kết quả tổng hợp
     all_results = {"rewards": [], "losses": [], "lrs": []}
     
