@@ -1,3 +1,5 @@
+from importlib.resources import path
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -219,7 +221,19 @@ class PPOAgent:
 
     def load(self, path: str) -> None:
         checkpoint = torch.load(path, map_location=self.device)
-        self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        self.last_action = checkpoint.get("last_action", 0)
+
+    # Nếu là full checkpoint dict
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            self.model.load_state_dict(checkpoint["model_state_dict"])
+
+            if "optimizer_state_dict" in checkpoint:
+                self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+            self.last_action = checkpoint.get("last_action", 0)
+
+        else:
+        # Nếu chỉ là state_dict thuần
+            self.model.load_state_dict(checkpoint)
+
         self.model.to(self.device)
+        print("PPO model loaded successfully")
