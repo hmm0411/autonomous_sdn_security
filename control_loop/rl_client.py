@@ -1,16 +1,27 @@
 import requests
-# 'rl-agent' là tên service trong docker-compose, port 8000 là port API của bạn
-RL_API_URL = "http://rl-agent:8000/predict"
+import random
 
-def get_action(state):
+DQN_URL = "http://rl-agent-dqn:9000/predict"
+PPO_URL = "http://rl-agent-ppo:9001/predict"
+
+def call_model(url, state):
     try:
-        payload = {"state": state}
-        response = requests.post(RL_API_URL, json=payload)
-        response.raise_for_status()
-        
-        # Giả định API trả về JSON: {"action": 1}
-        action = response.json().get("action", 0)
-        return action
-    except Exception as e:
-        print(f"Lỗi khi gọi RL API: {e}")
-        return 0 # Trả về action mặc định (ví dụ: 0 = Do nothing)
+        res = requests.post(url, json={"state": state.tolist()}, timeout=1.5)
+        return int(res.json()["action"])
+    except:
+        return 0
+
+def get_best_action(state, reward_fn):
+    # gọi cả 2 model
+    action_dqn = call_model(DQN_URL, state)
+    action_ppo = call_model(PPO_URL, state)
+
+    # tính reward
+    reward_dqn = reward_fn(state, action_dqn)
+    reward_ppo = reward_fn(state, action_ppo)
+
+    # chọn model tốt hơn
+    if reward_dqn >= reward_ppo:
+        return action_dqn, "DQN", reward_dqn
+    else:
+        return action_ppo, "PPO", reward_ppo

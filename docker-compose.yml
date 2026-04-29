@@ -44,7 +44,7 @@ services:
       - PYTHONPATH=/app
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - CI=false
-    command: python -m rl_engine.agent.train_dqn
+    command: python -m rl_engine.agent.serving_dqn.py
     restart: on-failure
 
   # Container chạy PPO
@@ -71,7 +71,7 @@ services:
       - PYTHONPATH=/app
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - CI=false
-    command: python -m rl_engine.agent.train_ppo
+    command: python -m rl_engine.agent.serving_ppo.py
     restart: on-failure
 
   # twin:
