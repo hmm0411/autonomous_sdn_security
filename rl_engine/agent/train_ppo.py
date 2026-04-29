@@ -174,7 +174,7 @@ def train_multi_seeds_ppo():
         model_path = os.path.join(RESULTS_DIR, "ppo_model.pth")
         torch.save(
             {
-                "model_state_dict": best_agent_overall.policy_net.state_dict(), # type: ignore
+                "model_state_dict": best_agent_overall.policy.state_dict(), # type: ignore
                 "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
             },
             model_path
@@ -202,7 +202,7 @@ def train_multi_seeds_ppo():
 
         torch.save(
             {
-                "model_state_dict": best_agent_overall.policy_net.state_dict(), # type: ignore
+                "model_state_dict": best_agent_overall.policy.state_dict(), # type: ignore
                 "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
             },
             model_path,
