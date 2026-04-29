@@ -174,7 +174,7 @@ def train_multi_seeds_ppo():
         model_path = os.path.join(RESULTS_DIR, "ppo_model.pth")
         torch.save(
             {
-                "model_state_dict": best_agent_overall.policy_net.state_dict(), # type: ignore
+                "model_state_dict": best_agent_overall.model.state_dict(), # type: ignore
                 "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
             },
             model_path
@@ -196,6 +196,19 @@ def train_multi_seeds_ppo():
         if avg_final > best_overall_mean:
             best_overall_mean = avg_final
             best_agent_overall = trained_agent
+
+    if best_agent_overall is not None:
+        model_path = os.path.join(RESULTS_DIR, "models", "ppo_model.pth")
+
+        torch.save(
+            {
+                "model_state_dict": best_agent_overall.model.state_dict(), # type: ignore
+                "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
+            },
+            model_path,
+        )
+
+        logging.info(f"Saved best overall PPO model to: {model_path}")
             
     # --- TÍNH TOÁN THỐNG KÊ TOÀN CỤC ---
     np_rewards = np.array(all_results["rewards"])
@@ -208,7 +221,7 @@ def train_multi_seeds_ppo():
 
     # --- LƯU KẾT QUẢ VÀO CSV ---
     try:
-        os.makedirs("../../results", exist_ok=True)
+        os.makedirs(os.path.join(RESULTS_DIR, "models"), exist_ok=True)
         
         # 1. Summary statistics
         summary_df = pd.DataFrame({
@@ -218,7 +231,7 @@ def train_multi_seeds_ppo():
             'mean_loss': mean_losses,
             'std_loss': std_losses
         })
-        summary_path = os.path.join(RESULTS_DIR, "ppo_summary_results.csv")
+        summary_path = os.path.join(RESULTS_DIR, "models", "ppo_summary_results.csv")
         summary_df.to_csv(summary_path, index=False)
         if not IS_CI: mlflow.log_artifact(summary_path)
 
@@ -230,7 +243,7 @@ def train_multi_seeds_ppo():
                 'loss': all_results["losses"][i],
                 'learning_rate': all_results["lrs"][i]
             })
-            seed_path = os.path.join(RESULTS_DIR, f"ppo_seed_{seed}_results.csv")
+            seed_path = os.path.join(RESULTS_DIR, "models", f"ppo_seed_{seed}_results.csv")
             seed_df.to_csv(seed_path, index=False)
             if not IS_CI: mlflow.log_artifact(seed_path)
 
@@ -243,7 +256,7 @@ def train_multi_seeds_ppo():
             'final_loss': [all_results["losses"][i][-1] for i in range(len(seeds))],
             'mean_loss': [np.mean(all_results["losses"][i]) for i in range(len(seeds))]
         })
-        metrics_path = os.path.join(RESULTS_DIR, "ppo_metrics_by_seed.csv")
+        metrics_path = os.path.join(RESULTS_DIR, "models", "ppo_metrics_by_seed.csv")
         metrics_df.to_csv(metrics_path, index=False)
         if not IS_CI: mlflow.log_artifact(metrics_path)
 
@@ -260,7 +273,7 @@ def train_multi_seeds_ppo():
     if not IS_CI and best_agent_overall is not None:
         try:
             # 1. Bỏ qua cảnh báo policy vì ta biết chắc Agent có thuộc tính này
-            mlflow.pytorch.log_model(best_agent_overall.policy, "ppo_model") # type: ignore
+            mlflow.pytorch.log_model(best_agent_overall.model, "ppo_model") # type: ignore
             
             # 2. Lấy active run an toàn
             current_run = mlflow.active_run()
