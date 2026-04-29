@@ -1,22 +1,43 @@
+# experiments/test_online_rl.py
+
 from rl_engine.online_env import OnlineSDNEnv
 from rl_engine.agent.dqn_agent import DQNAgent
 from rl_engine.agent.ppo_agent import PPOAgent
-from experiments.evaluate import evaluate_agent
-from rl_engine.config import *
+from rl_engine.config import STATE_DIM, ACTION_DIM
 
-env = OnlineSDNEnv()
 
-agent = DQNAgent(STATE_DIM, ACTION_DIM)
-agent.load("models/dqn_model.pth")
-agent.epsilon = 0.0  # Đảm bảo agent luôn chọn hành động tốt nhất
+env = OnlineSDNEnv(
+    controller_url="http://34.126.64.185:8181/onos/v1"
+)
 
-agent = PPOAgent(STATE_DIM, ACTION_DIM)
-agent.load("models/ppo_model.pth")
+# ===== Load DQN =====
+dqn_agent = DQNAgent(STATE_DIM, ACTION_DIM)
+dqn_agent.load("models/dqn_final.pth")
+dqn_agent.epsilon = 0.0
+
+# ===== Load PPO =====
+ppo_agent = PPOAgent(STATE_DIM, ACTION_DIM)
+ppo_agent.load("models/ppo_final.pth")
+
+print("\n========== DQN ONLINE TEST ==========\n")
 
 state = env.reset()
 
 for step in range(10):
-    action = agent.select_action(state)
+    action = dqn_agent.select_action(state)
     next_state, reward, done, _ = env.step(action)
-    print("Action:", action, "Reward:", reward)
+
+    print(f"[DQN] Step {step} | Action: {action} | Reward: {reward}")
+    state = next_state
+
+
+print("\n========== PPO ONLINE TEST ==========\n")
+
+state = env.reset()
+
+for step in range(10):
+    action = ppo_agent.select_action(state)
+    next_state, reward, done, _ = env.step(action)
+
+    print(f"[PPO] Step {step} | Action: {action} | Reward: {reward}")
     state = next_state
