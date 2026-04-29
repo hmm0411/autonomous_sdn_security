@@ -30,8 +30,8 @@ class StateBuilder:
         self.prev_bytes = bytes_
 
         state = np.array([
-            packet_rate / 10000,
-            byte_rate / 100000,
+            packet_rate / 20000,
+            byte_rate / 500000,
             flow_count / 100,
             latency / 100,
             packet_loss,
