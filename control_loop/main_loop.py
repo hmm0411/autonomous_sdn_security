@@ -17,6 +17,9 @@ reward_calc = Reward()
 
 print("AUTO MODEL CONTROL LOOP STARTED")
 
+def baseline_policy(state):
+    return 0
+    
 def validate_state(state):
     return state is not None and len(state) == STATE_DIM
 
@@ -39,13 +42,19 @@ while True:
             lambda s, a: reward_calc.calculate(raw, a)
         )
 
+        # ===== BASELINE =====
+        action_base = baseline_policy(state)
+        reward_base = reward_calc.calculate(raw, action_base)
+
         # ===== APPLY =====
         execute_action(action)
 
         # ===== UPDATE METRICS =====
-        update_metrics(state, reward, model)
+        update_metrics(state, reward, model, action)
+        update_metrics(state, reward_base, "baseline", action_base)
 
         print(f"[AUTO] {model} | action={action} | reward={reward}")
+        print(f"[BASELINE] action={action_base} | reward={reward_base}")
 
         time.sleep(SLEEP_TIME)
 
