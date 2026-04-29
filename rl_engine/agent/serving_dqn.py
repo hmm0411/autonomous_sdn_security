@@ -1,3 +1,4 @@
+import mlflow
 import mlflow.pytorch
 import torch
 from flask import Flask, request, jsonify

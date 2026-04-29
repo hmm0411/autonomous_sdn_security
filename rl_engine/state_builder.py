@@ -41,7 +41,6 @@ class StateBuilder:
             np.clip(src_ip_entropy, 0, 1),
             np.clip(queue_length, 0, 1),
             np.clip(controller_cpu, 0, 1),
-            np.clip(attack_indicator, 0, 1),
             self.prev_action
         ], dtype=np.float32)
 

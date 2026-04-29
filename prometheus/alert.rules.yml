@@ -14,7 +14,7 @@ groups:
 
       # Low reward alert
       - alert: LowReward
-        expr: rate(episode_reward[5m]) < 0
+        expr: rl_reward < 0
         for: 10m
         labels:
           severity: warning
