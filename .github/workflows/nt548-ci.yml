@@ -160,9 +160,11 @@ jobs:
 
           mlflow.set_tracking_uri("file:./mlruns")
 
+          mlflow.set_experiment("nt548-test")
+
           with mlflow.start_run():
-              mlflow.log_param("test", 1)
-              mlflow.log_metric("score", 0.9)
+          mlflow.log_param("test", 1)
+          mlflow.log_metric("score", 0.9)
 
           print("MLflow test done")
           EOF

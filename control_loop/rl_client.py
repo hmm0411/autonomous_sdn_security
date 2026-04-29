@@ -1,5 +1,4 @@
 import requests
-import random
 
 DQN_URL = "http://rl-agent-dqn:9000/predict"
 PPO_URL = "http://rl-agent-ppo:9001/predict"
@@ -12,15 +11,12 @@ def call_model(url, state):
         return 0
 
 def get_best_action(state, reward_fn):
-    # gọi cả 2 model
     action_dqn = call_model(DQN_URL, state)
     action_ppo = call_model(PPO_URL, state)
 
-    # tính reward
     reward_dqn = reward_fn(state, action_dqn)
     reward_ppo = reward_fn(state, action_ppo)
 
-    # chọn model tốt hơn
     if reward_dqn >= reward_ppo:
         return action_dqn, "DQN", reward_dqn
     else:

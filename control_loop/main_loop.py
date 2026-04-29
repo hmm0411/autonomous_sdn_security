@@ -14,8 +14,6 @@ SLEEP_TIME = 2
 
 state_builder = StateBuilder()
 reward_calc = Reward()
-raw = get_state()  # Lấy state đầu tiên để khởi tạo
-state = state_builder.build(raw)
 
 print("AUTO MODEL CONTROL LOOP STARTED")
 
@@ -24,7 +22,10 @@ def validate_state(state):
 
 while True:
     try:
-        raw = get_state()  # Lấy state mới
+        # ===== LẤY RAW DATA =====
+        raw = get_state()
+
+        # ===== BUILD STATE =====
         state = np.array(state_builder.build(raw), dtype=np.float32)
 
         if not validate_state(state):
@@ -32,16 +33,16 @@ while True:
             time.sleep(SLEEP_TIME)
             continue
 
-        # AUTO SELECT MODEL
+        # ===== AUTO CHỌN MODEL =====
         action, model, reward = get_best_action(
             state,
-            reward_calc.calculate
+            lambda s, a: reward_calc.calculate(raw, a)
         )
 
-        # APPLY
+        # ===== APPLY =====
         execute_action(action)
 
-        # METRICS
+        # ===== UPDATE METRICS =====
         update_metrics(state, reward, model)
 
         print(f"[AUTO] {model} | action={action} | reward={reward}")
