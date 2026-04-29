@@ -174,7 +174,7 @@ def train_multi_seeds_ppo():
         model_path = os.path.join(RESULTS_DIR, "ppo_model.pth")
         torch.save(
             {
-                "model_state_dict": best_agent_overall.policy.state_dict(), # type: ignore
+                "model_state_dict": best_agent_overall.model.state_dict(), # type: ignore
                 "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
             },
             model_path
@@ -202,7 +202,7 @@ def train_multi_seeds_ppo():
 
         torch.save(
             {
-                "model_state_dict": best_agent_overall.policy.state_dict(), # type: ignore
+                "model_state_dict": best_agent_overall.model.state_dict(), # type: ignore
                 "optimizer_state_dict": best_agent_overall.optimizer.state_dict(), # type: ignore
             },
             model_path,
@@ -273,7 +273,7 @@ def train_multi_seeds_ppo():
     if not IS_CI and best_agent_overall is not None:
         try:
             # 1. Bỏ qua cảnh báo policy vì ta biết chắc Agent có thuộc tính này
-            mlflow.pytorch.log_model(best_agent_overall.policy, "ppo_model") # type: ignore
+            mlflow.pytorch.log_model(best_agent_overall.model, "ppo_model") # type: ignore
             
             # 2. Lấy active run an toàn
             current_run = mlflow.active_run()
