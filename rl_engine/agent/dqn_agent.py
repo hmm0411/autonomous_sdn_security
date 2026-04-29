@@ -90,22 +90,19 @@ class DQNAgent:
     # =============================
     # LOAD MODEL (FOR ONLINE)
     # =============================
-    def load(self, path: str):
+    def load(self, path: str) -> None:
 
-        checkpoint = torch.load(path, map_location=self.device)
+        checkpoint = torch.load(path, map_location="cpu")
 
-        self.q_net.load_state_dict(checkpoint["model_state_dict"])
-        self.target_net.load_state_dict(checkpoint["target_model_state_dict"])
-
-        if "optimizer_state_dict" in checkpoint:
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        # checkpoint dạng full
+            self.q_net.load_state_dict(checkpoint["model_state_dict"])
+            self.target_net.load_state_dict(checkpoint["target_model_state_dict"])
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            self.epsilon = checkpoint.get("epsilon", self.epsilon)
+        else:
+        # checkpoint chỉ là state_dict
+            self.q_net.load_state_dict(checkpoint)
+            self.target_net.load_state_dict(checkpoint)
 
-        self.epsilon = checkpoint.get("epsilon", 0.0)
-
-        self.q_net.to(self.device)
-        self.target_net.to(self.device)
-
-        self.q_net.eval()
-        self.target_net.eval()
-
-        print(f"Loaded model from {path}")
+        print("Model loaded successfully")
