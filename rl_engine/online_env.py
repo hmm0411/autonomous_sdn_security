@@ -1,8 +1,10 @@
+from urllib import response
+import json
 import requests
 import numpy as np
 import time
 import subprocess
-
+from requests.auth import HTTPBasicAuth
 
 class OnlineSDNEnv:
 
@@ -14,7 +16,7 @@ class OnlineSDNEnv:
         polling_interval=2
     ):
         self.controller_url = controller_url
-        self.auth = (username, password)
+        self.auth = HTTPBasicAuth(username, password)
         self.polling_interval = polling_interval
         self.previous_action = 0
 
@@ -84,6 +86,25 @@ class OnlineSDNEnv:
     # ==========================================
     # ONOS FLOWS
     # ==========================================
+    def push_flow(self, device_id, flow):
+        url = f"{self.controller_url}/flows/{device_id}"
+        headers = {"Content-Type": "application/json"}
+
+        r = requests.post(
+            url,
+            json=flow,
+            headers=headers,
+            auth=self.auth,
+            timeout=5
+        )
+
+        if r.status_code not in [200, 201, 204]:
+            print("Failed to push flow:", r.status_code, r.text)
+        else:
+            print("Flow pushed successfully:", r.status_code)
+
+        return r.status_code
+    
     def _get_flows(self):
         try:
             r = requests.get(
@@ -91,9 +112,28 @@ class OnlineSDNEnv:
                 auth=self.auth,
                 timeout=5
             )
-            return r.json().get("flows", [])
-        except:
+            if r.status_code == 200:
+                return r.json().get("flows", [])
+            else:
+                print("Flow fetch error:", r.status_code)
+                return []
+        except Exception as e:
+            print("Failed to get flows:", str(e))
             return []
+        
+    def _detect_top_src_ip(self, flows):
+        ip_count: dict[str, int] = {}
+
+        for f in flows:
+            for c in f.get("selector", {}).get("criteria", []):
+                if c.get("type") == "IPV4_SRC":
+                    ip = c.get("ip")
+                    ip_count[ip] = ip_count.get(ip, 0) + 1
+
+        if not ip_count:
+            return None
+
+        return max(ip_count.keys(), key=lambda k: ip_count[k])
 
     # ==========================================
     # ENTROPY
@@ -160,13 +200,23 @@ class OnlineSDNEnv:
     # ==========================================
     def _block_suspicious_flow(self):
 
-        attacker_ip = "10.0.0.1/32"  # demo: có thể dynamic detect sau
+        flows = self._get_flows()
+        attacker_ip = self._detect_top_src_ip(flows)
+
+        if attacker_ip is None:
+            return
 
         rule = {
             "priority": 50000,
-            "isPermanent": True,
+            "timeout": 30,
+            "isPermanent": False,
             "deviceId": "of:0000000000000001",
-            "treatment": {},
+            "treatment": {
+                "instructions": [
+                    {"type": "METER", "meterId": "1"},
+                    {"type": "OUTPUT", "port": "1"}
+                ]
+            },
             "selector": {
                 "criteria": [
                     {"type": "ETH_TYPE", "ethType": "0x0800"},
@@ -174,16 +224,10 @@ class OnlineSDNEnv:
                 ]
             }
         }
-    
 
-        requests.post(
-            f"{self.controller_url}/flows/of:0000000000000001",
-            json=rule,
-            auth=self.auth,
-            timeout=5
-        )
+        self.push_flow("of:0000000000000001", rule)
 
-        print("BLOCK rule installed for", attacker_ip)
+        print("BLOCK:", attacker_ip)
 
 
     # ==========================================
@@ -197,7 +241,7 @@ class OnlineSDNEnv:
             "bands": [
                 {
                     "type": "DROP",
-                    "rate": 100
+                    "rate": 200
                 }
             ]
         }
@@ -216,10 +260,16 @@ class OnlineSDNEnv:
     # REDIRECT TO HONEYPOT
     # ==========================================
     def _redirect_traffic(self):
+        flows = self._get_flows()
+        attacker_ip = self._detect_top_src_ip(flows)
 
+        if attacker_ip is None:
+            return
+        
         rule = {
             "priority": 45000,
-            "isPermanent": True,
+            "timeout": 30,
+            "isPermanent": False,
             "deviceId": "of:0000000000000001",
             "treatment": {
                 "instructions": [
@@ -231,7 +281,8 @@ class OnlineSDNEnv:
             },
             "selector": {
                 "criteria": [
-                    {"type": "ETH_TYPE", "ethType": "0x0800"}
+                    {"type": "ETH_TYPE", "ethType": "0x0800"},
+                    {"type": "IPV4_SRC", "ip": attacker_ip}
                 ]
             }
         }
@@ -251,13 +302,23 @@ class OnlineSDNEnv:
     # ==========================================
     def _isolate_device(self):
 
-        attacker_ip = "10.0.0.1/32"
+        flows = self._get_flows()
+        attacker_ip = self._detect_top_src_ip(flows)
+
+        if attacker_ip is None:
+            return
 
         rule = {
             "priority": 60000,
-            "isPermanent": True,
+            "isPermanent": False,
+            "timeout": 60,
             "deviceId": "of:0000000000000001",
-            "treatment": {},
+            "treatment": {
+                "instructions": [
+                    {"type": "METER", "meterId": "1"},
+                    {"type": "OUTPUT", "port": "1"}
+                ]
+            },
             "selector": {
                 "criteria": [
                     {"type": "IPV4_SRC", "ip": attacker_ip}
