@@ -36,7 +36,8 @@ print("\n========== PPO ONLINE TEST ==========\n")
 state = env.reset()
 
 for step in range(10):
-    action = ppo_agent.select_action(state)
+    action_tuple = ppo_agent.select_action(state)
+    action = action_tuple[0] if isinstance(action_tuple, tuple) else action_tuple
     next_state, reward, done, _ = env.step(action)
 
     print(f"[PPO] Step {step} | Action: {action} | Reward: {reward}")
