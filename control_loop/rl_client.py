@@ -1,16 +1,35 @@
 import requests
-# 'rl-agent' là tên service trong docker-compose, port 8000 là port API của bạn
-RL_API_URL = "http://rl-agent:8000/predict"
+
+# Khai báo cứng cả 2 địa chỉ
+PPO_URL = "http://rl-agent-ppo:9001/predict"
+DQN_URL = "http://rl-agent-dqn:9000/predict"
 
 def get_action(state):
     try:
-        payload = {"state": state}
-        response = requests.post(RL_API_URL, json=payload)
-        response.raise_for_status()
+        state_list = [float(x) for x in state]
+        payload = {"state": state_list}
         
-        # Giả định API trả về JSON: {"action": 1}
-        action = response.json().get("action", 0)
-        return action
+        # BƯỚC 1: ƯU TIÊN PPO 
+        try:
+            response = requests.post(PPO_URL, json=payload, timeout=2)
+            if response.status_code == 200:
+                action = response.json().get("action", 0)
+                return action
+        except requests.exceptions.RequestException:
+            pass 
+
+        # BƯỚC 2: TỰ ĐỘNG CHUYỂN SANG DQN 
+        try:
+            response = requests.post(DQN_URL, json=payload, timeout=2)
+            if response.status_code == 200:
+                action = response.json().get("action", 0)
+                return action
+        except requests.exceptions.RequestException as e:
+            print(f"Cả DQN và PPO đều mất kết nối: {e}")
+            
+        # Nếu cả 2 đều sập, trả về 0 để giữ mạng không bị cấu hình sai
+        return 0
+        
     except Exception as e:
-        print(f"Lỗi khi gọi RL API: {e}")
-        return 0 # Trả về action mặc định (ví dụ: 0 = Do nothing)
+        print(f"Lỗi logic khi chuẩn bị dữ liệu: {e}")
+        return 0
