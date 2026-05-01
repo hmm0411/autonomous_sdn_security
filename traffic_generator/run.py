@@ -10,7 +10,7 @@ def run_experiment():
 
     net = Mininet(
         topo=topo,
-        controller=lambda name: RemoteController(name, ip='127.0.0.1', port=6653),
+        controller=lambda name: RemoteController(name, ip='34.126.64.185', port=6653),
         switch=lambda name, **opts: OVSSwitch(name, protocols='OpenFlow13', **opts)
     )
 
