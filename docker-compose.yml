@@ -16,7 +16,7 @@ services:
       - sdn-net
     environment:
       # Tự động kích hoạt các App cần thiết của ONOS khi khởi động
-      - ONOS_APPS=drivers,openflow,gui,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher,prometheus
+      - ONOS_APPS=drivers,openflow,gui,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher,prometheus
       - ONOS_AUTO_START=true
     restart: always
 
