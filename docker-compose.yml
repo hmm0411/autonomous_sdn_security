@@ -21,59 +21,82 @@ services:
     restart: always
 
   # Container chạy DQN
+  rl-trainer-dqn:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rl-trainer-dqn
+    depends_on:
+      - mlflow
+    networks:
+      - sdn-net
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - CI=false
+
+  # Container chạy PPO
+  rl-trainer-ppo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rl-trainer-ppo
+    depends_on:
+      - mlflow
+    networks:
+      - sdn-net
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - CI=false
+
   rl-agent-dqn:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: rl-agent-dqn
     depends_on:
-      - mlflow
-      - controller
+      - rl-trainer-dqn
     ports:
       - "9000:9000"
     networks:
       - sdn-net
     volumes:
       - .:/app
-      - ./results:/app/results
-      - ./models:/app/models
-      - ./logs:/app/logs
-      - ./mlruns:/app/mlruns
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - CI=false
-    command: python -m rl_engine.agent.serving_dqn.py
+    command: python -m rl_engine.agent.serving_dqn
     restart: on-failure
 
-  # Container chạy PPO
   rl-agent-ppo:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: rl-agent-ppo
     depends_on:
-      - mlflow
-      - controller
+      - rl-trainer-ppo
     ports:
       - "9001:9001"
     networks:
       - sdn-net
     volumes:
       - .:/app
-      - ./results:/app/results
-      - ./models:/app/models
-      - ./logs:/app/logs
-      - ./mlruns:/app/mlruns
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - CI=false
-    command: python -m rl_engine.agent.serving_ppo.py
+    command: python -m rl_engine.agent.serving_ppo
     restart: on-failure
-
   # twin:
   #   build: ./digital_twin
   #   depends_on:
@@ -112,6 +135,8 @@ services:
       context: .
       dockerfile: ./control_loop/Dockerfile
     container_name: control_loop
+    volumes:
+      - .:/app
     depends_on:
       - controller
       - rl-agent-dqn
@@ -122,7 +147,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - MLFLOW_TRACKING_URI=http://mlflow:5000
-        
+      - HF_TOKEN=
   # Prometheus
   prometheus:
     image: prom/prometheus:latest
