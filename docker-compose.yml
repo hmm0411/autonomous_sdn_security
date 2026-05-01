@@ -72,10 +72,9 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
-      - AGENT_TYPE=DQN
-      - PORT=9000
-    entrypoint: [""] # Vô hiệu hóa supervisord
-    command: python -m rl_engine.agent.agent 
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - CI=false
+    command: python -m rl_engine.agent.serving_dqn
     restart: on-failure
 
   rl-agent-ppo:
@@ -94,10 +93,9 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
-      - AGENT_TYPE=PPO
-      - PORT=9001
-    entrypoint: [""] # Vô hiệu hóa supervisord
-    command: python -m rl_engine.agent.agent 
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - CI=false
+    command: python -m rl_engine.agent.serving_ppo
     restart: on-failure
   # twin:
   #   build: ./digital_twin

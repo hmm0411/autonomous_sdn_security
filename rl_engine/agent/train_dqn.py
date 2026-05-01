@@ -8,27 +8,34 @@ import mlflow.pytorch
 from prometheus_client import start_http_server, Gauge
 import collections
 
+import torch
+
 # Giả sử các module này đã được định nghĩa đúng trong source code của bạn
 # from rl_engine.agent.train_ppo import run_single_seed, train_multi_seeds # (Bỏ dòng này nếu không cần thiết trong file DQN)
-from rl_engine.env import SDNEnv
+from rl_engine.online_env import OnlineSDNEnv
 from rl_engine.agent.dqn_agent import DQNAgent
 from rl_engine.offline_env import OfflineSDNEnv
 from rl_engine.replay_buffer import ReplayBuffer
 from rl_engine.logger import Logger
 from rl_engine.config import *
 from rl_engine.utils import set_seed
-# Bổ sung các biến cấu hình nếu chưa có trong rl_engine.config
-# STATE_DIM = 7; ACTION_DIM = 5; BUFFER_SIZE = 10000; BATCH_SIZE = 64; 
-# EPS_START = 1.0; EPS_END = 0.05; EPS_DECAY = 1000; WINDOW_SIZE = 50; MAX_EPISODES = 500; MAX_STEPS = 1000;
 
-# ==========================================
 # CẤU HÌNH PROMETHEUS METRICS
-# ==========================================
 PROM_REWARD = Gauge('episode_reward', 'Phần thưởng thô của Episode', ['agent'])
 PROM_REWARD_MEAN = Gauge('episode_reward_mean', 'Phần thưởng trung bình', ['agent'])
 PROM_REWARD_STD = Gauge('episode_reward_std', 'Độ lệch chuẩn phần thưởng', ['agent'])
 PROM_REWARD_BEST = Gauge('episode_reward_best', 'Kỷ lục phần thưởng tốt nhất', ['agent'])
 PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
+
+# DIRECTORY STRUCTURE
+# BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+# RESULTS_DIR = os.path.join(BASE_DIR, "results")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+RUNS_DIR = os.path.join(BASE_DIR, "runs")
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+
+os.makedirs(MODELS_DIR, exist_ok=True)
+os.makedirs(RUNS_DIR, exist_ok=True)
 
 # ==========================================
 # CẤU HÌNH MLOPS & CI/CD
@@ -47,7 +54,7 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=None):
     agent = DQNAgent(state_dim=STATE_DIM, action_dim=ACTION_DIM)
     buffer = ReplayBuffer(BUFFER_SIZE)
     
-    logger = Logger(log_dir=f"../../runs/dqn_seed_{seed_value}")
+    logger = Logger(log_dir=os.path.join(RUNS_DIR, f"dqn_seed_{seed_value}"))
     
     epsilon = EPS_START
     
@@ -61,84 +68,94 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=None):
 
     total_episodes = 2 if IS_CI else MAX_EPISODES
 
-    for episode in range(total_episodes):
-        state, _ = env.reset(seed=seed_value if episode == 0 else None)
-        episode_reward = 0
-        episode_losses = []
-        actions_in_episode = []
+    run_context = mlflow.start_run(run_name=f"Seed_{seed_value}", nested=True) if (not IS_CI and parent_run) else None
 
-        for step in range(MAX_STEPS):
-            # Epsilon-greedy
-            if random.random() < epsilon:
-                action = random.randint(0, ACTION_DIM - 1)
-            else:
-                action = agent.select_action(state)
-            
-            actions_in_episode.append(action)
+    try:
+        for episode in range(total_episodes):
+            state, _ = env.reset(seed=seed_value if episode == 0 else None)
+            episode_reward = 0
+            episode_losses = []
+            actions_in_episode = []
 
-            next_state, reward, terminated, truncated, _ = env.step(action)
-            done = terminated or truncated
-            
-            buffer.add((state, action, reward, next_state, done))
-
-            # Train Agent
-            if len(buffer) > BATCH_SIZE:
-                loss = agent.update(buffer.sample(BATCH_SIZE))
-                if loss is not None:
-                    episode_losses.append(loss)
-
-            state = next_state
-            episode_reward += reward
-
-            if done:
-                break
-
-        # Cập nhật epsilon
-        epsilon = max(EPS_END, epsilon - (EPS_START - EPS_END) / EPS_DECAY)
-        
-        # Thống kê cho episode
-        avg_loss = np.mean(episode_losses) if episode_losses else 0.0
-        
-        seed_rewards.append(episode_reward)
-        seed_losses.append(avg_loss)
-        seed_epsilons.append(epsilon)
-        
-        recent_rewards.append(episode_reward)
-        
-        mean_reward = np.mean(recent_rewards)
-        std_reward = np.std(recent_rewards) if len(recent_rewards) > 1 else 0.0
-        
-        if episode_reward > best_reward_so_far:
-            best_reward_so_far = episode_reward
-
-        # Log nội bộ
-        logger.log_dqn(
-            episode=episode,
-            reward=episode_reward,
-            loss=avg_loss,
-            epsilon=epsilon,
-            actions=actions_in_episode
-        )
-
-        # Bơm dữ liệu Prometheus
-        PROM_REWARD.labels(agent='dqn').set(episode_reward)
-        PROM_REWARD_MEAN.labels(agent='dqn').set(mean_reward)
-        PROM_REWARD_STD.labels(agent='dqn').set(std_reward)
-        PROM_REWARD_BEST.labels(agent='dqn').set(best_reward_so_far)
-        PROM_LOSS.labels(agent='dqn').set(avg_loss)
-        
-        # Bơm dữ liệu MLflow
-        if not IS_CI and parent_run:
-            try:
-                mlflow.log_metric(f"reward_raw_seed_{seed_value}", episode_reward, step=episode)
-                mlflow.log_metric(f"reward_mean_seed_{seed_value}", mean_reward, step=episode)
-                mlflow.log_metric(f"reward_std_seed_{seed_value}", std_reward, step=episode)
-                mlflow.log_metric(f"reward_best_seed_{seed_value}", best_reward_so_far, step=episode)
-                mlflow.log_metric(f"loss_seed_{seed_value}", avg_loss, step=episode)
-            except Exception: pass
+            for step in range(MAX_STEPS):
+                # Epsilon-greedy
+                if random.random() < epsilon:
+                    action = random.randint(0, ACTION_DIM - 1)
+                else:
+                    action = agent.select_action(state)
                 
-        if episode % 20 == 0:
-            logging.info(f"DQN | Ep {episode} | R: {episode_reward:.1f} | Mean: {mean_reward:.1f} | Best: {best_reward_so_far:.1f}")
+                actions_in_episode.append(action)
+
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                done = terminated or truncated
+                
+                buffer.add((state, action, reward, next_state, done))
+
+                # Train Agent
+                if len(buffer) > BATCH_SIZE:
+                    loss = agent.update(buffer.sample(BATCH_SIZE))
+                    if loss is not None:
+                        episode_losses.append(loss)
+
+                state = next_state
+                episode_reward += reward
+
+                if done:
+                    break
+
+            # Cập nhật epsilon
+            epsilon = max(EPS_END, epsilon - (EPS_START - EPS_END) / EPS_DECAY)
+        
+            # Thống kê cho episode
+            avg_loss = np.mean(episode_losses) if episode_losses else 0.0
+        
+            seed_rewards.append(episode_reward)
+            seed_losses.append(avg_loss)
+            seed_epsilons.append(epsilon)
+        
+            recent_rewards.append(episode_reward)
+        
+            mean_reward = np.mean(recent_rewards)
+            std_reward = np.std(recent_rewards) if len(recent_rewards) > 1 else 0.0
+        
+            if episode_reward > best_reward_so_far:
+                best_reward_so_far = episode_reward
+
+            # Log nội bộ
+            logger.log_dqn(
+                episode=episode,
+                reward=episode_reward,
+                loss=avg_loss,
+                epsilon=epsilon,
+                actions=actions_in_episode
+            )
+
+            # Bơm dữ liệu Prometheus
+            PROM_REWARD.labels(agent='dqn').set(episode_reward)
+            PROM_REWARD_MEAN.labels(agent='dqn').set(float(mean_reward))
+            PROM_REWARD_STD.labels(agent='dqn').set(float(std_reward))
+            PROM_REWARD_BEST.labels(agent='dqn').set(float(best_reward_so_far))
+            PROM_LOSS.labels(agent='dqn').set(float(avg_loss))
+        
+            # Bơm dữ liệu MLflow
+            if not IS_CI and parent_run:
+                try:
+                    mlflow.log_metric(f"reward_raw_seed_{seed_value}", float(episode_reward), step=episode)
+                    mlflow.log_metric(f"reward_mean_seed_{seed_value}", float(mean_reward), step=episode)
+                    mlflow.log_metric(f"reward_std_seed_{seed_value}", float(std_reward), step=episode)
+                    mlflow.log_metric(f"reward_best_seed_{seed_value}", float(best_reward_so_far), step=episode)
+                    mlflow.log_metric(f"loss_seed_{seed_value}", float(avg_loss), step=episode)
+                except Exception: pass
+                
+            if episode % 20 == 0:
+                logging.info(f"DQN | Ep {episode} | R: {episode_reward:.1f} | Mean: {mean_reward:.1f} | Best: {best_reward_so_far:.1f}")
+
+    finally:
+        # Đảm bảo luôn đóng Child Run
+        if run_context:
+            mlflow.end_run()
+    
+    agent.epsilon = epsilon  # Cập nhật epsilon cuối cùng vào agent trước khi trả về
 
     return {
         "rewards": seed_rewards,
@@ -146,6 +163,7 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=None):
         "epsilons": seed_epsilons
     }, agent
     
+
 
 def train_multi_seeds_dqn():
     """Train DQN with multiple seeds and log all metrics"""
@@ -158,8 +176,7 @@ def train_multi_seeds_dqn():
     if os.path.exists(data_path):
         df_train = pd.read_csv(data_path)
     else:
-        logging.error(f"Data file not found at {data_path}. Continuing without offline data (may cause errors if env requires it).")
-        df_train = None
+        raise FileNotFoundError(f"Data file not found at {data_path}. Please ensure the training data is available.")
 
     if not IS_CI:
         mlflow.start_run(run_name="DQN_Production_Training")
@@ -168,6 +185,7 @@ def train_multi_seeds_dqn():
     
     best_agent_overall = None
     best_overall_mean = -float('inf')
+    trained_agent = None  # Biến tạm để lưu agent cuối cùng trong trường hợp không tìm được best agent nào
     
     # Dictionary chứa kết quả tổng hợp
     all_results = {"rewards": [], "losses": [], "epsilons": []}
@@ -186,6 +204,25 @@ def train_multi_seeds_dqn():
             best_overall_mean = avg_final
             best_agent_overall = trained_agent
 
+    if best_agent_overall is None:
+        logging.warning("No best agent found.")
+        best_agent_overall = trained_agent  # Lấy agent cuối cùng làm fallback
+
+    model_path = os.path.join(MODELS_DIR, "dqn_model.pth")
+    assert best_agent_overall is not None, "Best agent is None, cannot save model."
+    
+    torch.save(
+        {
+            "model_state_dict": best_agent_overall.q_net.state_dict(),
+            "target_model_state_dict": best_agent_overall.target_net.state_dict(),
+            "optimizer_state_dict": best_agent_overall.optimizer.state_dict(),
+            "epsilon": best_agent_overall.epsilon,
+        },
+        model_path,
+    )
+
+    logging.info(f"Saved best overall DQN model to: {model_path}")
+
     # --- TÍNH TOÁN THỐNG KÊ TOÀN CỤC ---
     # Chuyển list of lists thành Numpy array để dễ tính mean/std theo cột
     np_rewards = np.array(all_results["rewards"])
@@ -198,7 +235,7 @@ def train_multi_seeds_dqn():
 
     # --- LƯU KẾT QUẢ VÀO CSV ---
     try:
-        os.makedirs("../../results", exist_ok=True)
+        os.makedirs(os.path.join(RUNS_DIR, "models"), exist_ok=True)
         
         # 1. Summary statistics
         summary_df = pd.DataFrame({
@@ -208,7 +245,7 @@ def train_multi_seeds_dqn():
             'mean_loss': mean_losses,
             'std_loss': std_losses
         })
-        summary_path = "../../results/dqn_summary_results.csv"
+        summary_path = os.path.join(RUNS_DIR, "models", "dqn_summary_results.csv")
         summary_df.to_csv(summary_path, index=False)
         if not IS_CI: mlflow.log_artifact(summary_path)
         logging.info(f"Saved summary results to: {summary_path}")
@@ -221,10 +258,10 @@ def train_multi_seeds_dqn():
                 'loss': all_results["losses"][i],
                 'epsilon': all_results["epsilons"][i]
             })
-            seed_path = f"../../results/dqn_seed_{seed}_results.csv"
+            seed_path = os.path.join(RUNS_DIR, "models", f"dqn_seed_{seed}_results.csv")
             seed_df.to_csv(seed_path, index=False)
             if not IS_CI: mlflow.log_artifact(seed_path)
-        logging.info(f"Saved individual seed results to ../../results/dqn_seed_*.csv")
+        logging.info(f"Saved individual seed results to {RUNS_DIR}/models/dqn_seed_*.csv")
 
         # 3. Detailed aggregated metrics
         metrics_df = pd.DataFrame({
@@ -235,7 +272,7 @@ def train_multi_seeds_dqn():
             'final_loss': [all_results["losses"][i][-1] for i in range(len(seeds))],
             'mean_loss': [np.mean(all_results["losses"][i]) for i in range(len(seeds))]
         })
-        metrics_path = "../../results/dqn_metrics_by_seed.csv"
+        metrics_path = os.path.join(RUNS_DIR, "models", "dqn_metrics_by_seed.csv")
         metrics_df.to_csv(metrics_path, index=False)
         if not IS_CI: mlflow.log_artifact(metrics_path)
         logging.info(f"Saved detailed metrics to: {metrics_path}")
@@ -243,18 +280,21 @@ def train_multi_seeds_dqn():
     except Exception as e:
         logging.error(f"Failed to save results: {e}")
 
-    logging.info(f"\n✓ Đã hoàn thành DQN Multi-seed training")
-    logging.info(f"Final Mean Reward (Across Seeds): {mean_rewards[-1]:.2f} ± {std_rewards[-1]:.2f}")
-    logging.info(f"Best Mean Reward (Across Seeds): {np.max(mean_rewards):.2f}")
+    logging.info(f"\nĐã hoàn thành DQN Multi-seed training")
+    logging.info(f"Final Mean Reward (Across Seeds): {float(mean_rewards[-1]):.2f} ± {float(std_rewards[-1]):.2f}")
+    logging.info(f"Best Mean Reward (Across Seeds): {float(np.max(mean_rewards)):.2f}")
 
     # Đăng ký model lên Registry
     if not IS_CI and best_agent_overall is not None:
-        # Nếu model của bạn lưu ở thuộc tính khác, vui lòng thay 'q_network'
         try:
-             mlflow.pytorch.log_model(best_agent_overall.q_network, "dqn_model")
-             run_id = mlflow.active_run().info.run_id
-             mlflow.register_model(f"runs:/{run_id}/dqn_model", "SDN_DQN_Model")
-             logging.info("Đã đăng ký SDN_DQN_Model lên Registry!")
+             mlflow.pytorch.log_model(best_agent_overall.q_net, "dqn_model") # type: ignore
+             current_run = mlflow.active_run()
+             if current_run is not None:
+                 run_id = current_run.info.run_id
+                 mlflow.register_model(f"runs:/{run_id}/dqn_model", "SDN_DQN_Model")
+                 logging.info("Đã đăng ký SDN_DQN_Model lên Registry!")
+             else:
+                 logging.warning("Không có Active Run nào trên MLflow. Bỏ qua bước đăng ký Model.")
         except Exception as e:
              logging.error(f"Failed to register model: {e}")
              

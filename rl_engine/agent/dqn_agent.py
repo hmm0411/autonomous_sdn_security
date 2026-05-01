@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 
-from rl_engine.config import GAMMA, LR, TARGET_UPDATE, ACTION_DIM, EPS_START
+from rl_engine.config import GAMMA, LR_DQN, TARGET_UPDATE, ACTION_DIM, EPS_START
 
 
 class QNetwork(nn.Module):
@@ -27,31 +27,45 @@ class DQNAgent:
 
     def __init__(self, state_dim, action_dim):
 
-        self.q_net = QNetwork(state_dim, action_dim)
-        self.target_net = QNetwork(state_dim, action_dim)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.q_net = QNetwork(state_dim, action_dim).to(self.device)
+        self.target_net = QNetwork(state_dim, action_dim).to(self.device)
 
         self.target_net.load_state_dict(self.q_net.state_dict())
 
-        self.optimizer = optim.Adam(self.q_net.parameters(), lr=LR)
+        self.optimizer = optim.Adam(self.q_net.parameters(), lr=LR_DQN)
+
         self.epsilon = EPS_START
         self.update_count = 0
 
+    # =============================
+    # ACTION SELECTION
+    # =============================
     def select_action(self, state):
+
         if np.random.random() < self.epsilon:
             return np.random.randint(0, ACTION_DIM)
-        with torch.no_grad():
-            q = self.q_net(torch.FloatTensor(state).unsqueeze(0))
-            return q.argmax().item()
 
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            q = self.q_net(state_tensor)
+
+        return q.argmax().item()
+
+    # =============================
+    # TRAIN UPDATE
+    # =============================
     def update(self, batch):
 
         states, actions, rewards, next_states, dones = batch
 
-        states = torch.FloatTensor(states)
-        actions = torch.LongTensor(actions)
-        rewards = torch.FloatTensor(rewards)
-        next_states = torch.FloatTensor(next_states)
-        dones = torch.FloatTensor(dones)
+        states = torch.FloatTensor(states).to(self.device)
+        actions = torch.LongTensor(actions).to(self.device)
+        rewards = torch.FloatTensor(rewards).to(self.device)
+        next_states = torch.FloatTensor(next_states).to(self.device)
+        dones = torch.FloatTensor(dones).to(self.device)
 
         q_values = self.q_net(states)
         q_value = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
@@ -72,3 +86,23 @@ class DQNAgent:
             self.target_net.load_state_dict(self.q_net.state_dict())
 
         return loss.item()
+
+    # =============================
+    # LOAD MODEL (FOR ONLINE)
+    # =============================
+    def load(self, path: str) -> None:
+
+        checkpoint = torch.load(path, map_location="cpu")
+
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        # checkpoint dạng full
+            self.q_net.load_state_dict(checkpoint["model_state_dict"])
+            self.target_net.load_state_dict(checkpoint["target_model_state_dict"])
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            self.epsilon = checkpoint.get("epsilon", self.epsilon)
+        else:
+        # checkpoint chỉ là state_dict
+            self.q_net.load_state_dict(checkpoint)
+            self.target_net.load_state_dict(checkpoint)
+
+        print("Model loaded successfully")

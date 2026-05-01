@@ -1,35 +1,23 @@
 import requests
 
-# Khai báo cứng cả 2 địa chỉ
-PPO_URL = "http://rl-agent-ppo:9001/predict"
 DQN_URL = "http://rl-agent-dqn:9000/predict"
+PPO_URL = "http://rl-agent-ppo:9001/predict"
 
-def get_action(state):
+def call_model(url, state):
     try:
-        state_list = [float(x) for x in state]
-        payload = {"state": state_list}
-        
-        # BƯỚC 1: ƯU TIÊN PPO 
-        try:
-            response = requests.post(PPO_URL, json=payload, timeout=2)
-            if response.status_code == 200:
-                action = response.json().get("action", 0)
-                return action
-        except requests.exceptions.RequestException:
-            pass 
+        res = requests.post(url, json={"state": state.tolist()}, timeout=1.5)
+        return int(res.json()["action"])
+    except:
+        return 0
 
-        # BƯỚC 2: TỰ ĐỘNG CHUYỂN SANG DQN 
-        try:
-            response = requests.post(DQN_URL, json=payload, timeout=2)
-            if response.status_code == 200:
-                action = response.json().get("action", 0)
-                return action
-        except requests.exceptions.RequestException as e:
-            print(f"Cả DQN và PPO đều mất kết nối: {e}")
-            
-        # Nếu cả 2 đều sập, trả về 0 để giữ mạng không bị cấu hình sai
-        return 0
-        
-    except Exception as e:
-        print(f"Lỗi logic khi chuẩn bị dữ liệu: {e}")
-        return 0
+def get_best_action(state, reward_fn):
+    action_dqn = call_model(DQN_URL, state)
+    action_ppo = call_model(PPO_URL, state)
+
+    reward_dqn = reward_fn(state, action_dqn)
+    reward_ppo = reward_fn(state, action_ppo)
+
+    if reward_dqn >= reward_ppo:
+        return action_dqn, "DQN", reward_dqn
+    else:
+        return action_ppo, "PPO", reward_ppo

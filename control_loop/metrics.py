@@ -1,26 +1,29 @@
-from prometheus_client import Gauge
-import numpy as np
+from prometheus_client import start_http_server, Gauge
 
-# Khởi tạo các biểu đồ cho Prometheus
-RL_REWARD = Gauge('rl_current_reward', 'Current reward from RL agent')
-PACKET_RATE = Gauge('sdn_packet_rate', 'Current packet rate in network')
-ACTION_TAKEN = Gauge('rl_action_taken', 'Action selected by RL agent')
+# ===== CORE =====
+reward_g = Gauge('rl_reward', 'Reward', ['agent'])
+latency_g = Gauge('rl_latency', 'Latency', ['agent'])
+packet_loss_g = Gauge('rl_packet_loss', 'Packet loss', ['agent'])
+flow_g = Gauge('rl_flow_count', 'Flow count', ['agent'])
 
-def update_metrics(state, reward):
-    """
-    Hàm đẩy dữ liệu trạng thái và phần thưởng lên Prometheus
-    """
-    try:
-        # Cập nhật Reward
-        RL_REWARD.set(float(reward))
-        
-        # Cập nhật Action 
-        action_val = state[-1] if isinstance(state, (list, np.ndarray)) else 0
-        ACTION_TAKEN.set(float(action_val))
-        
-        # Cập nhật Packet Rate 
-        packet_rate_val = state[0] if isinstance(state, (list, np.ndarray)) else 0
-        PACKET_RATE.set(float(packet_rate_val))
-        
-    except Exception as e:
-        print(f"Lỗi khi cập nhật Metrics: {e}")
+# ===== ACTION =====
+action_g = Gauge('rl_action', 'Action', ['agent'])
+
+# ===== SYSTEM =====
+cpu_g = Gauge('rl_controller_cpu', 'Controller CPU', ['agent'])
+queue_g = Gauge('rl_queue_length', 'Queue length', ['agent'])
+
+# ===== MODEL SELECTION =====
+model_selected_g = Gauge('rl_model_selected', 'Selected model')
+
+start_http_server(9100)
+
+def update_metrics(state, reward, agent, action):
+    reward_g.labels(agent=agent).set(reward)
+    latency_g.labels(agent=agent).set(state[3])
+    packet_loss_g.labels(agent=agent).set(state[4])
+    flow_g.labels(agent=agent).set(state[2])
+
+    action_g.labels(agent=agent).set(action)
+    cpu_g.labels(agent=agent).set(state[7])
+    queue_g.labels(agent=agent).set(state[6])

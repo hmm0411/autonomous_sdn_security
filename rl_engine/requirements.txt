@@ -11,3 +11,4 @@ seaborn
 requests
 mlflow
 prometheus-client
+seaborn
