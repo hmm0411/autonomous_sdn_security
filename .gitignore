@@ -16,3 +16,4 @@ tmp/
 *.tmp
 mlruns/
 *.db
+build_scaler.py

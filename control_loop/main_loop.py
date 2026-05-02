@@ -1,6 +1,7 @@
 import time
 import os
 import datetime
+import joblib
 import numpy as np
 
 from rl_engine.state_builder import StateBuilder
@@ -18,6 +19,9 @@ from control_loop.state_collector import get_state
 STATE_DIM = 9
 SLEEP_TIME = 2
 
+# ===== LOAD SCALER =====
+scaler = joblib.load("models/scaler.pkl")
+
 state_builder = StateBuilder()
 reward_calc = Reward()
 logger = Logger(log_dir="results/logs")
@@ -32,59 +36,101 @@ def validate_state(state):
 
 while True:
     try:
-        # ===== LẤY RAW DATA =====
-        raw = get_state()
+        # ====================================================
+        # LẤY RAW STATE DICTIONARY
+        # ====================================================
+        raw_dict = get_state()
 
-        # ===== BUILD STATE =====
-        state = np.array(state_builder.build(raw), dtype=np.float32)
+        if raw_dict is None:
+            print("State is None, skipping...")
+            time.sleep(SLEEP_TIME)
+            continue
+
+        # ====================================================
+        # BUILD RAW VECTOR (ĐÚNG THỨ TỰ TRAINING)
+        # ====================================================
+        raw_vector = np.array([[
+            raw_dict["packet_rate"],
+            raw_dict["byte_rate"],
+            raw_dict["flow_count"],
+            raw_dict["src_ip_entropy"],
+            raw_dict["latency"],
+            raw_dict["packet_loss"],
+            raw_dict["queue_length"],
+            raw_dict["controller_cpu"],
+            raw_dict.get("previous_action", 0)
+        ]], dtype=np.float32)
+
+        # ====================================================
+        # SCALE STATE (QUAN TRỌNG NHẤT)
+        # ====================================================
+        state_scaled = scaler.transform(raw_vector)[0]
+
+        # DEBUG SCALE
+        print("RAW:", raw_vector)
+        print("SCALED:", state_scaled)
+
+        state = state_scaled
 
         if not validate_state(state):
             print("Invalid state:", state)
             time.sleep(SLEEP_TIME)
             continue
 
-        # ===== AUTO CHỌN MODEL =====
+        # ====================================================
+        # AUTO MODEL SELECTION
+        # ====================================================
         action, model, reward = get_best_action(
             state,
-            lambda s, a: reward_calc.calculate(raw, a)
+            lambda s, a: reward_calc.calculate(raw_dict, a)
         )
 
-        # ===== TÍCH HỢP LLM =====
+        # ====================================================
+        # LLM EXPLANATION (NẾU CÓ ACTION)
+        # ====================================================
         if action != 0:
             qos_metrics = {
-                "delay": raw.get("latency", 0),
-                "loss": raw.get("packet_loss", 0),
-                "throughput": raw.get("byte_rate", 0)
+                "delay": raw_dict["latency"],
+                "loss": raw_dict["packet_loss"],
+                "throughput": raw_dict["byte_rate"]
             }
 
-            prompt = build_prompt(state, action, qos_metrics)
+            prompt = build_prompt(state.tolist(), action, qos_metrics)
             explanation = call_llm(prompt)
 
-            print(f"\nLLM SECURITY REPORT")
+            print("\nLLM SECURITY REPORT")
             print(explanation)
 
-            try:
-                os.makedirs("logs", exist_ok=True)
-                with open("logs/llm_reports.log", "a", encoding="utf-8") as f:
-                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    f.write(f"[{timestamp}] LLM SECURITY REPORT\n")
-                    f.write(str(explanation).strip() + "\n")
-                    f.write("-" * 50 + "\n")
-                    f.flush()
-            except Exception as file_err:
-                print(f"Lỗi khi ghi file log: {file_err}")
+            os.makedirs("logs", exist_ok=True)
+            with open("logs/llm_reports.log", "a", encoding="utf-8") as f:
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                f.write(f"[{timestamp}] LLM SECURITY REPORT\n")
+                f.write(str(explanation).strip() + "\n")
+                f.write("-" * 50 + "\n")
 
-            logger.log_llm(episode=0, step=0, state=state, action=action,
-                           qos=qos_metrics, explanation=explanation)
+            logger.log_llm(
+                episode=0,
+                step=0,
+                state=state,
+                action=action,
+                qos=qos_metrics,
+                explanation=explanation
+            )
 
-        # ===== BASELINE =====
+        # ====================================================
+        # BASELINE
+        # ====================================================
         action_base = baseline_policy(state)
-        reward_base = reward_calc.calculate(raw, action_base)
+        reward_base = reward_calc.calculate(raw_dict, action_base)
 
-        # ===== APPLY =====
+        # ====================================================
+        # EXECUTE ACTION
+        # ====================================================
         execute_action(action)
 
-        # ===== UPDATE METRICS =====
+        # ====================================================
+        # 8 UPDATE METRICS
+        # ====================================================
         update_metrics(state, reward, model, action)
         update_metrics(state, reward_base, "baseline", action_base)
 
