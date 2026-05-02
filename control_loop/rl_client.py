@@ -22,6 +22,8 @@ def get_best_action(state):
     action_dqn = call_model(DQN_URL, state)
     action_ppo = call_model(PPO_URL, state)
 
+    print(">>> HYBRID ACTIVE <<<")
+
     # state layout (scaled):
     # [packet_rate, byte_rate, flow_ratio, entropy, latency,
     #  packet_loss, queue_ratio, cpu, previous_action]
@@ -51,5 +53,8 @@ def get_best_action(state):
             return action_ppo, "PPO-FALLBACK", 0
 
     # Normal regime
-    print(">> NORMAL MODE: Use PPO")
-    return action_ppo, "PPO-NORMAL", 0
+    # print(">> NORMAL MODE: Use PPO")
+    # return action_ppo, "PPO-NORMAL", 0
+    print(" DQN ACTION:", action_dqn)
+    print(" PPO ACTION:", action_ppo)
+    return action_dqn, "DQN-NORMAL", 0
