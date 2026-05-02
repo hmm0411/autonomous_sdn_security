@@ -13,7 +13,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
     huggingface_hub \
     pandas \
     joblib \
-    tensorboardX
+    tensorboardX \
+    scikit-learn
 
 # Copy thư mục control_loop
 COPY ./control_loop /app/control_loop

@@ -12,3 +12,4 @@ requests
 mlflow
 prometheus-client
 seaborn
+joblib
