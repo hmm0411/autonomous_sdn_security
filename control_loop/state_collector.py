@@ -1,5 +1,6 @@
 import requests
 import time
+import math
 
 ONOS_URL = "http://controller:8181/onos/v1"
 AUTH = ("onos", "rocks")
@@ -7,6 +8,20 @@ AUTH = ("onos", "rocks")
 prev_packets = 0
 prev_bytes = 0
 prev_time = time.time()
+
+def calculate_entropy(ip_list):
+    if not ip_list:
+        return 0.0
+    freq = {}
+    for ip in ip_list:
+        freq[ip] = freq.get(ip, 0) + 1
+    total = len(ip_list)
+    entropy = 0
+    for count in freq.values():
+        p = count / total
+        entropy -= p * math.log2(p)
+    return entropy / math.log2(len(freq)) if len(freq) > 1 else 0.0
+
 
 def get_state():
     global prev_packets, prev_bytes, prev_time
@@ -19,6 +34,15 @@ def get_state():
 
         total_packets = sum(f.get("packets", 0) for f in flows)
         total_bytes = sum(f.get("bytes", 0) for f in flows)
+
+        src_ips = []
+        for f in flows:
+            crit = f.get("selector", {}).get("criteria", [])
+            for c in crit:
+                if c.get("type") == "IPV4_SRC":
+                    src_ips.append(c.get("ip"))
+
+        entropy = calculate_entropy(src_ips)
 
         now = time.time()
         dt = max(now - prev_time, 1e-6)
@@ -33,31 +57,23 @@ def get_state():
         prev_bytes = total_bytes
         prev_time = now
 
-        # --- PORT STATS (real queue approximation) ---
-        port_res = requests.get(f"{ONOS_URL}/statistics/ports", auth=AUTH)
-        port_res.raise_for_status()
-        port_data = port_res.json()
+        controller_cpu = min(packet_rate / 50.0, 1.0)
 
-        dropped = 0
-        for device in port_data.get("statistics", []):
-            for port in device.get("ports", []):
-                dropped += port.get("packetsRxDropped", 0)
+        queue_length = min(len(flows) / 20.0, 1.0)
 
-        # --- DEBUG PRINT ---
         print("PACKET RATE:", packet_rate)
-        print("BYTE RATE:", byte_rate)
         print("FLOW COUNT:", len(flows))
-        print("DROPPED:", dropped)
+        print("ENTROPY:", entropy)
 
         return {
             "packet_rate": packet_rate,
             "byte_rate": byte_rate,
             "flow_count": len(flows),
-            "src_ip_entropy": 0.0,   # bỏ tạm entropy
-            "latency": packet_rate * 0.00001,  # proxy latency
-            "packet_loss": dropped,
-            "queue_length": dropped,
-            "controller_cpu": min(packet_rate / 10000, 1.0)
+            "src_ip_entropy": entropy,
+            "latency": packet_rate * 0.00005,
+            "packet_loss": 0.0,
+            "queue_length": queue_length,
+            "controller_cpu": controller_cpu
         }
 
     except Exception as e:

