@@ -3,6 +3,8 @@ import requests
 DQN_URL = "http://rl-agent-dqn:9000/predict"
 PPO_URL = "http://rl-agent-ppo:9001/predict"
 
+print(">>> HYBRID VERSION LOADED <<<")
+
 def call_model(url, state):
     try:
         res = requests.post(url, json={"state": state.tolist()}, timeout=1.5)
