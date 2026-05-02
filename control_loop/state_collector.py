@@ -57,20 +57,31 @@ def get_state():
         prev_bytes = total_bytes
         prev_time = now
 
-        controller_cpu = min(packet_rate / 50.0, 1.0)
+        flow_count = len(flows)
 
-        queue_length = min(len(flows) / 20.0, 1.0)
+        packet_rate_scaled = packet_rate * 1000
+
+        if len(src_ips) > 1:
+            entropy = calculate_entropy(src_ips)
+        else:
+            entropy = min(flow_count / 50.0, 1.0)
+
+        controller_cpu = min(packet_rate / 1000.0, 1.0)
+
+        queue_length = min(len(flows) / 50.0, 1.0)
+
+        latency = packet_rate_scaled * 0.00005
 
         print("PACKET RATE:", packet_rate)
         print("FLOW COUNT:", len(flows))
         print("ENTROPY:", entropy)
 
         return {
-            "packet_rate": packet_rate,
+            "packet_rate": packet_rate_scaled,
             "byte_rate": byte_rate,
             "flow_count": len(flows),
             "src_ip_entropy": entropy,
-            "latency": packet_rate * 0.00005,
+            "latency": latency,
             "packet_loss": 0.0,
             "queue_length": queue_length,
             "controller_cpu": controller_cpu
