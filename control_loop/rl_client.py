@@ -51,6 +51,8 @@ def get_best_action(state):
         else:
             print(">> ATTACK MODE but DQN=0 → fallback PPO")
             return action_ppo, "PPO-FALLBACK", 0
+        
+    print("FINAL ACTION RETURNED:", action_dqn if pressure > 0.5 else action_ppo)
 
     # Normal regime
     # print(">> NORMAL MODE: Use PPO")

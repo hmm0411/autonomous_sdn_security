@@ -7,7 +7,7 @@ import numpy as np
 from control_loop.controller_client import execute_action
 from rl_engine.reward import Reward
 from rl_engine.logger import Logger
-from control_loop.rl_client import call_model
+from control_loop.rl_client import get_best_action
 from control_loop.state_collector import get_state
 from control_loop.metrics import update_metrics
 
@@ -72,16 +72,16 @@ while True:
         # =============================
         # SELECT ACTION (PPO ưu tiên)
         # =============================
-        action_ppo = call_model(PPO_URL, state)
-        action_dqn = call_model(DQN_URL, state)
+        action, model_name, _ = get_best_action(state)
 
-        print("DQN action:", action_dqn)
-        print("PPO action:", action_ppo)
+        # =============================
+        # HYBRID DECISION
+        # =============================
 
-        # Ưu tiên PPO
-        action = action_ppo
-        model_name = "PPO"
-
+        flow_ratio = state[2]
+        entropy = state[3]
+        queue_ratio = state[6]
+        cpu = state[7]
         # =============================
         # EXECUTE ACTION
         # =============================
