@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
     requests \
     numpy \
+    torch \
     prometheus_client \
     huggingface_hub \
     pandas \

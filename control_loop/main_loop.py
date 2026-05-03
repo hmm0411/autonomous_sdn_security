@@ -2,6 +2,7 @@ import time
 import os
 import datetime
 import numpy as np
+import pandas as pd
 import csv
 
 from control_loop.controller_client import execute_action
@@ -49,21 +50,20 @@ def log_transition(state, action, next_state):
     os.makedirs("logs", exist_ok=True)
     file_path = "logs/transition_log.csv"
 
-    header = (
-        [f"s{i}" for i in range(len(state))] +
-        ["action"] +
+    row = list(state) + [action] + list(next_state)
+    
+    columns = (
+        [f"s{i}" for i in range(len(state))] + \
+        ["action"] + \
         [f"next_s{i}" for i in range(len(next_state))]
     )
 
-    row = list(state) + [action] + list(next_state)
+    df = pd.DataFrame([row], columns=columns)
 
-    write_header = not os.path.exists(file_path)
-
-    with open(file_path, "a", newline="") as f:
-        writer = csv.writer(f)
-        if write_header:
-            writer.writerow(header)
-        writer.writerow(row)
+    if not os.path.exists(file_path):
+        df.to_csv(file_path, index=False)
+    else:
+        df.to_csv(file_path, mode='a', header=False, index=False)
 
 
 while True:
@@ -146,6 +146,7 @@ while True:
         print(f"[AUTO] {model_name} | action={action} | reward={reward}")
 
         update_metrics(state, reward, model_name, action)
+        log_transition(state, action, next_state)
 
         # =========================
         # LLM EXPLANATION

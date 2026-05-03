@@ -16,66 +16,82 @@ services:
       - sdn-net
     environment:
       # Tự động kích hoạt các App cần thiết của ONOS khi khởi động
-      - ONOS_APPS=drivers,openflow,gui,rest,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher,prometheus
+      - ONOS_APPS=drivers,openflow,gui,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher,prometheus
       - ONOS_AUTO_START=true
     restart: always
 
   # Container chạy DQN
-  rl-trainer-dqn:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: rl-trainer-dqn
-    depends_on:
-      - mlflow
-    networks:
-      - sdn-net
-    volumes:
-      - .:/app
-    environment:
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - CI=false
-
-  # Container chạy PPO
-  rl-trainer-ppo:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: rl-trainer-ppo
-    depends_on:
-      - mlflow
-    networks:
-      - sdn-net
-    volumes:
-      - .:/app
-    environment:
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - CI=false
-
+  # rl-agent-dqn:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: rl-agent-dqn
+  #   depends_on:
+  #     - mlflow
+  #     - controller
+  #   ports:
+  #     - "9000:9000"
+  #   networks:
+  #     - sdn-net
+  #   volumes:
+  #     - .:/app
+  #     - ./results:/app/results
+  #     - ./models:/app/models
+  #     - ./logs:/app/logs
+  #     - ./mlruns:/app/mlruns
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
+  #     - PYTHONPATH=/app
+  #     - MLFLOW_TRACKING_URI=http://mlflow:5000
+  #     - CI=false
+  #   command: python -m rl_engine.agent.serving_dqn.py
+  #   restart: on-failure
   rl-agent-dqn:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: rl-agent-dqn
     depends_on:
-      - rl-trainer-dqn
+      - controller
     ports:
       - "9000:9000"
     networks:
       - sdn-net
     volumes:
-      - .:/app
+      - ./models:/app/models
+      - ./logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - CI=false
     command: python -m rl_engine.agent.serving_dqn
-    restart: on-failure
+    restart: unless-stopped
+
+  # Container chạy PPO
+  # rl-agent-ppo:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: rl-agent-ppo
+  #   depends_on:
+  #     - mlflow
+  #     - controller
+  #   ports:
+  #     - "9001:9001"
+  #   networks:
+  #     - sdn-net
+  #   volumes:
+  #     - .:/app
+  #     - ./results:/app/results
+  #     - ./models:/app/models
+  #     - ./logs:/app/logs
+  #     - ./mlruns:/app/mlruns
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
+  #     - PYTHONPATH=/app
+  #     - MLFLOW_TRACKING_URI=http://mlflow:5000
+  #     - CI=false
+  #   command: python -m rl_engine.agent.serving_ppo.py
+  #   restart: on-failure
 
   rl-agent-ppo:
     build:
@@ -83,26 +99,31 @@ services:
       dockerfile: Dockerfile
     container_name: rl-agent-ppo
     depends_on:
-      - rl-trainer-ppo
+      - controller
     ports:
       - "9001:9001"
     networks:
-      - sdn-net
+    - sdn-net
     volumes:
-      - .:/app
+      - ./models:/app/models
+      - ./logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - CI=false
     command: python -m rl_engine.agent.serving_ppo
-    restart: on-failure
-  # twin:
-  #   build: ./digital_twin
-  #   depends_on:
-  #     - controller
-  #   networks:
-  #     - sdn-net
+    restart: unless-stopped
+
+
+  twin:
+    build: ./digital_twin
+    depends_on:
+      - controller
+    networks:
+      - sdn-net
+    volumes:
+      - ./logs:/app/logs
+      - ./models:/app/models
+    restart: unless-stopped
 
   mlflow:
     image: ghcr.io/mlflow/mlflow:v3.0.0
@@ -135,8 +156,6 @@ services:
       context: .
       dockerfile: ./control_loop/Dockerfile
     container_name: control_loop
-    volumes:
-      - .:/app
     depends_on:
       - controller
       - rl-agent-dqn
@@ -147,7 +166,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - HF_TOKEN=${HF_TOKEN}
+        
   # Prometheus
   prometheus:
     image: prom/prometheus:latest
@@ -216,22 +235,7 @@ services:
       - alertmanager
     restart: on-failure
 
-# dashboard
-  dashboard:
-    image: python:3.10-slim
-    container_name: sdn-dashboard
-    volumes:
-      - .:/app
-    working_dir: /app
-    command: >
-      sh -c "pip install streamlit && streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0"
-    ports:
-      - "8501:8501"
-    networks:
-      - sdn-net
-
 volumes:
   mlflow_data:
   prometheus_data:
   grafana_data:
-
