@@ -102,7 +102,7 @@ while True:
         # =========================
         # 6️⃣ LLM EXPLANATION
         # =========================
-        if action != 0:
+        if action != 0 and os.path.exists("logs/llm_on"):
             qos_metrics = {
                 "delay": next_raw_state.get("latency", 0),
                 "loss": next_raw_state.get("packet_loss", 0),

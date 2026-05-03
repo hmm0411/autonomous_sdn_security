@@ -16,7 +16,7 @@ services:
       - sdn-net
     environment:
       # Tự động kích hoạt các App cần thiết của ONOS khi khởi động
-      - ONOS_APPS=drivers,openflow,gui,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher,prometheus
+      - ONOS_APPS=drivers,openflow,gui,rest,fwd,proxyarp,hostprovider,linkprovider,flowruleprovider,statisticspublisher,prometheus
       - ONOS_AUTO_START=true
     restart: always
 
@@ -216,7 +216,22 @@ services:
       - alertmanager
     restart: on-failure
 
+# dashboard
+  dashboard:
+    image: python:3.10-slim
+    container_name: sdn-dashboard
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: >
+      sh -c "pip install streamlit && streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0"
+    ports:
+      - "8501:8501"
+    networks:
+      - sdn-net
+
 volumes:
   mlflow_data:
   prometheus_data:
   grafana_data:
+
