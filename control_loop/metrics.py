@@ -20,8 +20,9 @@ start_http_server(9100)
 
 def update_metrics(state, reward, agent, action):
     reward_g.labels(agent=agent).set(reward)
-    latency_g.labels(agent=agent).set(state[3])
-    packet_loss_g.labels(agent=agent).set(state[4])
+
+    latency_g.labels(agent=agent).set(state[4])
+    packet_loss_g.labels(agent=agent).set(state[5])
     flow_g.labels(agent=agent).set(state[2])
 
     action_g.labels(agent=agent).set(action)

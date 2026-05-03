@@ -1,6 +1,6 @@
 import requests
 
-ONOS_URL = "http://onos:8181/onos/v1"
+ONOS_URL = "http://controller:8181/onos/v1"
 AUTH = ("onos", "rocks")
 
 def execute_action(action):
