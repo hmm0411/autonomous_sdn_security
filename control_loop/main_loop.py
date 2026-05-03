@@ -25,6 +25,7 @@ logger = Logger(log_dir="results/logs")
 
 print("AUTO MODEL CONTROL LOOP STARTED")
 
+warmup_counter = 0
 
 def validate_state(state):
     return state is not None and len(state) == STATE_DIM
@@ -43,6 +44,7 @@ def scale_state(raw_dict):
     ]], dtype=np.float32)
 
     scaled_core = scaler.transform(raw_vector)[0]
+    scaled_core = np.clip(scaled_core, 0.0, 1.0)
     previous_action = raw_dict.get("previous_action", 0)
 
     return np.append(scaled_core, previous_action)
@@ -68,6 +70,12 @@ while True:
             continue
 
         print("STATE (scaled):", state)
+
+        warmup_counter += 1
+        if warmup_counter < 5:
+            print(f"Warming up... ({warmup_counter}/5)")
+            time.sleep(SLEEP_TIME)
+            continue
 
         # =============================
         # SELECT ACTION (PPO ưu tiên)

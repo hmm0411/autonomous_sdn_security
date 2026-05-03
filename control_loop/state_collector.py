@@ -50,23 +50,27 @@ def get_state():
         packet_delta = max(total_packets - prev_packets, 0)
         byte_delta = max(total_bytes - prev_bytes, 0)
 
-        packet_rate = packet_delta / dt
+        alpha = 0.3
+
+        prev_smoothed_packet_rate = 0.0
+
+        packet_rate = alpha * packet_rate + (1 - alpha) * prev_smoothed_packet_rate
         byte_rate = byte_delta / dt
 
         prev_packets = total_packets
         prev_bytes = total_bytes
         prev_time = now
 
-        flow_count = len(flows)
+        flow_ratio = min(len(flows) / 120.0, 1.0)
 
         packet_rate_scaled = packet_rate * 1000
 
         if len(src_ips) > 1:
             entropy = calculate_entropy(src_ips)
         else:
-            entropy = min(flow_count / 50.0, 1.0)
+            entropy = min(flow_ratio / 0.5, 1.0)
 
-        controller_cpu = min(packet_rate / 1000.0, 1.0)
+        controller_cpu = min(max(packet_rate / 1000.0, 0.0), 1.0)
 
         queue_length = min(len(flows) / 50.0, 1.0)
 
@@ -79,7 +83,7 @@ def get_state():
         return {
             "packet_rate": packet_rate_scaled,
             "byte_rate": byte_rate,
-            "flow_count": len(flows),
+            "flow_count": flow_ratio,
             "src_ip_entropy": entropy,
             "latency": latency,
             "packet_loss": 0.0,
