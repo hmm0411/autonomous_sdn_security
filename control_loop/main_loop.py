@@ -1,128 +1,63 @@
 import time
-import os
-import datetime
-import joblib
 import numpy as np
 
 from control_loop.controller_client import execute_action
-from rl_engine.reward import Reward
-from rl_engine.logger import Logger
 from control_loop.rl_client import get_best_action
 from control_loop.state_collector import get_state
 from control_loop.metrics import update_metrics
+from rl_engine.reward import Reward
 
 STATE_DIM = 9
 SLEEP_TIME = 2
 
-DQN_URL = "http://rl-agent-dqn:9000/predict"
-PPO_URL = "http://rl-agent-ppo:9001/predict"
-
-# ===== LOAD SCALER =====
-scaler = joblib.load("models/scaler.pkl")
-
 reward_calc = Reward()
-logger = Logger(log_dir="results/logs")
-
-print("AUTO MODEL CONTROL LOOP STARTED")
-
 warmup_counter = 0
 
-def validate_state(state):
-    return state is not None and len(state) == STATE_DIM
 
-
-def scale_state(raw_dict):
-    raw_vector = np.array([[
-        raw_dict["packet_rate"],
-        raw_dict["byte_rate"],
-        raw_dict["flow_count"],
-        raw_dict["src_ip_entropy"],
-        raw_dict["latency"],
-        raw_dict["packet_loss"],
-        raw_dict["queue_length"],
-        raw_dict["controller_cpu"],
-    ]], dtype=np.float32)
-
-    scaled_core = scaler.transform(raw_vector)[0]
-    scaled_core = np.clip(scaled_core, 0.0, 1.0)
-    previous_action = raw_dict.get("previous_action", 0)
-
-    return np.append(scaled_core, previous_action)
+def norm(x, max_val):
+    return min(max(x / max_val, 0.0), 1.0)
 
 
 while True:
     try:
-        # =============================
-        # GET CURRENT STATE s_t
-        # =============================
-        raw_state = get_state()
+        raw = get_state()
 
-        if raw_state is None:
-            print("State is None, skipping...")
+        if raw is None:
             time.sleep(SLEEP_TIME)
             continue
 
-        state = scale_state(raw_state)
+        # ===== ONLINE NORMALIZATION =====
+        state = np.array([
+            norm(raw["packet_rate"], 20000),
+            norm(raw["byte_rate"], 500000),
+            norm(raw["flow_count"], 100),
+            norm(raw["latency"], 100),
+            np.clip(raw["packet_loss"], 0, 1),
+            np.clip(raw["src_ip_entropy"], 0, 1),
+            np.clip(raw["queue_length"], 0, 1),
+            np.clip(raw["controller_cpu"], 0, 1),
+            0  # previous_action (optional)
+        ], dtype=np.float32)
 
-        if not validate_state(state):
-            print("Invalid state:", state)
-            time.sleep(SLEEP_TIME)
-            continue
-
-        print("STATE (scaled):", state)
+        print("STATE:", state)
 
         warmup_counter += 1
         if warmup_counter < 5:
-            print(f"Warming up... ({warmup_counter}/5)")
+            print("Warmup...")
             time.sleep(SLEEP_TIME)
             continue
 
-        # =============================
-        # SELECT ACTION (PPO ưu tiên)
-        # =============================
         action, model_name, _ = get_best_action(state)
 
-        # =============================
-        # HYBRID DECISION
-        # =============================
-
-        flow_ratio = state[2]
-        entropy = state[3]
-        queue_ratio = state[6]
-        cpu = state[7]
-        # =============================
-        # EXECUTE ACTION
-        # =============================
         execute_action(action)
 
-        # =============================
-        # WAIT ENV RESPONSE
-        # =============================
         time.sleep(SLEEP_TIME)
 
-        # =============================
-        # GET NEXT STATE s_{t+1}
-        # =============================
-        next_raw_state = get_state()
-
-        if next_raw_state is None:
-            print("Next state is None")
-            continue
-
-        # =============================
-        # COMPUTE REAL REWARD
-        # =============================
-        reward = reward_calc.calculate(
-            prev_state=raw_state,
-            action=action,
-            next_state=next_raw_state
-        )
+        next_raw = get_state()
+        reward = reward_calc.calculate(raw, action, next_raw)
 
         print(f"[AUTO] {model_name} | action={action} | reward={reward}")
 
-        # =============================
-        # LOG
-        # =============================
         update_metrics(state, reward, model_name, action)
 
     except Exception as e:
