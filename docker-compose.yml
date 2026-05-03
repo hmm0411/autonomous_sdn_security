@@ -147,7 +147,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - HF_TOKEN=
+      - HF_TOKEN=${HF_TOKEN}
   # Prometheus
   prometheus:
     image: prom/prometheus:latest
