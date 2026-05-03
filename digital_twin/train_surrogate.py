@@ -1,123 +1,50 @@
-# train_surrogate.py
-
+import torch
+import torch.nn as nn
 import pandas as pd
 import numpy as np
-import joblib
-import matplotlib.pyplot as plt
 
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+class Surrogate(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(10, 128),  # 9 state + 1 action
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 9)
+        )
 
-
-DATA_PATH = "transition_dataset.csv"
-MODEL_PATH = "surrogate_model.pkl"
-
-
-FEATURE_COLS = [
-    "packet_rate",
-    "byte_rate",
-    "flow_count",
-    "src_ip_entropy",
-    "latency",
-    "packet_loss",
-    "queue_length",
-    "controller_cpu",
-    "attack_indicator",
-    "action"
-]
-
-TARGET_COLS = [
-    "next_latency",
-    "next_packet_loss"
-]
+    def forward(self, x):
+        return self.net(x)
 
 
-def load_data():
-    df = pd.read_csv(DATA_PATH)
+df = pd.read_csv("logs/transition_log.csv")
 
-    X = df[FEATURE_COLS].values
-    y = df[TARGET_COLS].values
+state_cols = [c for c in df.columns if c.startswith("s")]
+next_cols = [c for c in df.columns if c.startswith("next_s")]
 
-    attack_labels = df["attack_type"].values
+X = df[state_cols].values
+actions = df["action"].values.reshape(-1, 1)
+X = np.concatenate([X, actions], axis=1)
 
-    return train_test_split(
-        X, y, attack_labels,
-        test_size=0.2,
-        random_state=42
-    )
+y = df[next_cols].values
 
+model = Surrogate()
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+loss_fn = nn.MSELoss()
 
-def evaluate(model, X_test, y_test, attack_labels):
+X_tensor = torch.tensor(X).float()
+y_tensor = torch.tensor(y).float()
 
-    preds = model.predict(X_test)
+for epoch in range(80):
+    pred = model(X_tensor)
+    loss = loss_fn(pred, y_tensor)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
 
-    mae = mean_absolute_error(y_test, preds)
-    rmse = np.sqrt(mean_squared_error(y_test, preds))
-    r2 = r2_score(y_test, preds)
+    if epoch % 10 == 0:
+        print(f"Epoch {epoch}, Loss: {loss.item()}")
 
-    print("\n==== GLOBAL METRICS ====")
-    print("MAE :", mae)
-    print("RMSE:", rmse)
-    print("R2  :", r2)
-
-    # --- Per attack evaluation ---
-    print("\n==== PER-ATTACK METRICS ====")
-
-    unique_attacks = np.unique(attack_labels)
-
-    for attack in unique_attacks:
-        idx = attack_labels == attack
-        if np.sum(idx) == 0:
-            continue
-
-        attack_mae = mean_absolute_error(y_test[idx], preds[idx])
-        attack_rmse = np.sqrt(mean_squared_error(y_test[idx], preds[idx]))
-        attack_r2 = r2_score(y_test[idx], preds[idx])
-
-        print(f"\nAttack: {attack}")
-        print("  MAE :", attack_mae)
-        print("  RMSE:", attack_rmse)
-        print("  R2  :", attack_r2)
-
-    return preds
-
-
-def plot_prediction_vs_real(y_test, preds):
-
-    plt.figure(figsize=(10,5))
-
-    plt.scatter(y_test[:,0], preds[:,0], alpha=0.3)
-    plt.xlabel("Real Next Latency")
-    plt.ylabel("Predicted Next Latency")
-    plt.title("Latency Prediction Scatter")
-    plt.plot([0,1],[0,1], 'r--')
-
-    plt.show()
-
-
-def train():
-
-    X_train, X_test, y_train, y_test, attack_train, attack_test = load_data()
-
-    model = RandomForestRegressor(
-        n_estimators=300,
-        max_depth=18,
-        min_samples_split=5,
-        random_state=42,
-        n_jobs=-1
-    )
-
-    print("Training surrogate model...")
-    model.fit(X_train, y_train)
-
-    preds = evaluate(model, X_test, y_test, attack_test)
-
-    plot_prediction_vs_real(y_test, preds)
-
-    joblib.dump(model, MODEL_PATH)
-    print("\nModel saved to:", MODEL_PATH)
-
-
-if __name__ == "__main__":
-    train()
+torch.save(model.state_dict(), "models/surrogate.pth")
+print("Surrogate trained & saved.")

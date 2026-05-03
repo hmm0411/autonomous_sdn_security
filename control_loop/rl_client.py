@@ -12,21 +12,21 @@ def call_model(url, state):
     except:
         return 0
 
+
 def get_best_action(state):
     """
     Hybrid Arbitration:
-    - Attack regime (pressure cao)  → ưu tiên DQN
-    - Normal regime                → ưu tiên PPO
+    - High pressure → DQN
+    - Low pressure  → PPO
     """
 
     action_dqn = call_model(DQN_URL, state)
     action_ppo = call_model(PPO_URL, state)
 
-    print(">>> HYBRID ACTIVE <<<")
-
-    # state layout (scaled):
+    # state layout:
     # [packet_rate, byte_rate, flow_ratio, entropy, latency,
     #  packet_loss, queue_ratio, cpu, previous_action]
+
     flow_ratio = state[2]
     entropy = state[3]
     queue_ratio = state[6]
@@ -34,7 +34,7 @@ def get_best_action(state):
 
     pressure = 0.4 * entropy + 0.3 * flow_ratio + 0.2 * queue_ratio + 0.1 * cpu
 
-    print("---- DECISION DEBUG ----")
+    print("---- HYBRID DEBUG ----")
     print("Entropy:", entropy)
     print("Flow ratio:", flow_ratio)
     print("Queue ratio:", queue_ratio)
@@ -43,20 +43,11 @@ def get_best_action(state):
     print("DQN action:", action_dqn)
     print("PPO action:", action_ppo)
 
-    # Attack regime
+    # ATTACK REGIME
     if pressure > 0.5:
-        if action_dqn != 0:
-            print(">> ATTACK MODE: Use DQN")
-            return action_dqn, "DQN-ATTACK", 0
-        else:
-            print(">> ATTACK MODE but DQN=0 → fallback PPO")
-            return action_ppo, "PPO-FALLBACK", 0
-        
-    print("FINAL ACTION RETURNED:", action_dqn if pressure > 0.5 else action_ppo)
+        print(">>> ATTACK MODE <<<")
+        return action_dqn, "DQN-ATTACK", pressure
 
-    # Normal regime
-    # print(">> NORMAL MODE: Use PPO")
-    # return action_ppo, "PPO-NORMAL", 0
-    print(" DQN ACTION:", action_dqn)
-    print(" PPO ACTION:", action_ppo)
-    return action_dqn, "DQN-NORMAL", 0
+    # NORMAL REGIME
+    print(">>> NORMAL MODE <<<")
+    return action_ppo, "PPO-NORMAL", pressure

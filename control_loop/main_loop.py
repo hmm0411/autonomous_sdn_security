@@ -2,6 +2,7 @@ import time
 import os
 import datetime
 import numpy as np
+import csv
 
 from control_loop.controller_client import execute_action
 from control_loop.rl_client import get_best_action
@@ -13,16 +14,19 @@ from llm.prompt_builder import build_prompt
 from llm.llm_service import call_llm
 from rl_engine.logger import Logger
 
+from digital_twin.twin_validation import TwinValidator
+
 STATE_DIM = 9
 SLEEP_TIME = 2
 
 reward_calc = Reward()
+twin = TwinValidator()
 logger = Logger(log_dir="results/logs")
 
 warmup_counter = 0
+mode = os.getenv("MODE", "rl_twin")
 
 print("AUTO MODEL CONTROL LOOP STARTED")
-
 
 def norm(x, max_val):
     return min(max(x / max_val, 0.0), 1.0)
@@ -30,22 +34,42 @@ def norm(x, max_val):
 
 def build_state(raw):
     return np.array([
-        norm(raw["packet_rate"], 20000),
-        norm(raw["byte_rate"], 500000),
-        norm(raw["flow_count"], 100),
-        norm(raw["latency"], 100),
-        np.clip(raw["packet_loss"], 0, 1),
-        np.clip(raw["src_ip_entropy"], 0, 1),
-        np.clip(raw["queue_length"], 0, 1),
-        np.clip(raw["controller_cpu"], 0, 1),
-        0  # previous_action (optional)
+        norm(raw["packet_rate"], 20000),       # 0
+        norm(raw["byte_rate"], 500000),       # 1
+        norm(raw["flow_count"], 100),         # 2 (flow_ratio)
+        np.clip(raw["src_ip_entropy"], 0, 1), # 3 (entropy)
+        norm(raw["latency"], 100),            # 4
+        np.clip(raw["packet_loss"], 0, 1),    # 5
+        np.clip(raw["queue_length"], 0, 1),   # 6
+        np.clip(raw["controller_cpu"], 0, 1), # 7
+        raw.get("previous_action", 0)         # 8
     ], dtype=np.float32)
+
+def log_transition(state, action, next_state):
+    os.makedirs("logs", exist_ok=True)
+    file_path = "logs/transition_log.csv"
+
+    header = (
+        [f"s{i}" for i in range(len(state))] +
+        ["action"] +
+        [f"next_s{i}" for i in range(len(next_state))]
+    )
+
+    row = list(state) + [action] + list(next_state)
+
+    write_header = not os.path.exists(file_path)
+
+    with open(file_path, "a", newline="") as f:
+        writer = csv.writer(f)
+        if write_header:
+            writer.writerow(header)
+        writer.writerow(row)
 
 
 while True:
     try:
         # =========================
-        # 1️⃣ GET CURRENT STATE
+        # GET CURRENT STATE
         # =========================
         raw_state = get_state()
 
@@ -65,29 +89,53 @@ while True:
             continue
 
         # =========================
-        # 2️⃣ DECIDE ACTION
+        # DECIDE ACTION
         # =========================
-        action, model_name, _ = get_best_action(state)
+        if mode == "no_defense":
+            action = 0
+            model_name = "NO_DEFENSE"
 
-        print("SELECTED ACTION:", action)
+        elif mode == "rule":
+            action = 1 if state[2] > 0.6 else 0
+            model_name = "RULE"
+
+        else:
+            action, model_name, pressure = get_best_action(state)
+
+            if mode == "rl_twin":
+                predicted_next = twin.predict_next_state(state, action)
+
+                if not twin.is_safe(predicted_next):
+                    print("Twin REJECT → fallback")
+                    action = 0
+                else:
+                    print("Twin ACCEPT")
 
         # =========================
-        # 3️⃣ EXECUTE
+        # EXECUTE
         # =========================
         execute_action(action)
 
-        # =========================
-        # 4️⃣ WAIT ENV RESPONSE
-        # =========================
         time.sleep(SLEEP_TIME)
 
         next_raw_state = get_state()
-
         if next_raw_state is None:
             continue
 
+        next_state = build_state(next_raw_state)
+
         # =========================
-        # 5️⃣ COMPUTE REWARD
+        # WAIT ENV RESPONSE
+        # =========================
+        if mode == "rl_twin":
+            gap = np.mean((predicted_next - next_state) ** 2)
+
+            with open("logs/gap_log.csv", "a") as f:
+                f.write(f"{gap},{action}\n")
+            print(f"Predicted next state: {predicted_next}")
+
+        # =========================
+        # COMPUTE REWARD
         # =========================
         reward = reward_calc.calculate(
             prev_state=raw_state,
@@ -100,9 +148,9 @@ while True:
         update_metrics(state, reward, model_name, action)
 
         # =========================
-        # 6️⃣ LLM EXPLANATION
+        # LLM EXPLANATION
         # =========================
-        if action != 0 and os.path.exists("logs/llm_on"):
+        if action != 0:
             qos_metrics = {
                 "delay": next_raw_state.get("latency", 0),
                 "loss": next_raw_state.get("packet_loss", 0),
