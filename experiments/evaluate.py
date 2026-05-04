@@ -17,6 +17,8 @@ def evaluate_agent(env, agent, episodes=20, max_steps=1000):
 
     for ep in range(episodes):
         state, _ = env.reset()
+        if hasattr(agent, "reset"):
+            agent.reset()  # Nếu agent có hàm reset, gọi nó để làm mới trạng thái nội bộ
         done = False
 
         total_reward = 0
@@ -76,8 +78,13 @@ def main():
     print("Evaluating DQN...")
     dqn = DQNAgent(STATE_DIM, ACTION_DIM)
     if os.path.exists(DQN_MODEL_PATH):
-        dqn.q_net.load_state_dict(torch.load(DQN_MODEL_PATH, map_location=torch.device('cpu')))
+        checkpoint = torch.load(DQN_MODEL_PATH, map_location=torch.device('cpu'))
+        dqn.q_net.load_state_dict(checkpoint["model_state_dict"])
+        # dqn.q_net.load_state_dict(torch.load(DQN_MODEL_PATH, map_location=torch.device('cpu')))
         # dqn.q_net.load_state_dict(torch.load(DQN_MODEL_PATH))
+        dqn.q_net.load_state_dict(checkpoint["model_state_dict"])
+        dqn.q_net.eval()  # Đặt mô hình ở chế độ đánh giá
+        
         res = evaluate_agent(env, dqn)
         res['model'] = "DQN"
         all_results.append(res)
