@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 
-df = pd.read_csv(r"C:\Users\ADMIN\OneDrive - Đoàn Khoa Mạng máy tính và Truyền thông\Desktop\PROJECTS\autonomous_sdn_security\data\processed\test_data.csv")
+df = pd.read_csv("data/processed/test_data.csv")
 
 os.makedirs("data/processed", exist_ok=True)
 
