@@ -5,16 +5,22 @@ import seaborn as sns
 import numpy as np
 
 
-RESULT_PATH = "../results/evaluation_summary.csv"
-FIG_DIR = "../results/figures"
+SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+
+RESULT_PATH = os.path.join(ROOT_DIR, "results", "evaluation_summary.csv")
+FIG_DIR = os.path.join(ROOT_DIR, "results", "figures")
 
 
 def load_data():
+    print("Looking for:", RESULT_PATH)
+
     if not os.path.exists(RESULT_PATH):
         raise FileNotFoundError(
             "Chưa có evaluation_summary.csv.\n"
-            "Chạy: python experiments/evaluate.py trước."
+            "Chạy: python3 -m experiments.evaluate trước."
         )
+
     return pd.read_csv(RESULT_PATH)
 
 
