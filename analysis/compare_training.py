@@ -10,8 +10,10 @@ import os
 
 def plot_learning_curves():
 
-    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+    BASE_DIR = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
     RESULTS_DIR = os.path.join(BASE_DIR, "results")
+    
+    os.makedirs(RESULTS_DIR, exist_ok=True)
 
     dqn_csv = os.path.join(RESULTS_DIR, "dqn_summary_results.csv")
     ppo_csv = os.path.join(RESULTS_DIR, "ppo_summary_results.csv")
