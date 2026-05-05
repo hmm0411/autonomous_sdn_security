@@ -3,8 +3,8 @@ from scipy.stats import ttest_ind
 
 df = pd.read_csv("results/evaluation_summary.csv")
 
-dqn = df[df.model == "DQN"].groupby("scenario")["mean_reward"].mean()
-ppo = df[df.model == "PPO"].groupby("scenario")["mean_reward"].mean()
+dqn = df[df.model == "DQN"]["mean_reward"]
+ppo = df[df.model == "PPO"]["mean_reward"]
 
 t, p = ttest_ind(dqn, ppo)
 
