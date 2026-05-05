@@ -11,9 +11,9 @@ import os
 def plot_learning_curves():
 
     BASE_DIR = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
-    RESULTS_DIR = os.path.join(BASE_DIR, "results")
+    RESULTS_DIR = os.path.join(BASE_DIR, "runs", "models")
     
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+    os.makedirs(os.path.join(RESULTS_DIR, "results"), exist_ok=True)
 
     dqn_csv = os.path.join(RESULTS_DIR, "dqn_summary_results.csv")
     ppo_csv = os.path.join(RESULTS_DIR, "ppo_summary_results.csv")
@@ -96,7 +96,7 @@ def plot_learning_curves():
 
     plt.tight_layout()
 
-    out_path = os.path.join(RESULTS_DIR, "advanced_training_analysis.png")
+    out_path = os.path.join(RESULTS_DIR, "results", "advanced_training_analysis.png")
     plt.savefig(out_path, dpi=300)
     print(f"Saved to: {out_path}")
 
