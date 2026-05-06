@@ -19,6 +19,12 @@ class OnlineSDNEnv:
         self.auth = HTTPBasicAuth(username, password)
         self.polling_interval = polling_interval
         self.previous_action = 0
+        self.baseline = {
+            "flow_count": None,
+            "entropy": None,
+            "packet_rate": None,
+            "latency": None
+        }
 
     # ==========================================
     # RESET
@@ -174,6 +180,50 @@ class OnlineSDNEnv:
             pass
 
         return 0.0
+    
+    # ==========================================
+    # DETECT ATTACK
+    # ==========================================
+    
+    def _detect_attack(self, state):
+        packet_rate = state[0]
+        flow_count = state[2]
+        entropy = state[3]
+        latency = state[4]
+
+        # ===== Initialize baseline =====
+        if self.baseline["flow_count"] is None:
+            self.baseline["flow_count"] = flow_count
+            self.baseline["entropy"] = entropy
+            self.baseline["packet_rate"] = packet_rate
+            self.baseline["latency"] = latency
+            return 0
+
+        # ===== Compute relative spikes =====
+        flow_spike = flow_count > 1.8 * self.baseline["flow_count"]
+        entropy_spike = entropy > 1.5 * self.baseline["entropy"]
+        packet_spike = packet_rate > 2.0 * self.baseline["packet_rate"]
+        latency_spike = latency > 1.5 * self.baseline["latency"]
+
+        score = sum([
+            flow_spike,
+            entropy_spike,
+            packet_spike,
+            latency_spike
+        ])
+
+        # ===== Update baseline slowly =====
+        alpha = 0.05
+        self.baseline["flow_count"] = (1 - alpha) * self.baseline["flow_count"] + alpha * flow_count
+        self.baseline["entropy"] = (1 - alpha) * self.baseline["entropy"] + alpha * entropy
+        self.baseline["packet_rate"] = (1 - alpha) * self.baseline["packet_rate"] + alpha * packet_rate
+        self.baseline["latency"] = (1 - alpha) * self.baseline["latency"] + alpha * latency
+
+        # ===== Attack decision =====
+        if score >= 2:
+            return 1
+        else:
+            return 0
 
     # ==========================================
     # ACTION MAPPING
@@ -343,8 +393,20 @@ class OnlineSDNEnv:
         flow_count = state[2]
         latency = state[4]
 
+        attack_indicator = self._detect_attack(state)
+
         qos_penalty = 0.5 * flow_count + 2.0 * latency
+
+        # Security reward (giống offline)
+        if attack_indicator != 0 and action != 0:
+            security_reward = 2.0
+        elif attack_indicator != 0 and action == 0:
+            security_reward = -3.0
+        elif attack_indicator == 0 and action != 0:
+            security_reward = -1.5
+        else:
+            security_reward = 0.5
 
         switching_penalty = 0.2 if action != self.previous_action else 0.0
 
-        return -qos_penalty - switching_penalty
+        return security_reward - qos_penalty - switching_penalty
