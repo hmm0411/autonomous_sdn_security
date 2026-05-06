@@ -399,11 +399,11 @@ class OnlineSDNEnv:
 
         # Security reward (giống offline)
         if attack_indicator != 0 and action != 0:
-            security_reward = 2.0
+            security_reward = 5.0
         elif attack_indicator != 0 and action == 0:
-            security_reward = -3.0
+            security_reward = -5.0
         elif attack_indicator == 0 and action != 0:
-            security_reward = -1.5
+            security_reward = -0.5
         else:
             security_reward = 0.5
 
