@@ -71,16 +71,16 @@ class OnlineSDNEnv:
         controller_cpu = 0.0
 
         # IMPORTANT: normalize giống offline
-        packet_rate /= 1e6
-        byte_rate /= 1e9
-        flow_count /= 1000.0
+        packet_rate /= 10000
+        byte_rate /= 100000
+        flow_count /= 100
 
         state = np.array([
             packet_rate,
             byte_rate,
             flow_count,
-            src_ip_entropy,
-            latency,
+            src_ip_entropy / 10,
+            latency / 100,
             packet_loss,
             queue_length,
             controller_cpu,
@@ -373,20 +373,8 @@ class OnlineSDNEnv:
         flow_count = state[2]
         latency = state[4]
 
-        attack_indicator = self._detect_attack(state)
+        qos_penalty = 2.0 * flow_count + 1.0 * latency
 
-        qos_penalty = 5.0 * flow_count + 2.0 * latency
+        switching_penalty = 0.3 if action != self.previous_action else 0.0
 
-        # Security reward (giống offline)
-        if attack_indicator != 0 and action != 0:
-            security_reward = 5.0
-        elif attack_indicator != 0 and action == 0:
-            security_reward = -5.0
-        elif attack_indicator == 0 and action != 0:
-            security_reward = -0.5
-        else:
-            security_reward = 0.5
-
-        switching_penalty = 0.2 if action != self.previous_action else 0.0
-
-        return security_reward - qos_penalty - switching_penalty
+        return 1.0 - qos_penalty - switching_penalty
