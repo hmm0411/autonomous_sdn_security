@@ -34,9 +34,9 @@ for step in range(50):
 
     timeline_dqn.append({
         "step": step,
-        "flow_count": next_state[2],    
-        "entropy": next_state[3],
-        "latency": next_state[4],
+        "flow_count": [next_state[2]],
+        "entropy": [next_state[3]],
+        "latency": [next_state[4]],
         "action": action,
         "reward": reward
     })
@@ -60,9 +60,9 @@ for step in range(50):
 
     timeline_ppo.append({
         "step": step,
-        "flow_count": next_state[2],
-        "entropy": next_state[3],
-        "latency": next_state[4],
+        "flow_count": [next_state[2]],
+        "entropy": [next_state[3]],
+        "latency": [next_state[4]],
         "action": action,
         "reward": reward
     })
