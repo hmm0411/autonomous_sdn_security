@@ -3,12 +3,19 @@ import pandas as pd
 import os
 import random
 from datetime import datetime
+from prometheus_client import start_http_server, Gauge
 
 LOG_FILE = "logs/live_metrics.csv"
 SIGNAL_FILE = "logs/current_attack.txt"
 
+PROM_PACKET_RATE = Gauge('sdn_packet_rate', 'Real-time Packet Rate')
+PROM_FLOW_COUNT = Gauge('sdn_flow_count', 'Real-time Flow Count')
+PROM_THREAT_LEVEL = Gauge('sdn_threat_level', 'Threat Level (0=Normal, 1=Medium, 2=High)')
+PROM_ACTION = Gauge('sdn_rl_action', 'Action taken by RL Agent')
+
 # Đảm bảo thư mục tồn tại
 os.makedirs("logs", exist_ok=True)
+
 
 # ---------------------------------------------------------
 # 1. FIX LỖI: RESET TRẠNG THÁI NGAY KHI KHỞI ĐỘNG
@@ -89,6 +96,11 @@ def main():
             # Giúp tạo cảm giác mạng đang "nóng lên" hoặc "hạ nhiệt" dần dần một cách rất thật.
             current_packet_rate += (target_pr - current_packet_rate) * 0.35
             current_flow_count += (target_fc - current_flow_count) * 0.35
+
+            PROM_PACKET_RATE.set(int(current_packet_rate))
+            PROM_FLOW_COUNT.set(int(current_flow_count))
+            PROM_THREAT_LEVEL.set(threat_num)
+            PROM_ACTION.set(action_id)
             
             # Ghi dữ liệu ra file CSV
             new_data = pd.DataFrame([{
@@ -110,4 +122,6 @@ def main():
         time.sleep(2)
 
 if __name__ == "__main__":
+    # Start the Prometheus HTTP server
+    start_http_server(8000)
     main()
