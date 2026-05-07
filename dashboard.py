@@ -1,4 +1,6 @@
 import streamlit as st
+import streamlit.components.v1 as components
+import pandas as pd
 import os
 import pandas as pd
 import numpy as np
@@ -150,7 +152,8 @@ svg_html = f"""
 """
 
 with col_topo:
-    st.markdown(svg_html, unsafe_allow_html=True)
+    import streamlit.components.v1 as components
+    components.html(svg_html, height=550)
 
 with col_info:
     st.markdown("### Action Log")
