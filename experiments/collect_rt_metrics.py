@@ -2,7 +2,7 @@ import time
 import pandas as pd
 from rl_engine.online_env import OnlineSDNEnv
 
-SCENARIO = "NORMAL"  # đổi tay khi test từng attack
+SCENARIO = "portscanning"  # đổi tay khi test từng attack
 DURATION = 60        # số giây log
 
 def main():
