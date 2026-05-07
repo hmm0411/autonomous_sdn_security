@@ -2,28 +2,68 @@ import time
 import pandas as pd
 from rl_engine.online_env import OnlineSDNEnv
 
+
 class DemoDefenseAgent:
 
     def __init__(self, env):
         self.env = env
-        self.previous_attack = "NORMAL"
+        self.baseline_packet = None
+        self.baseline_flow = None
+        self.baseline_drop = None
+        self.warmup_steps = 10  # 10 bước đầu chỉ học baseline
 
+    # ==========================================
+    # BASELINE UPDATE (chỉ update khi NORMAL)
+    # ==========================================
+    def _update_baseline(self, packet_rate, flow_count, drop_rate):
+        # If any are None, initialize them immediately and stop
+        if self.baseline_packet is None or self.baseline_flow is None or self.baseline_drop is None:
+            self.baseline_packet = packet_rate
+            self.baseline_flow = flow_count
+            self.baseline_drop = drop_rate
+            return # Exit the function so the math below is safe
+
+        # Pylance now knows these are not None
+        alpha = 0.1
+        self.baseline_packet = (1 - alpha) * self.baseline_packet + alpha * packet_rate
+        self.baseline_flow = (1 - alpha) * self.baseline_flow + alpha * flow_count
+        self.baseline_drop = (1 - alpha) * self.baseline_drop + alpha * drop_rate
+
+    # ==========================================
+    # DETECTION
+    # ==========================================
     def detect_attack(self, packet_rate, flow_count, drop_rate):
+        # 1. Guard Clause: If baseline isn't set, we can't calculate deltas.
+        # This fixes the Pylance "None" operator error.
+        if self.baseline_packet is None or self.baseline_flow is None or self.baseline_drop is None:
+            return "NORMAL"
 
-        if packet_rate > 80000:
+        # Now Pylance knows these are floats, not None
+        delta_packet = packet_rate - self.baseline_packet
+        delta_flow = flow_count - self.baseline_flow
+        delta_drop = drop_rate - self.baseline_drop
+
+        # ===== DDOS =====
+        if delta_packet > self.baseline_packet * 3:
             return "DDOS"
 
-        if flow_count > 120:
+        # ===== FLOW OVERFLOW =====
+        if delta_flow > self.baseline_flow * 1.5:  # Changed to 1.5 based on your image
             return "FLOW_OVERFLOW"
 
-        if drop_rate > 0.15:
+        # ===== IP SPOOF =====
+        if delta_drop > 0.05:  # Changed to 0.05 based on your image
             return "IP_SPOOF"
 
-        if 20000 < packet_rate < 80000 and flow_count > 60:
+        # ===== PORT SCAN =====
+        if delta_flow > self.baseline_flow * 1.2 and delta_packet < self.baseline_packet * 2:
             return "PORT_SCAN"
 
         return "NORMAL"
 
+    # ==========================================
+    # MAP ATTACK → ACTION
+    # ==========================================
     def map_action(self, attack):
 
         if attack == "DDOS":
@@ -38,15 +78,28 @@ class DemoDefenseAgent:
         if attack == "PORT_SCAN":
             return 3  # REDIRECT
 
-        return 0  # NORMAL
+        return 0
 
-    def step(self, state):
+    # ==========================================
+    # MAIN STEP
+    # ==========================================
+    def step(self, state, step_count):
 
         packet_rate = state[0]
         flow_count = state[2]
         drop_rate = state[5]
 
+        # Warmup baseline
+        if step_count < self.warmup_steps:
+            self._update_baseline(packet_rate, flow_count, drop_rate)
+            return "BASELINE_LEARNING", 0
+
         attack = self.detect_attack(packet_rate, flow_count, drop_rate)
+
+        # Chỉ update baseline nếu NORMAL
+        if attack == "NORMAL":
+            self._update_baseline(packet_rate, flow_count, drop_rate)
+
         action = self.map_action(attack)
 
         return attack, action
@@ -67,7 +120,7 @@ def main():
 
     for step in range(100):
 
-        attack, action = agent.step(state)
+        attack, action = agent.step(state, step)
 
         next_state, reward, _, _ = env.step(action)
 
@@ -90,7 +143,6 @@ def main():
     df.to_csv("results/demo_timeline.csv", index=False)
 
     print("\n===== DEMO COMPLETE =====")
-    print("Timeline saved to results/demo_timeline.csv")
 
 
 if __name__ == "__main__":

@@ -40,7 +40,7 @@ for step in range(50):
         "action": action,
         "reward": reward
     })
-    print(f"[DQN] Step {step} | Action: {action} | Reward: {reward}" f"| Attack: {env._detect_attack(state)}")
+    print(f"[DQN] Step {step} | Action: {action} | Reward: {reward}" f"| Attack: {env._detect_attack(state) | env._detect_attack(next_state)}")
     state = next_state
 
 df_dqn = pd.DataFrame(timeline_dqn)
@@ -67,7 +67,7 @@ for step in range(50):
         "reward": reward
     })
 
-    print(f"[PPO] Step {step} | Action: {action} | Reward: {reward} | Attack: {env._detect_attack(state)}")
+    print(f"[PPO] Step {step} | Action: {action} | Reward: {reward} | Attack: {env._detect_attack(state) | env._detect_attack(next_state)}")
     state = next_state
 
 df_ppo = pd.DataFrame(timeline_ppo)
