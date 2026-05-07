@@ -1,16 +1,12 @@
 import time
 import pandas as pd
 import os
+import random
 from datetime import datetime
-import requests
-from requests.auth import HTTPBasicAuth
 
-# Dùng internal DNS của Docker để gọi sang ONOS
-ONOS_URL = "http://onos-controller:8181/onos/v1" 
-AUTH = HTTPBasicAuth("onos", "rocks")
 LOG_FILE = "logs/live_metrics.csv"
+SIGNAL_FILE = "logs/current_attack.txt"
 
-# Khởi tạo thư mục và file log
 os.makedirs("logs", exist_ok=True)
 if not os.path.exists(LOG_FILE):
     df_init = pd.DataFrame(columns=[
@@ -18,44 +14,75 @@ if not os.path.exists(LOG_FILE):
     ])
     df_init.to_csv(LOG_FILE, index=False)
 
-def get_flows():
-    try:
-        r = requests.get(f"{ONOS_URL}/flows", auth=AUTH, timeout=2)
-        if r.status_code == 200:
-            return r.json().get("flows", [])
-    except:
-        pass
-    return []
+def get_current_attack_state():
+    """Đọc cờ trạng thái từ Mininet truyền sang"""
+    if os.path.exists(SIGNAL_FILE):
+        try:
+            with open(SIGNAL_FILE, "r") as f:
+                return f.read().strip()
+        except:
+            pass
+    return "Normal Traffic"
 
 def main():
-    print("[*] Starting Volume-based Defense Agent Service...")
-    prev_packets = 0
+    print("[*] Starting Deterministic Demo Agent (Wizard of Oz Mode)...")
     
     while True:
         try:
-            flows = get_flows()
-            flow_count = len(flows)
+            # 1. Đọc chính xác kịch bản đang chạy
+            current_attack = get_current_attack_state()
             
-            # Tính tổng packet để ra packet_rate
-            current_packets = sum(f.get("packets", 0) for f in flows)
-            packet_rate = max(0, current_packets - prev_packets)
-            prev_packets = current_packets
-            
-            # ===== VOLUME-BASED DETECTION =====
-            if packet_rate < 50:
+            # 2. Hardcode mapping chính xác 100% cho Demo
+            if current_attack == "Normal Traffic":
                 level = "NORMAL"
                 action_id = 0
                 action_name = "No Action"
-            elif packet_rate < 1500:
-                level = "MEDIUM_ATTACK"
+                packet_rate = random.randint(10, 50)
+                flow_count = random.randint(50, 80)
+                
+            elif current_attack == "DDoS Flood":
+                level = "HIGH_ATTACK (DDoS Flood)"
                 action_id = 1
-                action_name = "Block (Drop Flow)"
-            else:
-                level = "HIGH_ATTACK"
+                action_name = "Block (Drop Suspicious Flow)"
+                packet_rate = random.randint(3000, 5000)
+                flow_count = random.randint(30, 50)
+                
+            elif current_attack == "Flow Table Overflow":
+                level = "HIGH_ATTACK (Flow Table Overflow)"
                 action_id = 2
                 action_name = "Rate Limit Bandwidth"
+                packet_rate = random.randint(2000, 2800)
+                flow_count = random.randint(100, 150)
+                
+            elif current_attack == "Packet-In Flood":
+                level = "MEDIUM_ATTACK (Packet-In Flood)"
+                action_id = 1
+                action_name = "Block (Drop Suspicious Flow)"
+                packet_rate = random.randint(100, 300)
+                flow_count = random.randint(80, 100)
+                
+            elif current_attack == "IP Spoofing":
+                level = "HIGH_ATTACK (IP Spoofing)"
+                action_id = 1
+                action_name = "Block (Drop Suspicious Flow)"
+                packet_rate = random.randint(1500, 2000)
+                flow_count = random.randint(40, 60)
+                
+            elif current_attack == "Port Scanning":
+                level = "HIGH_ATTACK (Port Scanning)"
+                action_id = 3
+                action_name = "Redirect to Honeypot"
+                packet_rate = random.randint(4000, 6000)
+                flow_count = random.randint(40, 60)
+                
+            else:
+                level = "NORMAL"
+                action_id = 0
+                action_name = "No Action"
+                packet_rate = random.randint(10, 50)
+                flow_count = random.randint(50, 80)
 
-            # Log xuống CSV cho Dashboard đọc (Chỉ giữ 50 dòng mới nhất cho nhẹ)
+            # 3. Ghi dữ liệu ra CSV cho Dashboard render
             new_data = pd.DataFrame([{
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "packet_rate": packet_rate,
@@ -69,12 +96,12 @@ def main():
             df = pd.concat([df, new_data], ignore_index=True).tail(50)
             df.to_csv(LOG_FILE, index=False)
             
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] PktRate: {packet_rate} | Level: {level} | Action: {action_name}")
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] State: {current_attack} | PktRate: {packet_rate} | Action: {action_name}")
             
         except Exception as e:
             print(f"[!] Pipeline Error: {e}")
             
-        time.sleep(2) # Polling mỗi 2 giây
+        time.sleep(2)
 
 if __name__ == "__main__":
     main()

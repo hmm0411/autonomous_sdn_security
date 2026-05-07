@@ -53,3 +53,8 @@ scrape_configs:
     static_configs:
       - targets: [ "control_loop:8000" ]
     scrape_interval: 10s
+
+  - job_name: 'sdn-defense-agent'
+    scrape_interval: 2s
+    static_configs:
+      - targets: ['sdn-defense-agent:8000']
