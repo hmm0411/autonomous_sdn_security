@@ -1,3 +1,5 @@
+from curses import raw
+
 import numpy as np
 
 class StateBuilder:
@@ -20,16 +22,18 @@ class StateBuilder:
         queue_length = min(1.0, packet_rate / 100000)
         controller_cpu = min(1.0, flow_count / 100)
 
-        state = np.array([
-            packet_rate / 10000,     # giống offline
-            byte_rate / 100000,
-            flow_count / 100,
-            entropy / 10,
-            latency / 100,
-            packet_loss,
-            queue_length,
-            controller_cpu,
-            self.prev_action
-        ], dtype=np.float32)
+        def build(self, raw):
 
-        return state
+            state = np.array([
+                raw.get("packet_rate", 0),
+                raw.get("byte_rate", 0),
+                raw.get("flow_count", 0),
+                raw.get("src_ip_entropy", 0),
+                raw.get("latency", 0),
+                raw.get("packet_loss", 0),
+                raw.get("queue_length", 0),
+                raw.get("controller_cpu", 0),
+                self.prev_action
+            ], dtype=np.float32)
+
+            return state

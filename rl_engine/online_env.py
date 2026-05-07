@@ -79,7 +79,8 @@ class OnlineSDNEnv:
         self.prev_bytes = current_bytes
         self.prev_time = now
 
-        entropy = self._compute_entropy(flows)
+        # entropy = self._compute_entropy(flows)
+        entropy = min(3.0, flow_count * 0.02)
         latency = self._estimate_latency()
 
         raw = {
