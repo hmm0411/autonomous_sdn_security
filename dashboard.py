@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import os
 import pandas as pd
 import numpy as np
@@ -27,9 +26,9 @@ st.markdown("""
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/TensorFlowLogo.svg/200px-TensorFlowLogo.svg.png", width=50)
     st.subheader("System Links")
-    st.link_button("ONOS Controller GUI", "http://localhost:8181/onos/ui", use_container_width=True)
-    st.link_button("MLflow (AI Tracking)", "http://localhost:5000", use_container_width=True)
-    st.link_button("Grafana Dashboards", "http://localhost:3000", use_container_width=True)
+    st.link_button("ONOS Controller GUI", "http://34.126.64.185:8181/onos/ui", use_container_width=True)
+    st.link_button("MLflow (AI Tracking)", "http://34.126.64.185:5000", use_container_width=True)
+    st.link_button("Grafana Dashboards", "http://34.126.64.185:3000", use_container_width=True)
     st.divider()
     
     st.markdown("### RL Agent Status")
@@ -151,7 +150,7 @@ svg_html = f"""
 """
 
 with col_topo:
-    components.html(svg_html, height=520)
+    st.markdown(svg_html, unsafe_allow_html=True)
 
 with col_info:
     st.markdown("### Action Log")

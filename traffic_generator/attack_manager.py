@@ -14,12 +14,13 @@ class AttackManager:
         self._set_state("Normal Traffic")
     
     def _set_state(self, state_name):
-        """Hàm ghi tín hiệu tấn công ra file"""
         try:
-            with open(SIGNAL_FILE, "w") as f:
+            # Dùng đường dẫn tuyệt đối để tránh lỗi chạy sai thư mục
+            abs_path = os.path.abspath(SIGNAL_FILE)
+            with open(abs_path, "w") as f:
                 f.write(state_name)
         except Exception as e:
-            print(f"[!] Lỗi ghi file trạng thái: {e}")
+            print(f"Lỗi ghi file: {e}")
 
     # ================================
     # DDoS
