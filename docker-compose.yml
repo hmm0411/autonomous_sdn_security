@@ -215,6 +215,7 @@ services:
     volumes:
       - .:/app
     working_dir: /app
+    # Thêm prometheus_client vào lệnh dưới đây:
     command: >
       sh -c "pip install streamlit pandas numpy requests prometheus_client && streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0"
     ports:
