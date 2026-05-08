@@ -36,7 +36,8 @@ class ONOSCollector:
             packet_loss = 0.0
             queue_length = 0.0
             controller_cpu = 0.1 # Có thể lấy từ thư viện psutil của máy chạy controller
-            previous_action = 0  # Cần lưu lại action đã thực hiện ở vòng trước để đưa vào state
+            attack_indicator = 0.0 # Bằng 1 nếu vượt ngưỡng bất thường
+
             # Mảng 9 features khớp với file train_surrogate.py
             state = [
                 packet_rate, 
@@ -47,8 +48,7 @@ class ONOSCollector:
                 packet_loss, 
                 queue_length, 
                 controller_cpu, 
-                # attack_indicator
-                previous_action
+                attack_indicator
             ]
             
             return state

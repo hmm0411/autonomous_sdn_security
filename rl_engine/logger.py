@@ -1,11 +1,7 @@
 import csv
 import os
 import numpy as np
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except ImportError:
-    # Dùng bản siêu nhẹ cho container Control Loop
-    from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from prometheus_client import Gauge, Counter
 
 # Khởi tạo các Gauge và Counter cho Prometheus

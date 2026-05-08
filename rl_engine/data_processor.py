@@ -15,12 +15,12 @@ def process_sdn_dataset():
     
     # 1. Khai báo các file CSV
     files = {
-        "data\\raw\\normal.csv": 0,
-        "data\\raw\\ddos.csv": 1,
-        "data\\raw\\flow_overflow.csv": 2,
-        "data\\raw\\ip_spoofing.csv": 3,
-        "data\\raw\\packet_in_flood.csv": 4,
-        "data\\raw\\port_scanning.csv": 5
+        "data/raw/normal.csv": 0,
+        "data/raw/ddos.csv": 1,
+        "data/raw/flow_overflow.csv": 2,
+        "data/raw/ip_spoofing.csv": 3,
+        "data/raw/packet_in_flood.csv": 4,
+        "data/raw/port_scanning.csv": 5
     }
     
     # 2. Đọc và gộp toàn bộ dữ liệu

@@ -12,66 +12,83 @@ class ONOSCollector:
         self.url_flows = f"http://{onos_ip}:8181/onos/v1/flows"
         self.url_ports = f"http://{onos_ip}:8181/onos/v1/statistics/ports"
         self.auth = HTTPBasicAuth('onos', 'rocks')
-        self.prev_packet, self.prev_byte, self.prev_drop = self._get_port_stats()
+
+        self.prev_packets = 0
+        self.prev_bytes = 0
         self.prev_time = time.time()
 
     def _get_port_stats(self):
         try:
-            res = requests.get(self.url_ports, auth=self.auth)
-            data = res.json()
-            tp, tb, td = 0, 0, 0
-            for device in data.get("statistics", []):
-                for port in device.get("ports", []):
-                    tp += port.get("packetsReceived", 0)
-                    tb += port.get("bytesReceived", 0)
-                    td += port.get("packetsDropped", 0)
-            return tp, tb, td
+            r = requests.get(self.url_ports, auth=self.auth, timeout=5)
+            data = r.json()
+
+            total_packets = 0
+            total_bytes = 0
+            total_drop = 0
+
+            for dev in data.get("statistics", []):
+                for port in dev.get("ports", []):
+                    total_packets += port.get("packetsReceived", 0)
+                    total_bytes += port.get("bytesReceived", 0)
+                    total_drop += port.get("packetsDropped", 0)
+
+            return total_packets, total_bytes, total_drop
+
         except:
             return 0, 0, 0
 
     def _get_flow_count(self):
         try:
-            res = requests.get(self.url_flows, auth=self.auth)
-            return len(res.json().get("flows", []))
+            r = requests.get(self.url_flows, auth=self.auth, timeout=5)
+            return len(r.json().get("flows", []))
         except:
             return 0
 
     def _measure_latency(self):
         try:
-            # Tự động tìm PID của host h7 để "mượn" không gian mạng của nó
-            pid_cmd = "pgrep -f 'mininet:h7'"
-            pid = subprocess.getoutput(pid_cmd).strip().split('\n')[0]
-            
-            if not pid or not pid.isdigit():
-                return 500.0
+            result = subprocess.run(
+                ["ping", "-c", "1", self.victim_ip],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
 
-            # Dùng mnexec để thực hiện ping từ h7 tới h8
-            cmd = f"sudo mnexec -a {pid} ping -c 1 -W 1 10.0.0.8"
-            output = subprocess.getoutput(cmd)
-
-            match = re.findall(r"time=([\d.]+)", output)
+            match = re.findall(r"time=([\d.]+)", result.stdout)
             if match:
                 return float(match[0])
-            return 500.0
         except:
-            return 500.0
+            pass
 
-    def get_state(self, attack_indicator=0):
-        packet, byte, drop = self._get_port_stats()
+        return 500.0  # Mặc định nếu không đo được
+
+    def get_raw_state(self, attack_indicator=0):
+        packets, bytes_, drops = self._get_port_stats()
+
         now = time.time()
         dt = max(now - self.prev_time, 1e-6)
-        
-        pr = (packet - self.prev_packet) / dt
-        br = (byte - self.prev_byte) / dt
-        dr = (drop - self.prev_drop) / dt
 
-        self.prev_packet, self.prev_byte, self.prev_drop, self.prev_time = packet, byte, drop, now
-        
-        return [pr, br, self._get_flow_count(), self._measure_latency(), dr, attack_indicator]
+        packet_rate = (packets - self.prev_packets) / dt
+        byte_rate = (bytes_ - self.prev_bytes) / dt
+        drop_rate = drops / dt
+
+        self.prev_packets = packets
+        self.prev_bytes = bytes_
+        self.prev_time = now
+
+        flow_count = self._get_flow_count()
+        latency = self._measure_latency()
+
+        return {
+            "packet_rate": packet_rate,
+            "byte_rate": byte_rate,
+            "flow_count": flow_count,
+            "latency": latency,
+            "packet_loss": min(1.0, drop_rate / 1000.0),
+        }
 
     def save_to_csv(self, state, filename):
         with open(filename, "a") as f:
-            f.write(",".join(map(str, state)) + "\n")
+            f.write(",".join(map(str, state.values())) + "\n")
 
 if __name__ == "__main__":
     import argparse
@@ -87,11 +104,11 @@ if __name__ == "__main__":
     
     try:
         with open(args.output, "x") as f:
-            f.write("packet_rate,byte_rate,flow_count,latency,drop_rate,label\n")
+            f.write("packet_rate,byte_rate,flow_count,latency,packet_loss,label\n")
     except FileExistsError: pass
 
     for i in range(1, args.samples + 1):
-        state = collector.get_state(attack_indicator=args.label)
+        state = collector.get_raw_state(attack_indicator=args.label)
         collector.save_to_csv(state, args.output)
         print(f"[{i}/{args.samples}] {state}")
         time.sleep(args.interval)

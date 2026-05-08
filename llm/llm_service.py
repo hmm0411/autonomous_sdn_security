@@ -19,9 +19,8 @@ def call_llm(prompt):
                 {"role": "system", "content": "You are an SDN network security expert."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=500,
-            temperature=0.3,
-            top_p=0.9
+            max_tokens=150,
+            temperature=0.3
         )
 
         return res.choices[0].message.content

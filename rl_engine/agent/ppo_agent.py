@@ -222,7 +222,6 @@ class PPOAgent:
     def load(self, path: str) -> None:
         checkpoint = torch.load(path, map_location=self.device)
 
-    # Nếu là full checkpoint dict
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
             self.model.load_state_dict(checkpoint["model_state_dict"])
 
@@ -230,10 +229,9 @@ class PPOAgent:
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
             self.last_action = checkpoint.get("last_action", 0)
-
         else:
-        # Nếu chỉ là state_dict thuần
             self.model.load_state_dict(checkpoint)
 
         self.model.to(self.device)
+        self.model.eval()
         print("PPO model loaded successfully")

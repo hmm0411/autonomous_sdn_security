@@ -11,8 +11,7 @@ S = [
     packet_loss,        # 5
     queue_length,       # 6
     controller_cpu,     # 7
-    attack_indicator,   # 8
-    previous_action     # 9
+    previous_action     # 8
 ]
 
 Action mapping suggestion:
@@ -67,7 +66,6 @@ class BaselineRuleBasedAgent:
         packet_loss,
         queue_length,
         controller_cpu,
-        attack_indicator,
         previous_action
     ]
     """
@@ -92,59 +90,29 @@ class BaselineRuleBasedAgent:
         packet_loss = parsed["packet_loss"]
         queue_length = parsed["queue_length"]
         controller_cpu = parsed["controller_cpu"]
-        attack_indicator = parsed["attack_indicator"]
         previous_action = parsed["previous_action"]
 
-        # =========================
-        # Rule-based decision logic
-        # =========================
+        # Heuristic anomaly score
+        anomaly_score = 0
 
-        # Rule 1: Severe attack / system overload -> isolate
-        if (
-            attack_indicator == 1
-            and (
-                packet_rate > self.config.severe_packet_rate_threshold
-                or byte_rate > self.config.severe_byte_rate_threshold
-                or flow_count > self.config.severe_flow_count_threshold
-                or latency > self.config.severe_latency_threshold
-                or packet_loss > self.config.severe_packet_loss_threshold
-                or queue_length > self.config.severe_queue_length_threshold
-                or controller_cpu > self.config.severe_cpu_threshold
-            )
-        ):
-            action = self.config.isolate_action_id
+        if packet_rate > self.config.packet_rate_threshold:
+            anomaly_score += 1
+        if flow_count > self.config.flow_count_threshold:
+            anomaly_score += 1
+        if src_ip_entropy > self.config.src_ip_entropy_threshold:
+            anomaly_score += 1
+        if packet_loss > self.config.packet_loss_threshold:
+            anomaly_score += 1
+        if controller_cpu > self.config.controller_cpu_threshold:
+            anomaly_score += 1
 
-        # Rule 2: High-confidence attack symptoms -> block
-        elif (
-            attack_indicator == 1
-            and (
-                packet_rate > self.config.packet_rate_threshold
-                or flow_count > self.config.flow_count_threshold
-                or src_ip_entropy > self.config.src_ip_entropy_threshold
-            )
-        ):
+        # Decision logic
+        if anomaly_score >= 3:
             action = self.config.block_action_id
-
-        # Rule 3: Congestion/network degradation -> limit bandwidth
-        elif (
-            byte_rate > self.config.byte_rate_threshold
-            or queue_length > self.config.queue_length_threshold
-            or packet_loss > self.config.packet_loss_threshold
-        ):
+        elif anomaly_score == 2:
             action = self.config.limit_bw_action_id
-
-        # Rule 4: Latency high but not yet severe -> redirect
         elif latency > self.config.latency_threshold:
             action = self.config.redirect_action_id
-
-        # Rule 5: Avoid overly aggressive repeated isolate/block
-        elif previous_action == self.config.isolate_action_id and attack_indicator == 0:
-            action = self.config.no_action_id
-
-        elif previous_action == self.config.block_action_id and attack_indicator == 0:
-            action = self.config.no_action_id
-
-        # Default: no action
         else:
             action = self.config.no_action_id
 
@@ -166,14 +134,13 @@ class BaselineRuleBasedAgent:
                 "packet_loss": float(state.get("packet_loss", 0.0)),
                 "queue_length": float(state.get("queue_length", 0.0)),
                 "controller_cpu": float(state.get("controller_cpu", 0.0)),
-                "attack_indicator": int(state.get("attack_indicator", 0)),
                 "previous_action": int(state.get("previous_action", self.last_action)),
             }
 
         if isinstance(state, (list, tuple, np.ndarray)):
-            if len(state) < 10:
+            if len(state) < 9:
                 raise ValueError(
-                    f"State must have at least 10 elements, got {len(state)}"
+                    f"State must have at least 9 elements, got {len(state)}"
                 )
 
             return {
@@ -185,8 +152,7 @@ class BaselineRuleBasedAgent:
                 "packet_loss": float(state[5]),
                 "queue_length": float(state[6]),
                 "controller_cpu": float(state[7]),
-                "attack_indicator": int(state[8]),
-                "previous_action": int(state[9]),
+                "previous_action": int(state[8]),
             }
 
         raise TypeError(

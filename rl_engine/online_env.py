@@ -5,6 +5,7 @@ import numpy as np
 import time
 import subprocess
 from requests.auth import HTTPBasicAuth
+from rl_engine.state_builder import StateBuilder
 
 class OnlineSDNEnv:
 
@@ -19,12 +20,26 @@ class OnlineSDNEnv:
         self.auth = HTTPBasicAuth(username, password)
         self.polling_interval = polling_interval
         self.previous_action = 0
+        self.prev_packets = 0
+        self.prev_bytes = 0
+        self.prev_time = time.time()
+        self.baseline = {
+            "flow_count": None,
+            "entropy": None,
+            "packet_rate": None,
+            "latency": None
+        }
+        self.builder = StateBuilder()
 
     # ==========================================
     # RESET
     # ==========================================
     def reset(self):
         self.previous_action = 0
+        self.builder.prev_action = 0
+        self.prev_packets = 0
+        self.prev_bytes = 0
+        self.prev_time = time.time()
         return self._get_state()
 
     # ==========================================
@@ -37,15 +52,12 @@ class OnlineSDNEnv:
         time.sleep(1)
 
         state = self._get_state()
-
         reward = self._compute_reward(state, action)
 
         self.previous_action = action
+        self.builder.prev_action = action
 
-        done = False
-
-        return state, reward, done, {}
-
+        return state, reward, False, {}
     # ==========================================
     # STATE COLLECTION
     # ==========================================
@@ -53,33 +65,42 @@ class OnlineSDNEnv:
 
         flows = self._get_flows()
 
-        packet_rate = sum(f.get("packets", 0) for f in flows)
-        byte_rate = sum(f.get("bytes", 0) for f in flows)
+        current_packets = sum(f.get("packets", 0) for f in flows)
+        current_bytes = sum(f.get("bytes", 0) for f in flows)
         flow_count = len(flows)
 
-        src_ip_entropy = self._compute_entropy(flows)
+        now = time.time()
+        dt = max(now - self.prev_time, 1e-6)
+
+        packet_rate = (current_packets - self.prev_packets) / dt
+        byte_rate = (current_bytes - self.prev_bytes) / dt
+
+        self.prev_packets = current_packets
+        self.prev_bytes = current_bytes
+        self.prev_time = now
+
+        # entropy = self._compute_entropy(flows)
+        entropy = min(3.0, flow_count * 0.02)
         latency = self._estimate_latency()
 
-        packet_loss = 0.0
-        queue_length = flow_count / 100.0
-        controller_cpu = 0.0
+        raw = {
+            "packet_rate": packet_rate,
+            "byte_rate": byte_rate,
+            "flow_count": flow_count,
+            "latency": latency,
+            "packet_loss": 0.0,
+            "src_ip_entropy": entropy,
+            "queue_length": flow_count,
+            "controller_cpu": 0.0
+        }
 
-        # IMPORTANT: normalize giống offline
-        packet_rate /= 1e6
-        byte_rate /= 1e9
-        flow_count /= 1000.0
+        state = self.builder.build(raw)
 
-        state = np.array([
-            packet_rate,
-            byte_rate,
-            flow_count,
-            src_ip_entropy,
-            latency,
-            packet_loss,
-            queue_length,
-            controller_cpu,
-            self.previous_action
-        ], dtype=np.float32)
+        print(
+            f"Flow={flow_count} | "
+            f"PacketRate={packet_rate:.2f} | "
+            f"Entropy={entropy:.2f}"
+        )
 
         return state
 
@@ -114,11 +135,8 @@ class OnlineSDNEnv:
             )
             if r.status_code == 200:
                 return r.json().get("flows", [])
-            else:
-                print("Flow fetch error:", r.status_code)
-                return []
-        except Exception as e:
-            print("Failed to get flows:", str(e))
+            return []
+        except:
             return []
         
     def _detect_top_src_ip(self, flows):
@@ -140,6 +158,7 @@ class OnlineSDNEnv:
     # ==========================================
     def _compute_entropy(self, flows):
         src_ips = []
+
         for f in flows:
             for c in f.get("selector", {}).get("criteria", []):
                 if c.get("type") == "IPV4_SRC":
@@ -157,7 +176,6 @@ class OnlineSDNEnv:
     # LATENCY REAL PING
     # ==========================================
     def _estimate_latency(self):
-
         try:
             result = subprocess.run(
                 ["ping", "-c", "1", "10.0.0.1"],
@@ -168,12 +186,33 @@ class OnlineSDNEnv:
 
             for line in result.stdout.split("\n"):
                 if "time=" in line:
-                    return float(line.split("time=")[1].split(" ")[0]) / 1000.0
-
+                    return float(line.split("time=")[1].split(" ")[0])
         except:
             pass
 
         return 0.0
+    
+    # ==========================================
+    # DETECT ATTACK
+    # ==========================================
+    
+    def _detect_attack(self, state):
+
+        packet_rate = state[0]
+        flow_count = state[2]
+        entropy = state[3]
+        latency = state[4]
+
+        if flow_count > 0.15:
+            return 1
+
+        if entropy > 2.0:
+            return 1
+
+        if packet_rate > 0.01:
+            return 1
+
+        return 0
 
     # ==========================================
     # ACTION MAPPING
@@ -343,8 +382,7 @@ class OnlineSDNEnv:
         flow_count = state[2]
         latency = state[4]
 
-        qos_penalty = 0.5 * flow_count + 2.0 * latency
+        qos_penalty = 2.0 * flow_count + 1.0 * latency
+        switching_penalty = 0.3 if action != self.previous_action else 0.0
 
-        switching_penalty = 0.2 if action != self.previous_action else 0.0
-
-        return -qos_penalty - switching_penalty
+        return 1.0 - qos_penalty - switching_penalty
