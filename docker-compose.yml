@@ -44,8 +44,8 @@ services:
       dockerfile: Dockerfile
     container_name: rl-agent-dqn
     depends_on:
-      # - mlflow
-      - demo-initializer
+      - mlflow
+      # - demo-initializer
       - controller
     ports:
       - "9000:9000"
