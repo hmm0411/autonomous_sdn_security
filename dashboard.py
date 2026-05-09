@@ -31,6 +31,7 @@ with st.sidebar:
     st.link_button("ONOS Controller GUI", "http://34.126.64.185:8181/onos/ui", use_container_width=True)
     st.link_button("MLflow (AI Tracking)", "http://34.126.64.185:5000", use_container_width=True)
     st.link_button("Grafana Dashboards", "http://34.126.64.185:3000", use_container_width=True)
+    st.link_button("Prometheus Metrics", "http://34.126.64.185:9090", use_container_width=True)
     st.divider()
     
     st.markdown("### RL Agent Status")

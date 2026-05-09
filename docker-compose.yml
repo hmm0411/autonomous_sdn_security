@@ -202,8 +202,9 @@ services:
     volumes:
       - .:/app
     working_dir: /app
+    # MÌNH ĐÃ THÊM prometheus_client VÀO DÒNG DƯỚI NÀY:
     command: >
-      sh -c "pip install pandas numpy requests && python realtime_pipeline.py"
+      sh -c "pip install pandas numpy requests prometheus_client && python realtime_pipeline.py"
     networks:
       - sdn-net
     depends_on:

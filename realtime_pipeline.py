@@ -54,6 +54,7 @@ def main():
             # ---------------------------------------------------------
             # 2. XÁC ĐỊNH MỤC TIÊU VÀ HÀNH ĐỘNG THEO TỪNG LOẠI TẤN CÔNG
             # ---------------------------------------------------------
+            threat_num = 0
             if current_attack == "Normal Traffic":
                 level, action_id, action_name = "NORMAL", 0, "No Action"
                 target_pr = random.randint(10, 40)
