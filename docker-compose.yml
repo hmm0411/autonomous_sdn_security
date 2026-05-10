@@ -63,7 +63,8 @@ services:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - CI=false
     # Ép Docker chạy thẳng Train rồi đến Serving, bỏ qua hoàn toàn Supervisord
-    entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_dqn && python -m rl_engine.agent.serving_dqn"]
+    # entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_dqn && python -m rl_engine.agent.serving_dqn"]
+    entrypoint: ["python", "-m", "rl_engine.agent.serving_dqn"]
     restart: on-failure
   # Container chạy PPO
   # Container chạy PPO
@@ -91,7 +92,8 @@ services:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - CI=false
     # Ép Docker chạy thẳng Train rồi đến Serving, bỏ qua hoàn toàn Supervisord
-    entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_ppo && python -m rl_engine.agent.serving_ppo"]
+    # entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_ppo && python -m rl_engine.agent.serving_ppo"]
+    entrypoint: ["python", "-m", "rl_engine.agent.serving_ppo"]
     restart: on-failure
 
   # twin:
