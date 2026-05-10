@@ -68,7 +68,7 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=None):
 
     total_episodes = 2 if IS_CI else MAX_EPISODES
 
-    run_context = mlflow.start_run(run_name=f"Seed_{seed_value}", nested=True) if (not IS_CI and parent_run) else None
+    # run_context = mlflow.start_run(run_name=f"Seed_{seed_value}", nested=True) if (not IS_CI and parent_run) else None
 
     try:
         for episode in range(total_episodes):
@@ -145,15 +145,15 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=None):
                     mlflow.log_metric(f"reward_std_seed_{seed_value}", float(std_reward), step=episode)
                     mlflow.log_metric(f"reward_best_seed_{seed_value}", float(best_reward_so_far), step=episode)
                     mlflow.log_metric(f"loss_seed_{seed_value}", float(avg_loss), step=episode)
-                except Exception: pass
+                except Exception as e: 
+                    logging.error(f"Lỗi MLflow ở DQN Seed {seed_value}: {e}")
                 
             if episode % 20 == 0:
                 logging.info(f"DQN | Ep {episode} | R: {episode_reward:.1f} | Mean: {mean_reward:.1f} | Best: {best_reward_so_far:.1f}")
 
     finally:
         # Đảm bảo luôn đóng Child Run
-        if run_context:
-            mlflow.end_run()
+        pass
     
     agent.epsilon = epsilon  # Cập nhật epsilon cuối cùng vào agent trước khi trả về
 
