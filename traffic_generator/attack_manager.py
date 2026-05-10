@@ -37,6 +37,11 @@ class AttackManager:
                 pid = attacker.cmd(cmd).strip()
                 self.active_pids.append((attacker, pid))
 
+        import os
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/current_attack.txt", "w") as f:
+            f.write("DDoS Flood")
+
     def packet_in_flood(self):
         self._set_state("Packet-In Flood")
         attacker = random.choice(self.attackers)
@@ -46,6 +51,11 @@ class AttackManager:
             pid = attacker.cmd(cmd).strip()
             self.active_pids.append((attacker, pid))
 
+        import os
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/current_attack.txt", "w") as f:
+            f.write("Packet-In Flood")
+
     def flow_overflow(self):
         self._set_state("Flow Table Overflow")
         attacker = random.choice(self.attackers)
@@ -54,6 +64,11 @@ class AttackManager:
             cmd = (f'hping3 --flood --rand-source -S -p {random.randint(1,65535)} {self.victim.IP()} --fast > /dev/null 2>&1 & echo $!')
             pid = attacker.cmd(cmd).strip()
             self.active_pids.append((attacker, pid))
+
+        import os
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/current_attack.txt", "w") as f:
+            f.write("Flow Table Overflow")
 
     def ip_spoofing(self):
         self._set_state("IP Spoofing")
@@ -65,6 +80,11 @@ class AttackManager:
             pid = attacker.cmd(cmd).strip()
             self.active_pids.append((attacker, pid))
 
+        import os
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/current_attack.txt", "w") as f:
+            f.write("IP Spoofing")
+
     def port_scanning(self):
         self._set_state("Port Scanning")
         attacker = random.choice(self.attackers)
@@ -73,6 +93,11 @@ class AttackManager:
             cmd = (f'nmap -sS -p 1-65535 -T5 --max-retries 1 {self.victim.IP()} > /dev/null 2>&1 & echo $!')
             pid = attacker.cmd(cmd).strip()
             self.active_pids.append((attacker, pid))
+
+        import os
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/current_attack.txt", "w") as f:
+            f.write("Port Scanning")
 
     def stop_all(self):
         self._set_state("Normal Traffic")
@@ -86,3 +111,8 @@ class AttackManager:
             host.cmd('pkill -9 hping3 nmap python3')
         self.active_pids.clear()
         print("[+] Attack stopped.")
+
+        import os
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/current_attack.txt", "w") as f:
+            f.write("Normal Traffic")
