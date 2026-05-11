@@ -20,4 +20,4 @@ WINDOW_SIZE = 50
 clip_eps = 0.15
 entropy_coef = 0.02
 value_coef = 0.5
-LR_PPO = 2e-4
+LR_PPO = 1e-4

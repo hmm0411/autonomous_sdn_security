@@ -7,6 +7,7 @@ import mlflow
 import mlflow.pytorch
 from prometheus_client import start_http_server, Gauge
 import torch
+import gc
 from torch.optim.lr_scheduler import LinearLR
 
 from rl_engine.online_env import OnlineSDNEnv
@@ -90,8 +91,8 @@ def run_single_seed_ppo(seed_value, df_train, parent_run=None):
         # Cập nhật mô hình PPO sau mỗi episode
         metrics = agent.update(states, actions, log_probs, rewards, dones)
         
-        policy_loss = metrics.get("policy_loss", 0.0) if metrics else 0.0
-        value_loss = metrics.get("value_loss", 0.0) if metrics else 0.0
+        policy_loss = float(metrics.get("policy_loss", 0.0)) if metrics else 0.0
+        value_loss = float(metrics.get("value_loss", 0.0)) if metrics else 0.0
         total_loss = policy_loss + value_loss
 
         # Thống kê
@@ -126,7 +127,8 @@ def run_single_seed_ppo(seed_value, df_train, parent_run=None):
                 mlflow.log_metric(f"loss_total_seed_{seed_value}", float(total_loss), step=episode)
                 mlflow.log_metric(f"loss_policy_seed_{seed_value}", float(policy_loss), step=episode)
                 mlflow.log_metric(f"loss_value_seed_{seed_value}", float(value_loss), step=episode)
-            except Exception: pass
+            except Exception as e:
+                logging.error(f"Lỗi MLflow ở PPO Seed {seed_value}: {e}")
 
         # Log nội bộ
         logger.log_ppo(
@@ -143,8 +145,13 @@ def run_single_seed_ppo(seed_value, df_train, parent_run=None):
         if episode % 20 == 0:
             logging.info(f"PPO | Ep {episode} | R: {episode_reward:.1f} | Mean: {mean_reward:.1f} | Best: {best_reward_so_far:.1f}")
 
-    logger.close()
+        del states, actions, rewards, log_probs, dones
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
     
+    logger.close()
+
     return {
         "rewards": seed_rewards,
         "losses": seed_losses,

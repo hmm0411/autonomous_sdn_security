@@ -58,3 +58,13 @@ scrape_configs:
     scrape_interval: 2s
     static_configs:
       - targets: ['sdn-defense-agent:8000']
+
+  - job_name: 'rl-agent-dqn'
+    scrape_interval: 2s
+    static_configs:
+      - targets: ['rl-agent-dqn:9000']
+
+  - job_name: 'rl-agent-ppo'
+    scrape_interval: 2s
+    static_configs:
+      - targets: ['rl-agent-ppo:9001']
