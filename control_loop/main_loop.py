@@ -1,15 +1,16 @@
 import time
 import numpy as np
+import csv
 
 from rl_engine.state_builder import StateBuilder
 from control_loop.controller_client import execute_action
 from rl_engine.reward import Reward
 
-from control_loop.rl_client import get_best_action
+from control_loop.rl_client import get_action
 from control_loop.metrics import update_metrics
 from control_loop.state_collector import get_state
 
-STATE_DIM = 9
+STATE_DIM = 8
 SLEEP_TIME = 2
 
 state_builder = StateBuilder()
@@ -30,17 +31,20 @@ while True:
 
         # ===== BUILD STATE =====
         state = np.array(state_builder.build(raw), dtype=np.float32)
+        with open("data/realtime_log.csv", "a") as f:
+            writer = csv.writer(f)
+            writer.writerow(state.tolist())
 
         if not validate_state(state):
             print("Invalid state:", state)
             time.sleep(SLEEP_TIME)
             continue
 
-        # ===== AUTO CHỌN MODEL =====
-        action, model, reward = get_best_action(
-            state,
-            lambda s, a: reward_calc.calculate(raw, a)
-        )
+        # ===== CALL RL =====
+        action, model = get_action(state)
+
+        # ===== CALCULATE REWARD =====
+        reward = reward_calc.calculate(raw, action)
 
         # ===== BASELINE =====
         action_base = baseline_policy(state)
@@ -53,6 +57,7 @@ while True:
         update_metrics(state, reward, model, action)
         update_metrics(state, reward_base, "baseline", action_base)
 
+        # ===== LOG =====
         print(f"[AUTO] {model} | action={action} | reward={reward}")
         print(f"[BASELINE] action={action_base} | reward={reward_base}")
 

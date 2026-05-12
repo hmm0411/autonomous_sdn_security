@@ -39,63 +39,69 @@ services:
 
   # Container chạy DQN
   # Container chạy DQN
-  rl-agent-dqn:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: rl-agent-dqn
+  # rl-agent-dqn:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: rl-agent-dqn
+  #   depends_on:
+  #     - mlflow
+  #     - controller
+  #   ports:
+  #     - "9000:9000"
+  #   networks:
+  #     - sdn-net
+  #   volumes:
+  #     - .:/app
+  #     - ./results:/app/results
+  #     - ./models:/app/models
+  #     - ./logs:/app/logs
+  #     - ./mlruns:/app/mlruns
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
+  #     - PYTHONPATH=/app
+  #     - MLFLOW_TRACKING_URI=http://mlflow:5000
+  #     - CI=false
+  #   # Ép Docker chạy thẳng Train rồi đến Serving, bỏ qua hoàn toàn Supervisord
+  #   # entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_dqn && python -m rl_engine.agent.serving_dqn"]
+  #   entrypoint: ["python", "-m", "rl_engine.agent.serving_dqn"]
+  #   restart: on-failure
+  # # Container chạy PPO
+  # # Container chạy PPO
+  # rl-agent-ppo:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: rl-agent-ppo
+  #   depends_on:
+  #     - mlflow
+  #     - controller
+  #   ports:
+  #     - "9001:9001"
+  #   networks:
+  #     - sdn-net
+  #   volumes:
+  #     - .:/app
+  #     - ./results:/app/results
+  #     - ./models:/app/models
+  #     - ./logs:/app/logs
+  #     - ./mlruns:/app/mlruns
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
+  #     - PYTHONPATH=/app
+  #     - MLFLOW_TRACKING_URI=http://mlflow:5000
+  #     - CI=false
+  #   # Ép Docker chạy thẳng Train rồi đến Serving, bỏ qua hoàn toàn Supervisord
+  #   # entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_ppo && python -m rl_engine.agent.serving_ppo"]
+  #   entrypoint: ["python", "-m", "rl_engine.agent.serving_ppo"]
+  #   restart: on-failure
+  rl-serving:
+    build: ./rl_engine
+    ports:
+      - "8000:8000"
+      - "9100:9100"
     depends_on:
       - mlflow
-      - controller
-    ports:
-      - "9000:9000"
-    networks:
-      - sdn-net
-    volumes:
-      - .:/app
-      - ./results:/app/results
-      - ./models:/app/models
-      - ./logs:/app/logs
-      - ./mlruns:/app/mlruns
-    environment:
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - CI=false
-    # Ép Docker chạy thẳng Train rồi đến Serving, bỏ qua hoàn toàn Supervisord
-    # entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_dqn && python -m rl_engine.agent.serving_dqn"]
-    entrypoint: ["python", "-m", "rl_engine.agent.serving_dqn"]
-    restart: on-failure
-  # Container chạy PPO
-  # Container chạy PPO
-  rl-agent-ppo:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: rl-agent-ppo
-    depends_on:
-      - mlflow
-      - controller
-    ports:
-      - "9001:9001"
-    networks:
-      - sdn-net
-    volumes:
-      - .:/app
-      - ./results:/app/results
-      - ./models:/app/models
-      - ./logs:/app/logs
-      - ./mlruns:/app/mlruns
-    environment:
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - CI=false
-    # Ép Docker chạy thẳng Train rồi đến Serving, bỏ qua hoàn toàn Supervisord
-    # entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_ppo && python -m rl_engine.agent.serving_ppo"]
-    entrypoint: ["python", "-m", "rl_engine.agent.serving_ppo"]
-    restart: on-failure
-
   # twin:
   #   build: ./digital_twin
   #   depends_on:

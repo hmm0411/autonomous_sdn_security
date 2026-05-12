@@ -1,6 +1,7 @@
 import os
 import logging
 import collections
+from pyexpat import model
 import numpy as np
 import pandas as pd
 import mlflow
@@ -45,6 +46,21 @@ if not IS_CI:
     mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("SDN_Autonomous_Security")
+
+with mlflow.start_run():
+    mlflow.log_param("experiment", "PPO_Training")
+    mlflow.log_param("seeds", [42, 123, 456])
+    mlflow.log_param("max_episodes", MAX_EPISODES)
+    mlflow.log_param("max_steps", MAX_STEPS)
+    mlflow.log_param("batch_size", BATCH_SIZE)
+    mlflow.log_param("buffer_size", BUFFER_SIZE)
+    mlflow.log_param("epsilon_start", EPS_START)
+    mlflow.log_param("epsilon_end", EPS_END)
+    mlflow.log_param("epsilon_decay", EPS_DECAY)
+    mlflow.log_metric("reward", final_reward)
+
+    mlflow.pytorch.log_model(model, "model", registered_model_name="SDN_PPO_Model")
+
 
 def run_single_seed_ppo(seed_value, df_train, parent_run=None):
     """Huấn luyện PPO với một Seed cụ thể"""
@@ -277,17 +293,17 @@ def train_multi_seeds_ppo():
     if not IS_CI and best_agent_overall is not None:
         try:
             # 1. Bỏ qua cảnh báo policy vì ta biết chắc Agent có thuộc tính này
-            mlflow.pytorch.log_model(best_agent_overall.model, "ppo_model") # type: ignore
-            
+            mlflow.pytorch.log_model(best_agent_overall.model, "ppo_model", registered_model_name="SDN_PPO_Model") 
+            mlflow.log_metric("final_mean_reward", float(mean_rewards[-1]))
+            mlflow.log_metric("best_mean_reward", float(np.max(mean_rewards)))
+            logging.info("Logged PPO model and metrics to MLflow!")            
             # 2. Lấy active run an toàn
             current_run = mlflow.active_run()
             if current_run is not None:
-                run_id = current_run.info.run_id
-                mlflow.register_model(f"runs:/{run_id}/ppo_model", "SDN_PPO_Model")
                 logging.info("Đã đăng ký SDN_PPO_Model lên MLflow Registry!")
             else:
                 logging.warning("Không có Active Run nào trên MLflow. Bỏ qua bước đăng ký Model.")
-                
+                logging.info("Failed to register PPO model.")
         except Exception as e:
             logging.error(f"Lỗi đăng ký model: {e}")
             

@@ -1,6 +1,7 @@
 import os
 import random
 import logging
+from xml.parsers.expat import model
 import numpy as np
 import pandas as pd
 import mlflow
@@ -46,7 +47,7 @@ if not IS_CI:
     mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("SDN_Autonomous_Security")
-
+    
 def run_single_seed_dqn(seed_value, df_train, parent_run=None):
     """Huấn luyện DQN với một Seed cụ thể"""
     set_seed(seed_value)
@@ -287,17 +288,18 @@ def train_multi_seeds_dqn():
     # Đăng ký model lên Registry
     if not IS_CI and best_agent_overall is not None:
         try:
-             mlflow.pytorch.log_model(best_agent_overall.q_net, "dqn_model") # type: ignore
+             mlflow.pytorch.log_model(best_agent_overall.q_net, "dqn_model", registered_model_name="SDN_DQN_Model") 
+             mlflow.log_metric("final_mean_reward", float(mean_rewards[-1]))
+             mlflow.log_metric("best_mean_reward", float(np.max(mean_rewards)))
+             logging.info("Logged DQN model and metrics to MLflow!")
              current_run = mlflow.active_run()
              if current_run is not None:
-                 run_id = current_run.info.run_id
-                 mlflow.register_model(f"runs:/{run_id}/dqn_model", "SDN_DQN_Model")
                  logging.info("Đã đăng ký SDN_DQN_Model lên Registry!")
              else:
                  logging.warning("Không có Active Run nào trên MLflow. Bỏ qua bước đăng ký Model.")
         except Exception as e:
              logging.error(f"Failed to register model: {e}")
-             
+             logging.info("Failed to register DQN model.")
     if not IS_CI:
         mlflow.end_run()
 
