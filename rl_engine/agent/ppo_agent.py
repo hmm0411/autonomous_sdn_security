@@ -45,20 +45,19 @@ class ActorCritic(nn.Module):
 
 class PPOAgent:
     """
-    Expected state format:
-    state = [
-        packet_rate,        # 0
-        byte_rate,          # 1
-        flow_count,         # 2
-        src_ip_entropy,     # 3
-        latency,            # 4
-        packet_loss,        # 5
-        queue_length,       # 6
-        controller_cpu,     # 7
-        # attack_indicator,   # 8
-        previous_action     # 8
-    ]
-    """
+Expected state format:
+state = [
+    packet_rate,        # 0
+    byte_rate,          # 1
+    flow_count,         # 2
+    flow_growth_rate,   # 3
+    src_ip_entropy,     # 4
+    latency,            # 5
+    packet_loss,        # 6
+    controller_cpu,     # 7
+    previous_action     # 8, normalized 0-1
+]
+"""
 
     def __init__(
         self,
@@ -89,17 +88,20 @@ class PPOAgent:
 
     def _parse_state(self, state) -> np.ndarray:
         if isinstance(state, dict):
+            previous_action = float(state.get("previous_action", self.last_action))
+            if previous_action > 1.0:
+                previous_action = previous_action / 4.0
+
             return np.array([
                 float(state.get("packet_rate", 0.0)),
                 float(state.get("byte_rate", 0.0)),
-                float(state.get("flow_count", 0)),
+                float(state.get("flow_count", 0.0)),
+                float(state.get("flow_growth_rate", 0.0)),
                 float(state.get("src_ip_entropy", 0.0)),
                 float(state.get("latency", 0.0)),
                 float(state.get("packet_loss", 0.0)),
-                float(state.get("queue_length", 0.0)),
                 float(state.get("controller_cpu", 0.0)),
-                # float(state.get("attack_indicator", 0)),
-                float(state.get("previous_action", self.last_action)),
+                previous_action,
             ], dtype=np.float32)
 
         if isinstance(state, (list, tuple, np.ndarray)):

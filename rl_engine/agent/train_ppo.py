@@ -47,21 +47,6 @@ if not IS_CI:
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("SDN_Autonomous_Security")
 
-with mlflow.start_run():
-    mlflow.log_param("experiment", "PPO_Training")
-    mlflow.log_param("seeds", [42, 123, 456])
-    mlflow.log_param("max_episodes", MAX_EPISODES)
-    mlflow.log_param("max_steps", MAX_STEPS)
-    mlflow.log_param("batch_size", BATCH_SIZE)
-    mlflow.log_param("buffer_size", BUFFER_SIZE)
-    mlflow.log_param("epsilon_start", EPS_START)
-    mlflow.log_param("epsilon_end", EPS_END)
-    mlflow.log_param("epsilon_decay", EPS_DECAY)
-    mlflow.log_metric("reward", final_reward)
-
-    mlflow.pytorch.log_model(model, "model", registered_model_name="SDN_PPO_Model")
-
-
 def run_single_seed_ppo(seed_value, df_train, parent_run=None):
     """Huấn luyện PPO với một Seed cụ thể"""
     set_seed(seed_value)
@@ -213,7 +198,7 @@ def train_multi_seeds_ppo():
             best_agent_overall = trained_agent
 
     # ==== SAVE BEST PPO MODEL ====
-    if best_agent_overall is not None:
+    if best_agent_overall is None:
         logging.warning("No best PPO agent found. Using last trained agent.")
         best_agent_overall = trained_agent  # Lấy agent cuối cùng làm fallback
     model_path = os.path.join(MODELS_DIR, "ppo_model.pth")

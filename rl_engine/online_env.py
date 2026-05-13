@@ -6,6 +6,7 @@ import time
 import subprocess
 from requests.auth import HTTPBasicAuth
 from rl_engine.state_builder import StateBuilder
+from traffic_generator.onos_collector import ONOSCollector
 
 class OnlineSDNEnv:
 
@@ -62,44 +63,29 @@ class OnlineSDNEnv:
     # STATE COLLECTION
     # ==========================================
     def _get_state(self):
+        if not hasattr(self, "collector"):
+            base_url = self.controller_url.replace("http://", "").replace("/onos/v1", "")
+            onos_ip = base_url.split(":")[0]
 
-        flows = self._get_flows()
+            self.collector = ONOSCollector(
+                onos_ip=onos_ip,
+                victim_ip="10.0.0.8",
+                latency_host="h1",
+                entropy_host="h8",
+                entropy_iface="h8-eth0",
+                onos_container="onos-controller"
+            )
 
-        current_packets = sum(f.get("packets", 0) for f in flows)
-        current_bytes = sum(f.get("bytes", 0) for f in flows)
-        flow_count = len(flows)
-
-        now = time.time()
-        dt = max(now - self.prev_time, 1e-6)
-
-        packet_rate = (current_packets - self.prev_packets) / dt
-        byte_rate = (current_bytes - self.prev_bytes) / dt
-
-        self.prev_packets = current_packets
-        self.prev_bytes = current_bytes
-        self.prev_time = now
-
-        # entropy = self._compute_entropy(flows)
-        entropy = min(3.0, flow_count * 0.02)
-        latency = self._estimate_latency()
-
-        raw = {
-            "packet_rate": packet_rate,
-            "byte_rate": byte_rate,
-            "flow_count": flow_count,
-            "latency": latency,
-            "packet_loss": 0.0,
-            "src_ip_entropy": entropy,
-            "queue_length": flow_count,
-            "controller_cpu": 0.0
-        }
-
+        raw = self.collector.get_raw_state()
         state = self.builder.build(raw)
 
         print(
-            f"Flow={flow_count} | "
-            f"PacketRate={packet_rate:.2f} | "
-            f"Entropy={entropy:.2f}"
+            f"PacketRate={raw['packet_rate']:.2f} | "
+            f"Flow={raw['flow_count']} | "
+            f"Growth={raw['flow_growth_rate']:.2f} | "
+            f"Entropy={raw['src_ip_entropy']:.2f} | "
+            f"Latency={raw['latency']:.2f} | "
+            f"CPU={raw['controller_cpu']:.2f}"
         )
 
         return state
@@ -197,19 +183,19 @@ class OnlineSDNEnv:
     # ==========================================
     
     def _detect_attack(self, state):
-
         packet_rate = state[0]
         flow_count = state[2]
-        entropy = state[3]
-        latency = state[4]
+        flow_growth_rate = state[3]
+        entropy = state[4]
+        latency = state[5]
 
-        if flow_count > 0.15:
+        if flow_growth_rate > 0.2:
             return 1
-
-        if entropy > 2.0:
+        if entropy > 0.5:
             return 1
-
-        if packet_rate > 0.01:
+        if packet_rate > 0.2:
+            return 1
+        if latency > 0.5:
             return 1
 
         return 0
@@ -378,11 +364,18 @@ class OnlineSDNEnv:
     # REWARD ONLINE
     # ==========================================
     def _compute_reward(self, state, action):
+        flow_growth_rate = state[3]
+        latency = state[5]
+        packet_loss = state[6]
+        controller_cpu = state[7]
 
-        flow_count = state[2]
-        latency = state[4]
+        qos_penalty = (
+            0.5 * flow_growth_rate +
+            1.0 * latency +
+            2.0 * packet_loss +
+            0.5 * controller_cpu
+        )
 
-        qos_penalty = 2.0 * flow_count + 1.0 * latency
         switching_penalty = 0.3 if action != self.previous_action else 0.0
 
-        return 1.0 - qos_penalty - switching_penalty
+        return float(1.0 - qos_penalty - switching_penalty)
