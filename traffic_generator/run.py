@@ -1,12 +1,12 @@
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSSwitch
 from mininet.cli import CLI
-from topo import SDNResearchTopo
+from topo import SDNSecurityTopo
 from attack_manager import AttackManager
 import time
 
 def run_experiment():
-    topo = SDNResearchTopo()
+    topo = SDNSecurityTopo()
 
     net = Mininet(
         topo=topo,
