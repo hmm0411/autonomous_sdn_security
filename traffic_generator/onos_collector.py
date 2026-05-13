@@ -246,11 +246,8 @@ class ONOSCollector:
         packet_rate = delta_packets / dt
         byte_rate = delta_bytes / dt
 
-        if not self.warmed_up:
-            flow_growth_rate = 0.0
-            self.warmed_up = True
-        else:
-            flow_growth_rate = max(0, flow_count - self.prev_flow_count) / dt
+        flow_growth_rate = max(0, flow_count - self.prev_flow_count) / dt
+
         # Ưu tiên packet_loss đo bằng ping từ Mininet host
         packet_loss = self._measure_ping_loss()
 
