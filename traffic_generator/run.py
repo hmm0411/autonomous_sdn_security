@@ -1,8 +1,8 @@
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSSwitch
 from mininet.cli import CLI
-from topo import SDNSecurityTopo
-from attack_manager import AttackManager
+from traffic_generator.topo import SDNSecurityTopo
+from traffic_generator.attack_manager import AttackManager
 import time
 
 def run_experiment():
