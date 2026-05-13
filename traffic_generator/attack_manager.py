@@ -63,7 +63,6 @@ class AttackManager:
 
 
     def normal_low(self):
-        self._set_state("Normal Low")
         print("[*] Normal LOW: h1-h2 ping -> h8")
         for h in self.normal_users[:2]:
             pid = h.cmd(f"ping {self.victim.IP()} > /tmp/{h.name}_normal_low.log 2>&1 & echo $!").strip()
@@ -71,7 +70,6 @@ class AttackManager:
 
 
     def normal_medium(self):
-        self._set_state("Normal Medium")
         print("[*] Normal MEDIUM: h1-h3 iperf -> h8")
         for h in self.normal_users[:3]:
             pid = h.cmd(f"iperf -c {self.victim.IP()} -p 5001 -t 600 -i 1 > /tmp/{h.name}_normal_medium.log 2>&1 & echo $!").strip()
@@ -79,7 +77,6 @@ class AttackManager:
 
 
     def normal_high(self):
-        self._set_state("Normal High")
         print("[*] Normal HIGH: h1-h4 iperf -> h8")
         for h in self.normal_users:
             pid = h.cmd(f"iperf -c {self.victim.IP()} -p 5001 -t 600 -i 1 > /tmp/{h.name}_normal_high.log 2>&1 & echo $!").strip()
@@ -89,7 +86,6 @@ class AttackManager:
     # ATTACK TRAFFIC
     # ==================================================
     def ddos_flood(self, num_attackers=1, intensity="low"):
-        self._set_state("DDoS Flood")
 
         selected = random.sample(self.attackers, min(num_attackers, len(self.attackers)))
 
@@ -112,7 +108,6 @@ class AttackManager:
                 self.active_pids.append((attacker, pid))
 
     def packet_in_flood(self, num_attackers=1, intensity="medium"):
-        self._set_state("Packet-In Flood")
         selected = random.sample(self.attackers, min(num_attackers, len(self.attackers)))
 
         mode = "--fast" if intensity == "low" else "--faster"
@@ -124,7 +119,6 @@ class AttackManager:
 
 
     def ip_spoofing(self, num_attackers=1, intensity="medium"):
-        self._set_state("IP Spoofing")
         selected = random.sample(self.attackers, min(num_attackers, len(self.attackers)))
 
         mode = "--fast" if intensity == "low" else "--faster"
@@ -136,7 +130,6 @@ class AttackManager:
 
 
     def flow_overflow(self, num_attackers=1, flows_per_attacker=2000):
-        self._set_state("Flow Table Overflow")
         selected = random.sample(self.attackers, min(num_attackers, len(self.attackers)))
 
         for attacker in selected:
@@ -150,7 +143,6 @@ class AttackManager:
 
 
     def port_scanning(self, attacker_index=0, start_port=1, end_port=1000):
-        self._set_state("Port Scanning")
         attacker = self.attackers[attacker_index % len(self.attackers)]
 
         cmd = (
@@ -162,7 +154,6 @@ class AttackManager:
         self.active_pids.append((attacker, pid))
 
     def stop_all(self):
-        self._set_state("Normal Traffic")
         print("[*] Stopping all generated traffic...")
 
         for host, pid in self.active_pids:
