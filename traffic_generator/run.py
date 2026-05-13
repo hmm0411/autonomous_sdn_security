@@ -1,57 +1,82 @@
+#!/usr/bin/env python3
+
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSSwitch
 from mininet.cli import CLI
+from mininet.log import setLogLevel, info
+from mininet.link import TCLink
+
 from traffic_generator.topo import SDNSecurityTopo
 from traffic_generator.attack_manager import AttackManager
-import time
 
-def run_experiment():
+
+def run():
     topo = SDNSecurityTopo()
 
     net = Mininet(
         topo=topo,
-        controller=lambda name: RemoteController(name, ip='127.0.0.1', port=6653),
-        switch=lambda name, **opts: OVSSwitch(name, protocols='OpenFlow13', **opts)
+        controller=None,
+        switch=OVSSwitch,
+        link=TCLink,
+        autoSetMacs=False,
+        autoStaticArp=True
     )
 
-    print("[*] Starting Mininet...")
+    # ONOS controller
+    # Đổi IP này theo máy chạy ONOS của bạn
+    c0 = RemoteController(
+        "c0",
+        ip="127.0.0.1",
+        port=6653
+    )
+
+    net.addController(c0)
+
+    info("[*] Starting network...\n")
     net.start()
-    print("[*] Enabling STP on OVS bridges to prevent Broadcast Storm...")
+
+    # Force OpenFlow13
     for sw in net.switches:
-        # Ra lệnh cho switch bật STP
-        sw.cmd('ovs-vsctl set bridge', sw.name, 'stp_enable=true')
+        sw.cmd(f"ovs-vsctl set bridge {sw.name} protocols=OpenFlow13")
 
-    # ------------------------
-    print("[*] Waiting for STP Convergence (20s)...")
-    time.sleep(20)
-    print("[*] Connecting Root Namespace to Mininet (Fixing 500.0 Latency)...")
+    info("[*] Starting victim/honeypot services...\n")
 
-    import os
-    os.system('sudo ip addr add 10.0.0.100/24 dev s1')
-    os.system('sudo ip link set dev s1 up')
-
-    print("[*] Initializing Attack Manager...")
     manager = AttackManager(net)
-    net.manager = manager
-    print("[*] Waiting controller connection (5s)...")
-    time.sleep(5)
+    manager.start_servers()
 
-    print("="*40)
-    print("SYSTEM READY")
-    print("="*40)
-    print("pingall → test network")
-    print("py net.manager.ddos_flood()")
-    print("py net.manager.packet_in_flood()")
-    print("py net.manager.flow_overflow()")
-    print("py net.manager.ip_spoofing()")
-    print("py net.manager.port_scanning()")
-    print("py net.manager.stop_all()")
-    print("="*40)
+    # Expose manager in Mininet CLI
+    net.manager = manager
+
+    info("\n")
+    info("====================================================\n")
+    info("SDN Security Topology Ready\n")
+    info("Normal users : h1 h2 h3 h4\n")
+    info("Attackers    : h5 h6 h7\n")
+    info("Victim       : h8 10.0.0.8\n")
+    info("Honeypot     : h9 10.0.0.9\n")
+    info("====================================================\n")
+    info("Useful commands:\n")
+    info("  pingall\n")
+    info("  py net.manager.normal_low()\n")
+    info("  py net.manager.normal_medium()\n")
+    info("  py net.manager.normal_high()\n")
+    info("  py net.manager.ddos_flood(num_attackers=1, intensity='low')\n")
+    info("  py net.manager.ddos_flood(num_attackers=2, intensity='medium')\n")
+    info("  py net.manager.packet_in_flood(num_attackers=1, intensity='medium')\n")
+    info("  py net.manager.ip_spoofing(num_attackers=1, intensity='medium')\n")
+    info("  py net.manager.port_scanning(attacker_index=0, start_port=1, end_port=1000)\n")
+    info("  py net.manager.flow_overflow(num_attackers=1, flows_per_attacker=2000)\n")
+    info("  py net.manager.mixed_ddos_with_normal()\n")
+    info("  py net.manager.stop_all()\n")
+    info("====================================================\n\n")
 
     CLI(net)
-    os.system('sudo ip addr del 10.0.0.100/24 dev s1 2>/dev/null')
-    print("[*] Stopping network...")
+
+    info("[*] Stopping network...\n")
+    manager.stop_all()
     net.stop()
 
+
 if __name__ == "__main__":
-    run_experiment()
+    setLogLevel("info")
+    run()
