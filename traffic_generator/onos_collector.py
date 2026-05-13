@@ -34,6 +34,7 @@ class ONOSCollector:
         self.prev_drops = 0
         self.prev_flow_count = 0
         self.prev_time = time.time()
+        self.initialized = False
 
     # =========================
     # MININET HOST PID
@@ -238,6 +239,25 @@ class ONOSCollector:
 
         now = time.time()
         dt = max(now - self.prev_time, 1e-6)
+
+        if not self.initialized:
+            self.prev_packets = packets
+            self.prev_bytes = bytes_
+            self.prev_drops = drops
+            self.prev_flow_count = flow_count
+            self.prev_time = now
+            self.initialized = True
+
+            return {
+                "packet_rate": 0.0,
+                "byte_rate": 0.0,
+                "flow_count": flow_count,
+                "flow_growth_rate": 0.0,
+                "src_ip_entropy": self._get_src_ip_entropy_from_tcpdump(),
+                "latency": self._measure_latency(),
+                "packet_loss": self._measure_ping_loss(),
+                "controller_cpu": self._get_controller_cpu()
+            }
 
         delta_packets = max(0, packets - self.prev_packets)
         delta_bytes = max(0, bytes_ - self.prev_bytes)
