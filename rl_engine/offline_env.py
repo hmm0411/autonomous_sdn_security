@@ -83,5 +83,4 @@ class OfflineSDNEnv:
         switching_penalty = 0.3 if int(action) != self.previous_action else 0.0
 
         reward = security_reward - qos_penalty - switching_penalty
-
         return float(np.clip(reward, -5.0, 5.0))

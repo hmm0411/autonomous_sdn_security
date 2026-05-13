@@ -47,16 +47,15 @@ class OnlineSDNEnv:
     # STEP
     # ==========================================
     def step(self, action):
-
         self._apply_action(action)
 
         time.sleep(1)
 
+        self.previous_action = int(action)
+        self.builder.prev_action = int(action)
+
         state = self._get_state()
         reward = self._compute_reward(state, action)
-
-        self.previous_action = action
-        self.builder.prev_action = action
 
         return state, reward, False, {}
     # ==========================================
@@ -238,14 +237,17 @@ class OnlineSDNEnv:
             "deviceId": "of:0000000000000001",
             "treatment": {
                 "instructions": [
-                    {"type": "METER", "meterId": "1"},
-                    {"type": "OUTPUT", "port": "1"}
+                    {
+                        "type": "OUTPUT",
+                        "port": "9"
+                    }
                 ]
             },
             "selector": {
                 "criteria": [
                     {"type": "ETH_TYPE", "ethType": "0x0800"},
-                    {"type": "IPV4_SRC", "ip": attacker_ip}
+                    {"type": "IPV4_SRC", "ip": attacker_ip},
+                    {"type": "IPV4_DST", "ip": "10.0.0.8/32"}
                 ]
             }
         }
@@ -300,7 +302,7 @@ class OnlineSDNEnv:
                 "instructions": [
                     {
                         "type": "OUTPUT",
-                        "port": "2"  # port nối sang s3
+                        "port": "9"  # port nối sang s3
                     }
                 ]
             },
@@ -339,10 +341,7 @@ class OnlineSDNEnv:
             "timeout": 60,
             "deviceId": "of:0000000000000001",
             "treatment": {
-                "instructions": [
-                    {"type": "METER", "meterId": "1"},
-                    {"type": "OUTPUT", "port": "1"}
-                ]
+                "instructions": []
             },
             "selector": {
                 "criteria": [

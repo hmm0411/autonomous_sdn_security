@@ -123,7 +123,8 @@ class ONOSCollector:
 
             cmd = (
                 f"sudo mnexec -a {pid} timeout {duration} "
-                f"tcpdump -i {self.entropy_iface} -n -tt ip 2>/dev/null"
+                f"tcpdump -i {self.entropy_iface} -n -tt "
+                f"'ip and dst host {self.victim_ip}' 2>/dev/null"
             )
 
             result = subprocess.run(
@@ -245,8 +246,11 @@ class ONOSCollector:
         packet_rate = delta_packets / dt
         byte_rate = delta_bytes / dt
 
-        flow_growth_rate = max(0, flow_count - self.prev_flow_count) / dt
-
+        if not self.warmed_up:
+            flow_growth_rate = 0.0
+            self.warmed_up = True
+        else:
+            flow_growth_rate = max(0, flow_count - self.prev_flow_count) / dt
         # Ưu tiên packet_loss đo bằng ping từ Mininet host
         packet_loss = self._measure_ping_loss()
 
