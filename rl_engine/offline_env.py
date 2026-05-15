@@ -43,7 +43,7 @@ class OfflineSDNEnv:
 
         previous_action_norm = self.previous_action / 4.0
 
-        state = np.array([
+        return np.array([
             row["packet_rate"],
             row["byte_rate"],
             row["flow_count"],
@@ -54,8 +54,6 @@ class OfflineSDNEnv:
             row["controller_cpu"],
             previous_action_norm
         ], dtype=np.float32)
-
-        return state
 
     def _compute_reward(self, action, row):
         packet_loss = float(row["packet_loss"])
@@ -83,4 +81,5 @@ class OfflineSDNEnv:
         switching_penalty = 0.3 if int(action) != self.previous_action else 0.0
 
         reward = security_reward - qos_penalty - switching_penalty
+
         return float(np.clip(reward, -5.0, 5.0))

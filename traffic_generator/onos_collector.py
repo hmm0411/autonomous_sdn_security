@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import csv
 import re
@@ -18,12 +20,14 @@ class ONOSCollector:
         entropy_host="h8",
         entropy_iface="h8-eth0",
         onos_container="onos-controller",
+        entropy_duration=1.0
     ):
         self.victim_ip = victim_ip
         self.latency_host = latency_host
         self.entropy_host = entropy_host
         self.entropy_iface = entropy_iface
         self.onos_container = onos_container
+        self.entropy_duration = entropy_duration
 
         self.url_flows = f"http://{onos_ip}:8181/onos/v1/flows"
         self.url_ports = f"http://{onos_ip}:8181/onos/v1/statistics/ports"
@@ -36,9 +40,6 @@ class ONOSCollector:
         self.prev_time = time.time()
         self.initialized = False
 
-    # =========================
-    # MININET HOST PID
-    # =========================
     def _find_mininet_host_pid(self, host_name):
         try:
             result = subprocess.run(
@@ -48,15 +49,14 @@ class ONOSCollector:
                 text=True,
                 timeout=2
             )
+
             pid = result.stdout.strip()
             return pid if pid else None
+
         except Exception as e:
             print(f"[WARN] Cannot find PID for {host_name}: {e}")
             return None
 
-    # =========================
-    # ONOS PORT STATS
-    # =========================
     def _get_port_stats(self):
         try:
             r = requests.get(self.url_ports, auth=self.auth, timeout=5)
@@ -83,21 +83,16 @@ class ONOSCollector:
             print(f"[WARN] Cannot get port stats: {e}")
             return 0, 0, 0
 
-    # =========================
-    # ONOS FLOWS
-    # =========================
     def _get_flows(self):
         try:
             r = requests.get(self.url_flows, auth=self.auth, timeout=5)
             r.raise_for_status()
             return r.json().get("flows", [])
+
         except Exception as e:
             print(f"[WARN] Cannot get flows: {e}")
             return []
 
-    # =========================
-    # ENTROPY
-    # =========================
     def _entropy(self, values):
         if not values:
             return 0.0
@@ -112,18 +107,14 @@ class ONOSCollector:
 
         return result
 
-    def _get_src_ip_entropy_from_tcpdump(self, duration=0.4):
-        """
-        Tính src_ip_entropy bằng cách bắt packet tại victim h8.
-        Cách này tốt hơn đọc IPV4_SRC từ ONOS flow vì nhiều flow không chứa IPV4_SRC.
-        """
+    def _get_src_ip_entropy_from_tcpdump(self):
         try:
             pid = self._find_mininet_host_pid(self.entropy_host)
             if not pid:
                 return 0.0
 
             cmd = (
-                f"sudo mnexec -a {pid} timeout {duration} "
+                f"sudo mnexec -a {pid} timeout {self.entropy_duration} "
                 f"tcpdump -i {self.entropy_iface} -n -tt "
                 f"'ip and dst host {self.victim_ip}' 2>/dev/null"
             )
@@ -133,14 +124,12 @@ class ONOSCollector:
                 shell=True,
                 capture_output=True,
                 text=True,
-                timeout=duration + 2
+                timeout=self.entropy_duration + 2
             )
 
             src_ips = []
 
             for line in result.stdout.splitlines():
-                # Ví dụ:
-                # IP 10.0.0.5.12345 > 10.0.0.8.80: Flags [S]
                 m = re.search(r"IP\s+(\d+\.\d+\.\d+\.\d+)(?:\.\d+)?\s+>", line)
                 if m:
                     src_ips.append(m.group(1))
@@ -151,14 +140,10 @@ class ONOSCollector:
             print(f"[WARN] tcpdump entropy error: {e}")
             return 0.0
 
-    # =========================
-    # LATENCY / LOSS FROM MININET HOST
-    # =========================
     def _measure_latency(self):
         try:
             pid = self._find_mininet_host_pid(self.latency_host)
             if not pid:
-                print(f"[WARN] Cannot find Mininet host {self.latency_host}")
                 return 500.0
 
             cmd = f"sudo mnexec -a {pid} ping -c 1 -W 1 {self.victim_ip}"
@@ -177,8 +162,7 @@ class ONOSCollector:
 
             return 500.0
 
-        except Exception as e:
-            print(f"[WARN] latency error: {e}")
+        except Exception:
             return 500.0
 
     def _measure_ping_loss(self):
@@ -203,13 +187,9 @@ class ONOSCollector:
 
             return 1.0
 
-        except Exception as e:
-            print(f"[WARN] ping loss error: {e}")
+        except Exception:
             return 1.0
 
-    # =========================
-    # CONTROLLER CPU
-    # =========================
     def _get_controller_cpu(self):
         try:
             result = subprocess.run(
@@ -224,14 +204,11 @@ class ONOSCollector:
             if value:
                 return float(value)
 
-        except Exception as e:
-            print("[WARN] docker cpu error:", e)
+        except Exception:
+            pass
 
         return 0.0
 
-    # =========================
-    # RAW STATE
-    # =========================
     def get_raw_state(self):
         packets, bytes_, drops = self._get_port_stats()
         flows = self._get_flows()
@@ -265,17 +242,16 @@ class ONOSCollector:
 
         packet_rate = delta_packets / dt
         byte_rate = delta_bytes / dt
-
         flow_growth_rate = max(0, flow_count - self.prev_flow_count) / dt
-
-        # Ưu tiên packet_loss đo bằng ping từ Mininet host
-        packet_loss = self._measure_ping_loss()
 
         self.prev_packets = packets
         self.prev_bytes = bytes_
         self.prev_drops = drops
         self.prev_flow_count = flow_count
         self.prev_time = now
+
+        # Ping loss dùng từ Mininet host; nếu muốn dùng drop stat thì đổi tại đây.
+        packet_loss = self._measure_ping_loss()
 
         return {
             "packet_rate": packet_rate,
@@ -328,6 +304,7 @@ if __name__ == "__main__":
     p.add_argument("--entropy-host", type=str, default="h8")
     p.add_argument("--entropy-iface", type=str, default="h8-eth0")
     p.add_argument("--onos-container", type=str, default="onos-controller")
+    p.add_argument("--entropy-duration", type=float, default=1.0)
     p.add_argument("--label", type=int, required=True)
     p.add_argument("--samples", type=int, default=1000)
     p.add_argument("--interval", type=float, default=1.0)
@@ -341,7 +318,8 @@ if __name__ == "__main__":
         latency_host=args.latency_host,
         entropy_host=args.entropy_host,
         entropy_iface=args.entropy_iface,
-        onos_container=args.onos_container
+        onos_container=args.onos_container,
+        entropy_duration=args.entropy_duration
     )
 
     print(f"[*] Collecting label={args.label}")

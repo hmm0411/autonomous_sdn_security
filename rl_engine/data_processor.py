@@ -43,15 +43,9 @@ def process_sdn_dataset():
             if col not in df.columns:
                 raise ValueError(f"{path} missing required column: {col}")
 
-        # Ghi đè label theo file để tránh file raw bị label sai
         df["label"] = label
-
-        # Chỉ giữ cột cần thiết
         df = df[feature_cols + ["label"]].copy()
-
-        # Dọn dữ liệu lỗi
-        df = df.replace([float("inf"), -float("inf")], 0)
-        df = df.fillna(0)
+        df = df.replace([float("inf"), -float("inf")], 0).fillna(0)
 
         dfs.append(df)
         print(f"Loaded {path}: {df.shape}")
@@ -60,14 +54,10 @@ def process_sdn_dataset():
     print("Total samples:", master_df.shape)
 
     scaler = MinMaxScaler()
-    scaled_features = scaler.fit_transform(master_df[feature_cols])
+    scaled = scaler.fit_transform(master_df[feature_cols])
 
-    processed_df = pd.DataFrame(scaled_features, columns=feature_cols)
-
-    # Dùng cho reward offline, không đưa vào observation
+    processed_df = pd.DataFrame(scaled, columns=feature_cols)
     processed_df["attack_indicator"] = master_df["label"].values / 5.0
-
-    # Chỉ để debug/đồng bộ schema; OfflineEnv tự sinh previous_action thật
     processed_df["previous_action"] = 0.0
 
     train_frames = []

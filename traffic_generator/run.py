@@ -22,8 +22,6 @@ def run():
         autoStaticArp=True
     )
 
-    # ONOS controller
-    # Đổi IP này theo máy chạy ONOS của bạn
     c0 = RemoteController(
         "c0",
         ip="127.0.0.1",
@@ -32,43 +30,36 @@ def run():
 
     net.addController(c0)
 
-    info("[*] Starting network...\n")
+    info("[*] Starting Mininet...\n")
     net.start()
 
-    # Force OpenFlow13
     for sw in net.switches:
         sw.cmd(f"ovs-vsctl set bridge {sw.name} protocols=OpenFlow13")
 
-    info("[*] Starting victim/honeypot services...\n")
-
     manager = AttackManager(net)
     manager.start_servers()
-
-    # Expose manager in Mininet CLI
     net.manager = manager
 
-    info("\n")
-    info("====================================================\n")
-    info("SDN Security Topology Ready\n")
+    info("\n========== SDN SECURITY TOPO READY ==========\n")
     info("Normal users : h1 h2 h3 h4\n")
     info("Attackers    : h5 h6 h7\n")
     info("Victim       : h8 10.0.0.8\n")
     info("Honeypot     : h9 10.0.0.9\n")
-    info("====================================================\n")
-    info("Useful commands:\n")
+    info("Redirect port on s1 to honeypot: 9\n")
+    info("=============================================\n")
+    info("Commands:\n")
     info("  pingall\n")
     info("  py net.manager.normal_low()\n")
     info("  py net.manager.normal_medium()\n")
     info("  py net.manager.normal_high()\n")
     info("  py net.manager.ddos_flood(num_attackers=1, intensity='low')\n")
-    info("  py net.manager.ddos_flood(num_attackers=2, intensity='medium')\n")
-    info("  py net.manager.packet_in_flood(num_attackers=1, intensity='medium')\n")
     info("  py net.manager.ip_spoofing(num_attackers=1, intensity='medium')\n")
+    info("  py net.manager.packet_in_flood(num_attackers=1, intensity='medium')\n")
+    info("  py net.manager.flow_overflow(num_attackers=1, flows_per_attacker=3000)\n")
     info("  py net.manager.port_scanning(attacker_index=0, start_port=1, end_port=1000)\n")
-    info("  py net.manager.flow_overflow(num_attackers=1, flows_per_attacker=2000)\n")
-    info("  py net.manager.mixed_ddos_with_normal()\n")
     info("  py net.manager.stop_all()\n")
-    info("====================================================\n\n")
+    info("  py net.manager.start_servers()\n")
+    info("=============================================\n\n")
 
     CLI(net)
 

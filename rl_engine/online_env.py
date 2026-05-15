@@ -236,12 +236,7 @@ class OnlineSDNEnv:
             "isPermanent": False,
             "deviceId": "of:0000000000000001",
             "treatment": {
-                "instructions": [
-                    {
-                        "type": "OUTPUT",
-                        "port": "9"
-                    }
-                ]
+                "instructions": []
             },
             "selector": {
                 "criteria": [

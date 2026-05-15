@@ -3,28 +3,16 @@ import joblib
 import numpy as np
 
 
-FEATURES = [
-    "packet_rate",
-    "byte_rate",
-    "flow_count",
-    "flow_growth_rate",
-    "src_ip_entropy",
-    "latency",
-    "packet_loss",
-    "controller_cpu"
-]
-
-
 class StateBuilder:
     def __init__(self, scaler_path="models/scaler.pkl"):
         self.prev_action = 0
-        self.scaler = None
 
         if os.path.exists(scaler_path):
             self.scaler = joblib.load(scaler_path)
             print(f"[+] Loaded scaler: {scaler_path}")
         else:
-            print(f"[WARN] Scaler not found: {scaler_path}. Using raw state.")
+            self.scaler = None
+            print(f"[WARN] Scaler not found: {scaler_path}")
 
     def build(self, raw):
         raw_vector = np.array([[
@@ -43,7 +31,7 @@ class StateBuilder:
         else:
             scaled = raw_vector[0]
 
-        state = np.array([
+        return np.array([
             scaled[0],
             scaled[1],
             scaled[2],
@@ -54,5 +42,3 @@ class StateBuilder:
             scaled[7],
             float(self.prev_action) / 4.0
         ], dtype=np.float32)
-
-        return state
