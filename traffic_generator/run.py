@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from functools import partial
+
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSSwitch
 from mininet.cli import CLI
@@ -13,13 +15,16 @@ from traffic_generator.attack_manager import AttackManager
 def run():
     topo = SDNSecurityTopo()
 
+    switch_cls = partial(OVSSwitch, protocols="OpenFlow13")
+
     net = Mininet(
         topo=topo,
         controller=None,
-        switch=OVSSwitch,
+        switch=switch_cls,
         link=TCLink,
         autoSetMacs=False,
-        autoStaticArp=True
+        autoStaticArp=True,
+        build=False
     )
 
     c0 = RemoteController(
@@ -30,11 +35,18 @@ def run():
 
     net.addController(c0)
 
-    info("[*] Starting Mininet...\n")
-    net.start()
+    info("[*] Building network...\n")
+    net.build()
 
+    info("[*] Starting controller...\n")
+    c0.start()
+
+    info("[*] Starting switches with OpenFlow13...\n")
     for sw in net.switches:
+        sw.start([c0])
         sw.cmd(f"ovs-vsctl set bridge {sw.name} protocols=OpenFlow13")
+        sw.cmd(f"ovs-vsctl set-fail-mode {sw.name} secure")
+        sw.cmd(f"ovs-vsctl set-controller {sw.name} tcp:127.0.0.1:6653")
 
     manager = AttackManager(net)
     manager.start_servers()
@@ -49,13 +61,15 @@ def run():
     info("=============================================\n")
     info("Commands:\n")
     info("  pingall\n")
+    info("  sh ovs-vsctl show\n")
+    info("  sh ovs-ofctl -O OpenFlow13 dump-flows s1\n")
     info("  py net.manager.normal_low()\n")
     info("  py net.manager.normal_medium()\n")
     info("  py net.manager.normal_high()\n")
     info("  py net.manager.ddos_flood(num_attackers=1, intensity='low')\n")
     info("  py net.manager.ip_spoofing(num_attackers=1, intensity='medium')\n")
     info("  py net.manager.packet_in_flood(num_attackers=1, intensity='medium')\n")
-    info("  py net.manager.flow_overflow(num_attackers=1, flows_per_attacker=3000)\n")
+    info("  py net.manager.flow_overflow(num_attackers=1, flows_per_attacker=500)\n")
     info("  py net.manager.port_scanning(attacker_index=0, start_port=1, end_port=1000)\n")
     info("  py net.manager.stop_all()\n")
     info("  py net.manager.start_servers()\n")
