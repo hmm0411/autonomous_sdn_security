@@ -8,43 +8,9 @@ mkdir -p $DATA_DIR
 echo "===== CLEAN ENV ====="
 sudo mn -c || true
 
-run_scenario () {
-    NAME=$1
-    LABEL=$2
-    CMD=$3
-
-    echo "===== RUN SCENARIO: $NAME ====="
-
-    # Start Mininet
-    PYTHONPATH=$(pwd) sudo python3 -m traffic_generator.run <<EOF &
-sleep 5
-py net.manager.start_servers()
-$CMD
-EOF
-
-    MN_PID=$!
-
-    sleep 5
-
-        # Run collector
-        PYTHONPATH=$(pwd) sudo python3 -m traffic_generator.onos_collector \
-        --label $LABEL \
-        --samples 200 \
-        --interval 1 \
-        --output $DATA_DIR/${NAME}.csv
-
-    echo "[*] Stop Mininet"
-    sudo mn -c || true
-
-    kill $MN_PID 2>/dev/null || true
-
-    sleep 5
-}
-
 # ========================
 # RUN ALL SCENARIOS
 # ========================
-
 run_scenario () {
     NAME=$1
     LABEL=$2
@@ -77,6 +43,7 @@ run_scenario () {
 
     sleep 5
 }
+
 # ========================
 # MERGE DATA
 # ========================
