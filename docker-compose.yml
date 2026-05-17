@@ -143,8 +143,8 @@ services:
     container_name: control_loop
     depends_on:
       - controller
-      - rl-agent-dqn
-      - rl-agent-ppo
+      # - rl-agent-dqn
+      # - rl-agent-ppo
       - mlflow
     networks:
       - sdn-net
