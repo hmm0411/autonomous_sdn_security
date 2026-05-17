@@ -328,29 +328,20 @@ if __name__ == "__main__":
     print(f"[*] Collecting label={args.label}")
     print(f"[*] Output={args.output}")
 
-    for i in range(1, args.samples + 1):
+    valid_count = 0
+    attempt = 0
+
+    while valid_count < args.samples:
+        attempt += 1
         state = collector.get_raw_state()
-        collector.save_to_csv(state, args.output, args.label)
 
-        print(f"[{i}/{args.samples}] {state}")
-        time.sleep(args.interval)
-
-        valid_count = 0
-        attempt = 0
-
-        while valid_count < args.samples:
-            attempt += 1
-            state = collector.get_raw_state()
-
-            if state is None:
-                print(f"[SKIP] invalid sample at attempt={attempt}")
-                time.sleep(args.interval)
-                continue
-
-            collector.save_to_csv(state, args.output, args.label)
-            valid_count += 1
-
-            print(f"[{valid_count}/{args.samples}] {state}")
+        if state is None:
+            print(f"[SKIP] invalid sample at attempt={attempt}")
             time.sleep(args.interval)
+            continue
 
-        
+        collector.save_to_csv(state, args.output, args.label)
+        valid_count += 1
+
+        print(f"[{valid_count}/{args.samples}] {state}")
+        time.sleep(args.interval)
