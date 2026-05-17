@@ -16,7 +16,7 @@ run_scenario () {
     echo "===== RUN SCENARIO: $NAME ====="
 
     # Start Mininet
-    python3 traffic_generator/run.py <<EOF &
+    PYTHONPATH=$(pwd) python3 -m traffic_generator.run <<EOF &
 sleep 5
 py net.manager.start_servers()
 $CMD
@@ -26,8 +26,8 @@ EOF
 
     sleep 5
 
-    # Run collector
-    python3 traffic_generator/onos_collector.py \
+        # Run collector
+        PYTHONPATH=$(pwd) python3 -m traffic_generator.onos_collector \
         --label $LABEL \
         --samples 200 \
         --interval 1 \
