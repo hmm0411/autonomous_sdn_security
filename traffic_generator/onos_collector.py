@@ -71,17 +71,15 @@ class ONOSCollector:
                 for port in dev.get("ports", []):
                     total_packets += port.get("packetsReceived", 0)
                     total_packets += port.get("packetsSent", 0)
-
                     total_bytes += port.get("bytesReceived", 0)
                     total_bytes += port.get("bytesSent", 0)
-
                     total_drops += port.get("packetsDropped", 0)
 
             return total_packets, total_bytes, total_drops
 
         except Exception as e:
             print(f"[WARN] Cannot get port stats: {e}")
-            return 0, 0, 0
+            return None
 
     def _get_flows(self):
         try:
@@ -91,7 +89,7 @@ class ONOSCollector:
 
         except Exception as e:
             print(f"[WARN] Cannot get flows: {e}")
-            return []
+            return None
 
     def _entropy(self, values):
         if not values:
@@ -210,8 +208,13 @@ class ONOSCollector:
         return 0.0
 
     def get_raw_state(self):
-        packets, bytes_, drops = self._get_port_stats()
+        port_stats = self._get_port_stats()
         flows = self._get_flows()
+
+        if port_stats is None or flows is None:
+            return None
+
+        packets, bytes_, drops = port_stats
         flow_count = len(flows)
 
         now = time.time()
@@ -331,3 +334,23 @@ if __name__ == "__main__":
 
         print(f"[{i}/{args.samples}] {state}")
         time.sleep(args.interval)
+
+        valid_count = 0
+        attempt = 0
+
+        while valid_count < args.samples:
+            attempt += 1
+            state = collector.get_raw_state()
+
+            if state is None:
+                print(f"[SKIP] invalid sample at attempt={attempt}")
+                time.sleep(args.interval)
+                continue
+
+            collector.save_to_csv(state, args.output, args.label)
+            valid_count += 1
+
+            print(f"[{valid_count}/{args.samples}] {state}")
+            time.sleep(args.interval)
+
+        

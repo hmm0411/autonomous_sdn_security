@@ -124,7 +124,8 @@ class AttackManager:
         elif intensity == "medium":
             mode = "--faster"
         else:
-            mode = "--flood"
+            # Không dùng --flood lâu khi thu dataset
+            mode = "--faster"
 
         print(f"[*] DDoS {intensity}: {len(selected)} attacker(s) -> h8:80")
 
@@ -135,7 +136,7 @@ class AttackManager:
                 f"ddos_{intensity}"
             )
 
-    def ip_spoofing(self, num_attackers=1, intensity="medium"):
+    def ip_spoofing(self, num_attackers=1, intensity="low"):
         self._set_state("IP Spoofing")
 
         selected = random.sample(
@@ -145,10 +146,8 @@ class AttackManager:
 
         if intensity == "low":
             mode = "--fast"
-        elif intensity == "medium":
-            mode = "--faster"
         else:
-            mode = "--flood"
+            mode = "--faster"
 
         print(f"[*] IP Spoofing {intensity}: {len(selected)} attacker(s) -> h8:80")
 
@@ -159,7 +158,7 @@ class AttackManager:
                 f"spoof_{intensity}"
             )
 
-    def packet_in_flood(self, num_attackers=1, intensity="medium"):
+    def packet_in_flood(self, num_attackers=1, intensity="low"):
         self._set_state("Packet-In Flood")
 
         selected = random.sample(
@@ -169,12 +168,10 @@ class AttackManager:
 
         if intensity == "low":
             mode = "--fast"
-        elif intensity == "medium":
-            mode = "--faster"
         else:
-            mode = "--flood"
+            mode = "--faster"
 
-        print(f"[*] Packet-In Flood {intensity}: {len(selected)} attacker(s) -> random ports on h8")
+        print(f"[*] Packet-In Flood {intensity}: {len(selected)} attacker(s) -> h8 random ports")
 
         for attacker in selected:
             self._run_bg(
@@ -183,7 +180,7 @@ class AttackManager:
                 f"packetin_{intensity}"
             )
 
-    def flow_overflow(self, num_attackers=1, flows_per_attacker=3000):
+    def flow_overflow(self, num_attackers=1, flows_per_attacker=500):
         self._set_state("Flow Table Overflow")
 
         selected = random.sample(
@@ -197,6 +194,7 @@ class AttackManager:
             cmd = (
                 f"for p in $(seq 10000 {10000 + flows_per_attacker}); do "
                 f"hping3 -S -c 1 -p $p {self.victim.IP()} >/dev/null 2>&1; "
+                f"sleep 0.005; "
                 f"done"
             )
 
@@ -216,6 +214,7 @@ class AttackManager:
         cmd = (
             f"for p in $(seq {start_port} {end_port}); do "
             f"hping3 -S -c 1 -p $p {self.victim.IP()} >/dev/null 2>&1; "
+            f"sleep 0.01; "
             f"done"
         )
 
