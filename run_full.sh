@@ -45,18 +45,38 @@ EOF
 # RUN ALL SCENARIOS
 # ========================
 
-run_scenario "normal" 0 "py net.manager.normal_medium()"
+run_scenario () {
+    NAME=$1
+    LABEL=$2
+    CMD=$3
 
-run_scenario "ddos" 1 "py net.manager.ddos_flood(num_attackers=2, intensity='medium')"
+    echo "===== RUN SCENARIO: $NAME ====="
 
-run_scenario "spoof" 2 "py net.manager.ip_spoofing(num_attackers=2, intensity='medium')"
+    # Start Mininet in background (giữ sống)
+    sudo env "PYTHONPATH=$(pwd)" python3 -m traffic_generator.run > /tmp/mn_$NAME.log 2>&1 &
+    MN_PID=$!
 
-run_scenario "packet_in" 3 "py net.manager.packet_in_flood(num_attackers=2, intensity='medium')"
+    echo "[*] Waiting Mininet to start..."
+    sleep 10
 
-run_scenario "flow_overflow" 4 "py net.manager.flow_overflow(num_attackers=2, flows_per_attacker=300)"
+    # Inject command vào CLI Mininet
+    echo "$CMD" | sudo mnexec -a $(pgrep -f "mininet:") sh
 
-run_scenario "port_scan" 5 "py net.manager.port_scanning(attacker_index=0, start_port=1, end_port=500)"
+    sleep 5
 
+    # Run collector
+    PYTHONPATH=$(pwd) python3 -m traffic_generator.onos_collector \
+        --label $LABEL \
+        --samples 500 \
+        --interval 1 \
+        --output data/${NAME}.csv
+
+    echo "[*] Stop Mininet"
+    sudo mn -c || true
+    kill $MN_PID 2>/dev/null || true
+
+    sleep 5
+}
 # ========================
 # MERGE DATA
 # ========================
