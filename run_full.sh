@@ -54,12 +54,17 @@ EOF
 
 echo "===== START DATA COLLECTION ====="
 
-run_scenario "normal" 0 "py net.manager.normal_medium()"
-run_scenario "ddos" 1 "py net.manager.ddos_flood(num_attackers=2, intensity='medium')"
-run_scenario "spoof" 2 "py net.manager.ip_spoofing(num_attackers=2, intensity='medium')"
-run_scenario "packet_in" 3 "py net.manager.packet_in_flood(num_attackers=2, intensity='medium')"
-run_scenario "flow_overflow" 4 "py net.manager.flow_overflow(num_attackers=2, flows_per_attacker=300)"
-run_scenario "port_scan" 5 "py net.manager.port_scanning(attacker_index=0, start_port=1, end_port=500)"
+run_scenario "normal" 0 "net.manager.normal_medium()"
+
+run_scenario "ddos" 1 "net.manager.ddos_flood(num_attackers=2, intensity='medium')"
+
+run_scenario "spoof" 2 "net.manager.ip_spoofing(num_attackers=2, intensity='medium')"
+
+run_scenario "packet_in" 3 "net.manager.packet_in_flood(num_attackers=2, intensity='medium')"
+
+run_scenario "flow_overflow" 4 "net.manager.flow_overflow(num_attackers=2, flows_per_attacker=300)"
+
+run_scenario "port_scan" 5 "net.manager.port_scanning(attacker_index=0, start_port=1, end_port=500)"
 
 # ========================
 # MERGE DATA
