@@ -15,25 +15,31 @@ run_scenario () {
 
     echo "===== RUN SCENARIO: $NAME ====="
 
-    # Start Mininet
-    sudo env "PYTHONPATH=$(pwd)" python3 -m traffic_generator.run > /tmp/mn_$NAME.log 2>&1 &
+    # Start Mininet + traffic
+    sudo env "PYTHONPATH=$(pwd)" python3 - <<EOF &
+from traffic_generator.run import main
+import time
+
+net = main()
+
+time.sleep(5)
+net.manager.start_servers()
+
+$CMD
+
+time.sleep(300)
+EOF
+
     MN_PID=$!
 
-    echo "[*] Waiting Mininet to start..."
     sleep 10
 
-    # Run traffic
-    echo "[*] Running traffic: $CMD"
-    echo "$CMD" | sudo mnexec -a $(pgrep -f "mininet:") sh
-
-    sleep 5
-
-    # Collect data
+    # Run collector
     PYTHONPATH=$(pwd) python3 -m traffic_generator.onos_collector \
         --label $LABEL \
         --samples 200 \
         --interval 1 \
-        --output $DATA_DIR/${NAME}.csv
+        --output data/${NAME}.csv
 
     echo "[*] Stop Mininet"
     sudo mn -c || true
