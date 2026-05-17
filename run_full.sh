@@ -15,26 +15,21 @@ run_scenario () {
 
     echo "===== RUN SCENARIO: $NAME ====="
 
-    # Start Mininet + traffic
-    sudo env "PYTHONPATH=$(pwd)" python3 - <<EOF &
-from traffic_generator.run import main
-import time
-
-net = main()
-
-time.sleep(5)
-net.manager.start_servers()
-
-$CMD
-
-time.sleep(300)
-EOF
-
+    # Start Mininet in background
+    sudo env "PYTHONPATH=$(pwd)" python3 -m traffic_generator.run > /tmp/mn_$NAME.log 2>&1 &
     MN_PID=$!
 
-    sleep 10
+    echo "[*] Waiting Mininet..."
+    sleep 15
 
-    # Run collector
+    echo "[*] Running traffic..."
+
+    # 👉 inject command bằng CLI (CÁCH ĐÚNG)
+    sudo bash -c "echo '$CMD' | mn -c 2>/dev/null"
+
+    sleep 5
+
+    # Collect data
     PYTHONPATH=$(pwd) python3 -m traffic_generator.onos_collector \
         --label $LABEL \
         --samples 200 \
