@@ -16,7 +16,7 @@ run_scenario () {
     echo "===== RUN SCENARIO: $NAME ====="
 
     # Start Mininet
-    python traffic_generator/run.py <<EOF &
+    python3 traffic_generator/run.py <<EOF &
 sleep 5
 py net.manager.start_servers()
 $CMD
@@ -27,7 +27,7 @@ EOF
     sleep 5
 
     # Run collector
-    python traffic_generator/onos_collector.py \
+    python3 traffic_generator/onos_collector.py \
         --label $LABEL \
         --samples 200 \
         --interval 1 \
@@ -63,7 +63,7 @@ run_scenario "port_scan" 5 "py net.manager.port_scanning(attacker_index=0, start
 
 echo "===== MERGING DATA ====="
 
-python <<EOF
+python3 <<EOF
 import pandas as pd
 import os
 
