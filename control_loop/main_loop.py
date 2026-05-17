@@ -13,6 +13,7 @@ from control_loop.state_collector import get_state
 STATE_DIM = 8
 SLEEP_TIME = 2
 
+
 state_builder = StateBuilder()
 reward_calc = Reward()
 
@@ -30,15 +31,11 @@ while True:
         raw = get_state()
 
         # ===== BUILD STATE =====
-        state = np.array(state_builder.build(raw), dtype=np.float32)
+        state = state_builder.build(raw)
+
         with open("data/realtime_log.csv", "a") as f:
             writer = csv.writer(f)
-            writer.writerow(state.tolist())
-
-        if not validate_state(state):
-            print("Invalid state:", state)
-            time.sleep(SLEEP_TIME)
-            continue
+            writer.writerow(state)
 
         # ===== CALL RL =====
         action, model = get_action(state)

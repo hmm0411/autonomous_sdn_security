@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import mlflow.pytorch
 import torch
 import json
+import joblib
 from prometheus_client import start_http_server, Gauge
 
 app = Flask(__name__)
@@ -25,6 +26,8 @@ def load_models():
 
 load_models()
 
+scaler = joblib.load("models/scaler.pkl")
+
 # ===== CONFIG =====
 def get_active_model():
     try:
@@ -38,7 +41,8 @@ def get_active_model():
 def predict():
     try:
         state = request.json["state"]
-        state = torch.tensor(state).float().unsqueeze(0)
+        state = scaler.transform([state])  # Scale state features
+        state = torch.tensor(state).float()
 
         mode = get_active_model()
 

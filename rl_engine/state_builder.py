@@ -15,7 +15,7 @@ class StateBuilder:
             print(f"[WARN] Scaler not found: {scaler_path}")
 
     def build(self, raw):
-        raw_vector = np.array([[
+        raw_vector = np.array([[ 
             float(raw.get("packet_rate", 0.0)),
             float(raw.get("byte_rate", 0.0)),
             float(raw.get("flow_count", 0.0)),
@@ -26,19 +26,16 @@ class StateBuilder:
             float(raw.get("controller_cpu", 0.0)),
         ]], dtype=np.float32)
 
+        # ===== SCALE =====
         if self.scaler is not None:
             scaled = self.scaler.transform(raw_vector)[0]
         else:
             scaled = raw_vector[0]
 
-        return np.array([
-            scaled[0],
-            scaled[1],
-            scaled[2],
-            scaled[3],
-            scaled[4],
-            scaled[5],
-            scaled[6],
-            scaled[7],
-            float(self.prev_action) / 4.0
-        ], dtype=np.float32)
+        # ===== ADD previous_action =====
+        state = np.append(scaled, self.prev_action / 4.0)
+
+        return state.astype(np.float32)
+
+    def update_action(self, action):
+        self.prev_action = action
