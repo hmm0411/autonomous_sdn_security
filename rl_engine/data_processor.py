@@ -4,6 +4,25 @@ import pandas as pd
 from sklearn.preprocessing import QuantileTransformer
 
 
+def balance_class(df, target_size=3000, random_state=42):
+    if len(df) > target_size:
+        return df.sample(
+            n=target_size,
+            random_state=random_state
+        ).reset_index(drop=True)
+
+    if len(df) < target_size:
+        extra = df.sample(
+            n=target_size - len(df),
+            replace=True,
+            random_state=random_state
+        )
+
+        return pd.concat([df, extra], ignore_index=True).reset_index(drop=True)
+
+    return df.reset_index(drop=True)
+
+
 def process_sdn_dataset():
     processed_dir = "data/processed"
     models_dir = "models"
@@ -31,6 +50,7 @@ def process_sdn_dataset():
         "controller_cpu"
     ]
 
+    target_size = 3000
     dfs = []
 
     for path, label in files.items():
@@ -47,14 +67,23 @@ def process_sdn_dataset():
         df = df[feature_cols + ["label"]].copy()
         df = df.replace([float("inf"), -float("inf")], 0).fillna(0)
 
+        # Cân bằng class ngay tại đây, trước khi append
+        df = balance_class(
+            df,
+            target_size=target_size,
+            random_state=42 + label
+        )
+
         dfs.append(df)
-        print(f"Loaded {path}: {df.shape}")
+
+        print(f"Loaded and balanced {path}: {df.shape}, label={label}")
 
     master_df = pd.concat(dfs, ignore_index=True)
-    print("Total samples:", master_df.shape)
 
-    # Fit scaler trên toàn bộ dữ liệu đã làm sạch để giữ nhất quán với realtime.
-    # Nếu muốn nghiêm ngặt nghiên cứu hơn, fit scaler chỉ trên train.
+    print("\nTotal samples after balancing:", master_df.shape)
+    print("Label distribution:")
+    print(master_df["label"].value_counts().sort_index())
+
     scaler = QuantileTransformer(
         output_distribution="uniform",
         n_quantiles=min(1000, len(master_df)),
@@ -72,23 +101,29 @@ def process_sdn_dataset():
     test_frames = []
 
     for label in range(6):
+        attack_value = label / 5.0
+
         group = processed_df[
-            processed_df["attack_indicator"] == label / 5.0
+            processed_df["attack_indicator"] == attack_value
         ].copy().reset_index(drop=True)
 
         n = len(group)
         train_end = int(0.70 * n)
         val_end = int(0.85 * n)
 
-        train_frames.append(group.iloc[:train_end])
-        val_frames.append(group.iloc[train_end:val_end])
-        test_frames.append(group.iloc[val_end:])
+        train_part = group.iloc[:train_end]
+        val_part = group.iloc[train_end:val_end]
+        test_part = group.iloc[val_end:]
+
+        train_frames.append(train_part)
+        val_frames.append(val_part)
+        test_frames.append(test_part)
 
         print(
             f"Label {label}: total={n}, "
-            f"train={train_end}, "
-            f"val={val_end - train_end}, "
-            f"test={n - val_end}"
+            f"train={len(train_part)}, "
+            f"val={len(val_part)}, "
+            f"test={len(test_part)}"
         )
 
     train_df = pd.concat(train_frames, ignore_index=True)
@@ -105,15 +140,24 @@ def process_sdn_dataset():
     test_df.to_csv(test_path, index=False)
     joblib.dump(scaler, scaler_path)
 
-    print("Saved:", train_path)
+    print("\nSaved:", train_path)
     print("Saved:", val_path)
     print("Saved:", test_path)
     print("Saved:", scaler_path)
 
-    print("Columns:", list(train_df.columns))
+    print("\nColumns:", list(train_df.columns))
     print("Train shape:", train_df.shape)
     print("Val shape:", val_df.shape)
     print("Test shape:", test_df.shape)
+
+    print("\nTrain label distribution:")
+    print(train_df["attack_indicator"].value_counts().sort_index())
+
+    print("\nVal label distribution:")
+    print(val_df["attack_indicator"].value_counts().sort_index())
+
+    print("\nTest label distribution:")
+    print(test_df["attack_indicator"].value_counts().sort_index())
 
 
 if __name__ == "__main__":
