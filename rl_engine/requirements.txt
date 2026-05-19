@@ -15,3 +15,5 @@ seaborn
 mlflow
 prometheus_client
 pandas
+tensorboard
+torch
