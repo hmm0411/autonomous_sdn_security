@@ -20,14 +20,28 @@ ACTION_NAMES = {
 
 def load_dqn():
     agent = DQNAgent(state_dim=STATE_DIM, action_dim=ACTION_DIM)
-    ckpt = torch.load("models/dqn_model.pth", map_location="cpu")
+    ckpt = torch.load("models/dqn_model.pth", map_location=agent.device)
 
     if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        agent.model.load_state_dict(ckpt["model_state_dict"])
-    else:
-        agent.model.load_state_dict(ckpt)
+        agent.q_net.load_state_dict(ckpt["model_state_dict"])
 
-    agent.model.eval()
+        if "target_model_state_dict" in ckpt:
+            agent.target_net.load_state_dict(ckpt["target_model_state_dict"])
+        else:
+            agent.target_net.load_state_dict(ckpt["model_state_dict"])
+
+        if "optimizer_state_dict" in ckpt:
+            agent.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+
+        agent.epsilon = 0.0
+    else:
+        agent.q_net.load_state_dict(ckpt)
+        agent.target_net.load_state_dict(ckpt)
+        agent.epsilon = 0.0
+
+    agent.q_net.eval()
+    agent.target_net.eval()
+
     return agent
 
 
@@ -47,15 +61,12 @@ def load_ppo():
 def select_dqn_action(agent, state):
     with torch.no_grad():
         x = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-        q_values = agent.model(x)
+        q_values = agent.q_net(x)
         return int(torch.argmax(q_values, dim=1).item())
 
 
 def select_ppo_action(agent, state):
-    with torch.no_grad():
-        x = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-        probs = agent.model.actor(x)
-        return int(torch.argmax(probs, dim=1).item())
+    return int(agent.select_greedy_action(state))
 
 
 def evaluate(agent, agent_name, data_path):
