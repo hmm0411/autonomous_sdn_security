@@ -44,7 +44,7 @@ IS_CI = os.getenv("CI", "false").lower() == "true"
 
 if not IS_CI:
     # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-    mlflow.set_tracking_uri("http://127.0.0.1:5000")
+    mlflow.uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("SDN_Autonomous_Security")
 
