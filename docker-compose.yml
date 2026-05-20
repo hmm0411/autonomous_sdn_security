@@ -40,6 +40,8 @@ services:
   # Container chạy DQN
   # Container chạy DQN
   rl-agent-dqn:
+    restart: "no"
+    tty: true
     build: .
     container_name: rl-agent-dqn
     depends_on:
@@ -53,9 +55,12 @@ services:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - MLFLOW_S3_ENDPOINT_URL=http://s3:9005
-    command: python train_dqn.py
+    command: >
+      sh -c "python train_dqn.py && sleep 5"
   # Container chạy PPO
   rl-agent-ppo:
+    restart: "no"
+    tty: true
     build: .
     container_name: rl-agent-ppo
     depends_on:
@@ -69,7 +74,8 @@ services:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - MLFLOW_S3_ENDPOINT_URL=http://s3:9005
-    command: python train_ppo.py
+    command: >
+      sh -c "python train_ppo.py && sleep 5"
   #   restart: on-failure
   rl-serving:
     build: ./rl_engine
@@ -78,6 +84,9 @@ services:
       - "9100:9100"
     depends_on:
       - mlflow
+      - promote
+    networks:
+      - sdn-net
   # twin:
   #   build: ./digital_twin
   #   depends_on:
@@ -85,6 +94,19 @@ services:
   #   networks:
   #     - sdn-net
 
+  promote:
+    build: .
+    container_name: mlflow-promote
+    depends_on:
+      - rl-agent-dqn
+      - rl-agent-ppo
+    networks:
+      - sdn-net
+    volumes:
+      - .:/app
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    command: python mlops/promote.py
   mlflow:
     image: ghcr.io/mlflow/mlflow:v3.0.0
     container_name: mlflow
@@ -107,7 +129,7 @@ services:
       --host 0.0.0.0
       --port 5000
       --backend-store-uri sqlite:////mlruns/mlflow.db
-      --default-artifact-root /mlruns/artifacts
+      --default-artifact-root s3://mlflow-artifacts
     networks:
       - sdn-net
     #healthcheck:
