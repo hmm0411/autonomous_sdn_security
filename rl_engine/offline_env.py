@@ -100,6 +100,10 @@ class OfflineSDNEnv:
         # =========================
         # Security reward
         # =========================
+        action_cost = action_costs.get(action, 0.20)
+        
+        switching_penalty = 0.03 if action != self.previous_action else 0.0
+
         risk_score = (
             0.20 * packet_rate +
             0.15 * byte_rate +
@@ -141,13 +145,13 @@ class OfflineSDNEnv:
         # 2 = flow_overflow
         elif attack_label == 2:
             if action == 1:
-                security_reward = 2.70
+                security_reward = 2.50
             elif action == 2:
-                security_reward = 2.20
+                security_reward = 2.00
             elif action == 4:
-                security_reward = 0.30
+                security_reward = 0.50
             elif action == 3:
-                security_reward = -2.20
+                security_reward = -0.50
             elif action == 0:
                 security_reward = -3.00
             else:
@@ -189,13 +193,13 @@ class OfflineSDNEnv:
         # 5 = port_scanning
         elif attack_label == 5:
             if action == 3:
-                security_reward = 3.20
+                security_reward = 2.80
             elif action == 1:
-                security_reward = -0.20
+                security_reward = 0.80
             elif action == 2:
-                security_reward = -0.20
+                security_reward = 0.30
             elif action == 4:
-                security_reward = -0.80
+                security_reward = -0.50
             elif action == 0:
                 security_reward = -2.80
             else:
