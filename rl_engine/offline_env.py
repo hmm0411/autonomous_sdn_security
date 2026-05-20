@@ -100,7 +100,14 @@ class OfflineSDNEnv:
         # =========================
         # Security reward
         # =========================
-
+        risk_score = (
+            0.20 * packet_rate +
+            0.15 * byte_rate +
+            0.15 * flow_count +
+            0.20 * flow_growth_rate +
+            0.15 * src_ip_entropy +
+            0.15 * controller_cpu
+        )
         # 0 = normal
         if attack_label == 0:
             if action == 0:
@@ -196,15 +203,6 @@ class OfflineSDNEnv:
 
         else:
             security_reward = -1.0
-
-        risk_score = (
-            0.20 * packet_rate +
-            0.15 * byte_rate +
-            0.15 * flow_count +
-            0.20 * flow_growth_rate +
-            0.15 * src_ip_entropy +
-            0.15 * controller_cpu
-        )
 
         severity_bonus = 0.0
         if attack_label != 0 and action != 0:
