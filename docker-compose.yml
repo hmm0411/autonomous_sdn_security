@@ -77,16 +77,21 @@ services:
     command: >
       sh -c "python train_ppo.py && sleep 5"
   #   restart: on-failure
-  rl-serving:
-    build: ./rl_engine
-    ports:
-      - "8000:8000"
-      - "9100:9100"
-    depends_on:
-      - mlflow
-      - promote
-    networks:
-      - sdn-net
+  # rl-serving:
+  #   build: .
+  #   ports:
+  #     - "8000:8000"
+  #     - "9100:9100"
+  #   depends_on:
+  #     - mlflow
+  #   networks:
+  #     - sdn-net
+  #   environment:
+  #     - MLFLOW_TRACKING_URI=http://mlflow:5000
+  #     - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+  #     - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+  #     - MLFLOW_S3_ENDPOINT_URL=http://s3:9005
+  #   command: python -m rl_engine.agent.serving_dq
   # twin:
   #   build: ./digital_twin
   #   depends_on:
