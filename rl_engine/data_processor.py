@@ -135,6 +135,10 @@ def process_sdn_dataset():
     test_path = os.path.join(processed_dir, "test_data.csv")
     scaler_path = os.path.join(models_dir, "scaler.pkl")
 
+    train_df = train_df.sample(frac=1.0, random_state=42).reset_index(drop=True)
+    val_df = val_df.sample(frac=1.0, random_state=43).reset_index(drop=True)
+    test_df = test_df.sample(frac=1.0, random_state=44).reset_index(drop=True)
+
     train_df.to_csv(train_path, index=False)
     val_df.to_csv(val_path, index=False)
     test_df.to_csv(test_path, index=False)
