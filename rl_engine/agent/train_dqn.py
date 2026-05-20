@@ -1,13 +1,14 @@
 import os
 import random
 import logging
-from xml.parsers.expat import model
 import numpy as np
 import pandas as pd
 import mlflow
 import mlflow.pytorch
+from mlops.mlflow_manager import get_best_model
 from prometheus_client import start_http_server, Gauge
 import collections
+import time
 
 import torch
 
@@ -20,6 +21,9 @@ from rl_engine.replay_buffer import ReplayBuffer
 from rl_engine.logger import Logger
 from rl_engine.config import *
 from rl_engine.utils import set_seed
+from mlflow.tracking import MlflowClient
+
+client = MlflowClient()
 
 # CẤU HÌNH PROMETHEUS METRICS
 PROM_REWARD = Gauge('episode_reward', 'Phần thưởng thô của Episode', ['agent'])
@@ -44,8 +48,8 @@ os.makedirs(RUNS_DIR, exist_ok=True)
 IS_CI = os.getenv("CI", "false").lower() == "true"
 
 if not IS_CI:
-    # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
+    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("SDN_Autonomous_Security")
     
@@ -182,9 +186,25 @@ def train_multi_seeds_dqn():
 
     if not IS_CI:
         mlflow.start_run(run_name="DQN_Production_Training")
-        mlflow.log_param("algo", "DQN")
+        mlflow.log_params({
+            "algo": "DQN",
+            "state_dim": STATE_DIM,
+            "action_dim": ACTION_DIM,
+            "gamma": 0.95,
+            "lr": 1e-4,
+            "batch_size": 128,
+            "episodes": 1000
+        })
         mlflow.log_param("seeds", str(seeds))
-    
+        mlflow.set_tags({
+            "project": "NT548",
+            "type": "RL",
+            "env": "production",
+            "author": "Ha My Nguyen"
+        })
+        
+
+
     best_agent_overall = None
     best_overall_mean = -float('inf')
     trained_agent = None  # Biến tạm để lưu agent cuối cùng trong trường hợp không tìm được best agent nào
@@ -287,31 +307,66 @@ def train_multi_seeds_dqn():
     logging.info(f"Best Mean Reward (Across Seeds): {float(np.max(mean_rewards)):.2f}")
 
     # Đăng ký model lên Registry
+
+    # =========================
+    # LOG MODEL TO MLFLOW
+    # =========================
     if not IS_CI and best_agent_overall is not None:
         try:
-             mlflow.pytorch.log_model(
-                    best_agent_overall.q_net,
-                    artifact_path="model",
-                    registered_model_name="SDN_DQN_Model"
-                )
+            print("[*] Logging model to MLflow...")
 
-             mlflow.log_param("model_type", "DQN")
-             mlflow.log_param("state_dim", STATE_DIM)
-             mlflow.log_param("action_dim", ACTION_DIM)   
-             mlflow.log_metric("final_mean_reward", float(mean_rewards[-1]))
-             mlflow.log_metric("best_mean_reward", float(np.max(mean_rewards)))
-             logging.info("Logged DQN model and metrics to MLflow!")
-             current_run = mlflow.active_run()
-             if current_run is not None:
-                 logging.info("Đã đăng ký SDN_DQN_Model lên Registry!")
-             else:
-                 logging.warning("Không có Active Run nào trên MLflow. Bỏ qua bước đăng ký Model.")
+            mlflow.pytorch.log_model(
+                best_agent_overall.q_net,
+                artifact_path="model",
+                registered_model_name="SDN_DQN_Model"
+            )
+
+            mlflow.log_metric("final_mean_reward", float(mean_rewards[-1]))
+            mlflow.log_metric("best_mean_reward", float(np.max(mean_rewards)))
+
+            mlflow.log_artifact(model_path)
+            mlflow.log_artifact(summary_path)
+            mlflow.log_artifact(metrics_path)
+
+            data_file = "data/processed/train_data.csv"
+            if os.path.exists(data_file):
+                mlflow.log_artifact(data_file)
+
+            print("[+] Model logged successfully!")
+
         except Exception as e:
-             logging.error(f"Failed to register model: {e}")
-             logging.info("Failed to register DQN model.")
+            print("MLflow logging failed:", e)
     if not IS_CI:
         mlflow.end_run()
+    
+    
+def promote_best_model():
+    best_model, _ = get_best_model()
 
+    client.transition_model_version_stage(
+        name=best_model.name,
+        version=best_model.version,
+        stage="Production"
+    )
+
+    print(f"Promote {best_model.name} v{best_model.version} → Production")
+
+def rollback_model(model_name):
+    versions = client.search_model_versions(f"name='{model_name}'")
+
+    if len(versions) < 2:
+        print("Không đủ version để rollback")
+        return
+
+    previous = sorted(versions, key=lambda x: int(x.version))[-2]
+
+    client.transition_model_version_stage(
+        name=model_name,
+        version=previous.version,
+        stage="Production"
+    )
+
+    print(f"Rollback → {model_name} v{previous.version}")    
 
 if __name__ == "__main__":
     start_http_server(9000)

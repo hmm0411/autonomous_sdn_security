@@ -1,7 +1,6 @@
 import os
 import logging
 import collections
-from pyexpat import model
 import numpy as np
 import pandas as pd
 import mlflow
@@ -10,6 +9,7 @@ from prometheus_client import start_http_server, Gauge
 import torch
 import gc
 from torch.optim.lr_scheduler import LinearLR
+import time
 
 from rl_engine.online_env import OnlineSDNEnv
 from rl_engine.offline_env import OfflineSDNEnv
@@ -17,9 +17,12 @@ from rl_engine.agent.ppo_agent import PPOAgent
 from rl_engine.logger import Logger
 from rl_engine.utils import set_seed
 from rl_engine.config import *
+from mlflow.tracking import MlflowClient
+
+
 # Bổ sung nếu chưa có trong config: 
 # STATE_DIM = 7; ACTION_DIM = 5; WINDOW_SIZE = 50; MAX_EPISODES = 500; MAX_STEPS = 1000;
-
+client = MlflowClient()
 # DIRECTORY STRUCTURE
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RUNS_DIR = os.path.join(BASE_DIR, "runs")
@@ -43,8 +46,8 @@ PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
 IS_CI = os.getenv("CI", "false").lower() == "true"
 
 if not IS_CI:
-    # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
+    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("SDN_Autonomous_Security")
 
@@ -175,8 +178,25 @@ def train_multi_seeds_ppo():
     
     if not IS_CI:
         mlflow.start_run(run_name="PPO_Production_Training")
-        mlflow.log_param("algo", "PPO")
+        mlflow.log_params({
+            "algo": "PPO",
+            "state_dim": STATE_DIM,
+            "action_dim": ACTION_DIM,
+            "gamma": 0.95,
+            "lr": 1e-4,
+            "batch_size": 128,
+            "clip_eps": 0.10,
+            "entropy_coef": 0.08,
+            "value_coef": 0.5,
+            "episodes": 1000
+        })
         mlflow.log_param("seeds", str(seeds))
+        mlflow.set_tags({
+            "project": "NT548",
+            "type": "RL",
+            "env": "production",
+            "author": "Ha My Nguyen"
+        })
     
     best_agent_overall = None
     best_overall_mean = -float('inf')
@@ -278,31 +298,56 @@ def train_multi_seeds_ppo():
     # Đăng ký model lên Registry
     if not IS_CI and best_agent_overall is not None:
         try:
-            # 1. Bỏ qua cảnh báo policy vì ta biết chắc Agent có thuộc tính này
+            print("[*] Logging PPO model to MLflow...")
+
             mlflow.pytorch.log_model(
-                best_agent_overall.q_net,
+                best_agent_overall.model,
                 artifact_path="model",
                 registered_model_name="SDN_PPO_Model"
             )
 
-            mlflow.log_param("model_type", "PPO")
-            mlflow.log_param("state_dim", STATE_DIM)
-            mlflow.log_param("action_dim", ACTION_DIM)
             mlflow.log_metric("final_mean_reward", float(mean_rewards[-1]))
             mlflow.log_metric("best_mean_reward", float(np.max(mean_rewards)))
-            logging.info("Logged PPO model and metrics to MLflow!")            
-            # 2. Lấy active run an toàn
-            current_run = mlflow.active_run()
-            if current_run is not None:
-                logging.info("Đã đăng ký SDN_PPO_Model lên MLflow Registry!")
-            else:
-                logging.warning("Không có Active Run nào trên MLflow. Bỏ qua bước đăng ký Model.")
-                logging.info("Failed to register PPO model.")
+
+            mlflow.log_artifact(model_path)
+            mlflow.log_artifact(summary_path)
+            mlflow.log_artifact(metrics_path)
+
+            print("[+] PPO model logged successfully!")
+
         except Exception as e:
-            logging.error(f"Lỗi đăng ký model: {e}")
+            print("MLflow logging failed:", e)
             
     if not IS_CI:
         mlflow.end_run()
+
+def promote_best_model():
+        best_model, _ = get_best_model()
+
+        client.transition_model_version_stage(
+            name=best_model.name,
+            version=best_model.version,
+            stage="Production"
+        )
+
+        print(f"Promote {best_model.name} v{best_model.version} → Production")
+
+def rollback_model(model_name):
+    versions = client.search_model_versions(f"name='{model_name}'")
+
+    if len(versions) < 2:
+        print("Không đủ version để rollback")
+        return
+
+    previous = sorted(versions, key=lambda x: int(x.version))[-2]
+
+    client.transition_model_version_stage(
+        name=model_name,
+        version=previous.version,
+        stage="Production"
+    )
+
+    print(f"Rollback → {model_name} v{previous.version}")  
 
 if __name__ == "__main__":
     PORT = 9001

@@ -1,90 +1,51 @@
 from flask import Flask, request, jsonify
 import mlflow.pytorch
 import torch
-import json
 import joblib
 from prometheus_client import start_http_server, Gauge
+from mlops.mlflow_manager import get_best_model
+
+model = None
+scaler = None
 
 app = Flask(__name__)
 
-CONFIG_PATH = "config/model_config.json"
-
-# ===== METRICS =====
 model_used_g = Gauge("model_used", "Model selected", ["model"])
 
 # ===== LOAD MODEL =====
 def load_models():
-    global dqn_model, ppo_model
+    global model, scaler
 
-    print("Loading models from MLflow...")
+    best_model, _ = get_best_model()
+    model_uri = f"models:/{best_model.name}/{best_model.version}"
 
-    dqn_model = mlflow.pytorch.load_model("models:/SDN_DQN_Model/Production")
-    ppo_model = mlflow.pytorch.load_model("models:/SDN_PPO_Model/Production")
+    model = mlflow.pytorch.load_model(model_uri)
+    scaler = joblib.load("models/scaler.pkl")
 
-    dqn_model.eval()
-    ppo_model.eval()
-
-load_models()
-
-scaler = joblib.load("models/scaler.pkl")
-
-# ===== CONFIG =====
-def get_active_model():
-    try:
-        with open(CONFIG_PATH) as f:
-            return json.load(f)["active_model"]
-    except:
-        return "AUTO"   # default auto mode
+    print(f"[+] Loaded model: {model_uri}")
 
 # ===== PREDICT =====
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
         state = request.json["state"]
-        state = scaler.transform([state])  # Scale state features
+
+        state = scaler.transform([state])
         state = torch.tensor(state).float()
 
-        mode = get_active_model()
-
         with torch.no_grad():
+            action = model(state).argmax().item()
 
-            # ===== AUTO MODE =====
-            if mode == "AUTO":
-                q_dqn = dqn_model(state)
-                q_ppo = ppo_model(state)
-
-                if q_dqn.max().item() > q_ppo.max().item():
-                    action = q_dqn.argmax().item()
-                    model_used = "DQN"
-                else:
-                    action = q_ppo.argmax().item()
-                    model_used = "PPO"
-
-            # ===== FORCE MODE =====
-            elif mode == "DQN":
-                action = dqn_model(state).argmax().item()
-                model_used = "DQN"
-
-            else:
-                action = ppo_model(state).argmax().item()
-                model_used = "PPO"
-
-        model_used_g.labels(model=model_used).set(1)
+        model_used_g.labels(model="AUTO").set(1)
 
         return jsonify({
             "action": int(action),
-            "model": model_used
+            "model": "AUTO"
         })
 
     except Exception as e:
         print("Predict error:", e)
-
-        # ===== FAILOVER =====
-        try:
-            action = ppo_model(state).argmax().item()
-            return jsonify({"action": int(action), "model": "PPO"})
-        except:
-            return jsonify({"action": 0, "model": "fallback"})
+        return jsonify({"action": 0, "model": "fallback"})
 
 # ===== RELOAD =====
 @app.route("/reload", methods=["POST"])
@@ -94,4 +55,6 @@ def reload_model():
 
 # ===== RUN =====
 if __name__ == "__main__":
+    start_http_server(9002)
+    load_models()
     app.run(host="0.0.0.0", port=8000)

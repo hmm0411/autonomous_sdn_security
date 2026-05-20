@@ -1,18 +1,18 @@
 import time
 import numpy as np
-import csv
 
 from rl_engine.state_builder import StateBuilder
 from control_loop.controller_client import execute_action
 from rl_engine.reward import Reward
 
-from control_loop.rl_client import get_action
+from control_loop.rl_client import call_model
 from control_loop.metrics import update_metrics
 from control_loop.state_collector import get_state
 
-STATE_DIM = 8
+STATE_DIM = 9
 SLEEP_TIME = 2
 
+RL_URL = "http://localhost:8000/predict"
 
 state_builder = StateBuilder()
 reward_calc = Reward()
@@ -26,40 +26,20 @@ def validate_state(state):
     return state is not None and len(state) == STATE_DIM
 
 while True:
-    try:
-        # ===== LẤY RAW DATA =====
-        raw = get_state()
+    raw = get_state()
+    state = np.array(state_builder.build(raw), dtype=np.float32)
 
-        # ===== BUILD STATE =====
-        state = state_builder.build(raw)
+    if not validate_state(state):
+        continue
 
-        with open("data/realtime_log.csv", "a") as f:
-            writer = csv.writer(f)
-            writer.writerow(state)
+    action = call_model(RL_URL, state)
 
-        # ===== CALL RL =====
-        action, model = get_action(state)
+    reward = reward_calc.calculate(raw, action)
 
-        # ===== CALCULATE REWARD =====
-        reward = reward_calc.calculate(raw, action)
+    execute_action(action)
 
-        # ===== BASELINE =====
-        action_base = baseline_policy(state)
-        reward_base = reward_calc.calculate(raw, action_base)
+    update_metrics(state, reward, "AUTO", action)
 
-        # ===== APPLY =====
-        execute_action(action)
+    print(f"[AUTO] action={action} | reward={reward}")
 
-        # ===== UPDATE METRICS =====
-        update_metrics(state, reward, model, action)
-        update_metrics(state, reward_base, "baseline", action_base)
-
-        # ===== LOG =====
-        print(f"[AUTO] {model} | action={action} | reward={reward}")
-        print(f"[BASELINE] action={action_base} | reward={reward_base}")
-
-        time.sleep(SLEEP_TIME)
-
-    except Exception as e:
-        print("Loop error:", e)
-        time.sleep(3)
+    time.sleep(SLEEP_TIME)
