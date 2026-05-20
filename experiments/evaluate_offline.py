@@ -73,6 +73,9 @@ def evaluate(agent, agent_name, data_path):
     df = pd.read_csv(data_path)
     env = OfflineSDNEnv(dataframe=df)
 
+    if hasattr(env, "max_steps_per_episode"):
+        env.max_steps_per_episode = len(df)
+
     state, _ = env.reset()
     done = False
 
@@ -99,9 +102,7 @@ def evaluate(agent, agent_name, data_path):
         total_reward += reward
         steps += 1
 
-        if attack_indicator not in reward_by_attack:
-            reward_by_attack[attack_indicator] = []
-        reward_by_attack[attack_indicator].append(reward)
+        reward_by_attack.setdefault(attack_indicator, []).append(reward)
 
         state = next_state
 
