@@ -147,7 +147,7 @@ class OfflineSDNEnv:
             elif action == 4:
                 security_reward = 0.30
             elif action == 3:
-                security_reward = -1.50
+                security_reward = -2.20
             elif action == 0:
                 security_reward = -3.00
             else:
@@ -191,7 +191,7 @@ class OfflineSDNEnv:
             if action == 3:
                 security_reward = 3.20
             elif action == 1:
-                security_reward = 0.20
+                security_reward = -0.20
             elif action == 2:
                 security_reward = -0.20
             elif action == 4:
