@@ -295,3 +295,4 @@ volumes:
   mlflow_data:
   prometheus_data:
   grafana_data:
+  minio_data:
