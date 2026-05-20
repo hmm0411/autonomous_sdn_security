@@ -8,9 +8,9 @@ import mlflow.pytorch
 from mlops.mlflow_manager import get_best_model
 from prometheus_client import start_http_server, Gauge
 import collections
-import time
-
+import traceback
 import torch
+from dotenv import load_dotenv
 
 # Giả sử các module này đã được định nghĩa đúng trong source code của bạn
 # from rl_engine.agent.train_ppo import run_single_seed, train_multi_seeds # (Bỏ dòng này nếu không cần thiết trong file DQN)
@@ -23,6 +23,7 @@ from rl_engine.config import *
 from rl_engine.utils import set_seed
 from mlflow.tracking import MlflowClient
 
+load_dotenv()  # Tải biến môi trường từ file .env
 client = MlflowClient()
 
 # CẤU HÌNH PROMETHEUS METRICS
@@ -48,6 +49,9 @@ os.makedirs(RUNS_DIR, exist_ok=True)
 IS_CI = os.getenv("CI", "false").lower() == "true"
 
 if not IS_CI:
+    os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("MINIO_ROOT_USER", "minioadmin")
+    os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin")
+    os.environ["MLFLOW_S3_ENDPOINT_URL"] = "http://localhost:9005"
     mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
     # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
     mlflow.set_tracking_uri(mlflow_uri)
@@ -227,6 +231,8 @@ def train_multi_seeds_dqn():
             best_agent_overall = trained_agent
 
     if best_agent_overall is None:
+        assert best_agent_overall is not None, "Model is None, cannot save to MLflow."
+        print("LOGGING MODEL NOW")
         logging.warning("No best agent found.")
         best_agent_overall = trained_agent  # Lấy agent cuối cùng làm fallback
 

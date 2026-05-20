@@ -220,6 +220,8 @@ def train_multi_seeds_ppo():
 
     # ==== SAVE BEST PPO MODEL ====
     if best_agent_overall is None:
+        assert best_agent_overall is not None, "Model is None, cannot save to MLflow."
+        print("LOGGING MODEL NOW")
         logging.warning("No best PPO agent found. Using last trained agent.")
         best_agent_overall = trained_agent  # Lấy agent cuối cùng làm fallback
     model_path = os.path.join(MODELS_DIR, "ppo_model.pth")
