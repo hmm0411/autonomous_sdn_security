@@ -3,7 +3,7 @@ import numpy as np
 import time
 
 # Trỏ tới container mlflow đang chạy
-mlflow.set_tracking_uri("http://34.126.64.185:5000") 
+mlflow.set_tracking_uri("http://35.240.135.171:5000") 
 mlflow.set_experiment("SDN_RL_Defense_Training")
 
 print("[*] Đang đẩy dữ liệu quá trình huấn luyện RL lên MLflow...")
@@ -33,4 +33,4 @@ with mlflow.start_run(run_name="PPO_Agent_MultiSeed"):
         
         time.sleep(0.02) # Tạo delay nhỏ để log mượt hơn
 
-print("[+] Hoàn tất! Hãy mở http://34.126.64.185:5000 để xem kết quả Training.")
+print("[+] Hoàn tất! Hãy mở http://35.240.135.171:5000 để xem kết quả Training.")

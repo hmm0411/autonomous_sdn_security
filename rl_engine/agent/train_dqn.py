@@ -289,7 +289,15 @@ def train_multi_seeds_dqn():
     # Đăng ký model lên Registry
     if not IS_CI and best_agent_overall is not None:
         try:
-             mlflow.pytorch.log_model(best_agent_overall.q_net, "dqn_model", registered_model_name="SDN_DQN_Model") 
+             mlflow.pytorch.log_model(
+                    best_agent_overall.q_net,
+                    artifact_path="model",
+                    registered_model_name="SDN_DQN_Model"
+                )
+
+             mlflow.log_param("model_type", "DQN")
+             mlflow.log_param("state_dim", STATE_DIM)
+             mlflow.log_param("action_dim", ACTION_DIM)   
              mlflow.log_metric("final_mean_reward", float(mean_rewards[-1]))
              mlflow.log_metric("best_mean_reward", float(np.max(mean_rewards)))
              logging.info("Logged DQN model and metrics to MLflow!")

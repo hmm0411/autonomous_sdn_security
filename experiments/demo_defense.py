@@ -108,7 +108,7 @@ class DemoDefenseAgent:
 def main():
 
     env = OnlineSDNEnv(
-        controller_url="http://34.126.64.185:8181/onos/v1"
+        controller_url="http://35.240.135.171:8181/onos/v1"
     )
 
     agent = DemoDefenseAgent(env)

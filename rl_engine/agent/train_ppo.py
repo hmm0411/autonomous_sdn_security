@@ -279,7 +279,15 @@ def train_multi_seeds_ppo():
     if not IS_CI and best_agent_overall is not None:
         try:
             # 1. Bỏ qua cảnh báo policy vì ta biết chắc Agent có thuộc tính này
-            mlflow.pytorch.log_model(best_agent_overall.model, "ppo_model", registered_model_name="SDN_PPO_Model") 
+            mlflow.pytorch.log_model(
+                best_agent_overall.q_net,
+                artifact_path="model",
+                registered_model_name="SDN_PPO_Model"
+            )
+
+            mlflow.log_param("model_type", "PPO")
+            mlflow.log_param("state_dim", STATE_DIM)
+            mlflow.log_param("action_dim", ACTION_DIM)
             mlflow.log_metric("final_mean_reward", float(mean_rewards[-1]))
             mlflow.log_metric("best_mean_reward", float(np.max(mean_rewards)))
             logging.info("Logged PPO model and metrics to MLflow!")            

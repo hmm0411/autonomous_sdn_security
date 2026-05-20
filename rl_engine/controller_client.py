@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class ControllerClient:
     def __init__(
         self, 
-        onos_ip: str = "34.126.64.185", 
+        onos_ip: str = "35.240.135.171", 
         port: str = "8181", 
         user: str = "onos", 
         pwd: str = "rocks", 

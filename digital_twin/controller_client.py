@@ -3,7 +3,7 @@ import requests
 import json
 
 class ControllerClient:
-    def __init__(self, onos_ip="34.126.64.185", port="8181", user="onos", pwd="rocks"):
+    def __init__(self, onos_ip="35.240.135.171", port="8181", user="onos", pwd="rocks"):
         self.base_url = f"http://{onos_ip}:{port}/onos/v1"
         self.auth = (user, pwd)
         self.headers = {
