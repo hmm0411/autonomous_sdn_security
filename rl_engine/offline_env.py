@@ -13,9 +13,15 @@ class OfflineSDNEnv:
         if seed is not None:
             np.random.seed(seed)
 
-        self.idx = 0
-        self.previous_action = 0
         self.current_step = 0
+        self.previous_action = 0
+
+        max_start = max(0, len(self.df) - self.max_steps_per_episode - 1)
+
+        if max_start > 0:
+            self.idx = np.random.randint(0, max_start)
+        else:
+            self.idx = 0
 
         return self._get_state(), {}
 
@@ -58,7 +64,6 @@ class OfflineSDNEnv:
     def _compute_reward(self, action, row):
         action = int(action)
 
-        # Các feature đã được scale về khoảng 0-1 sau QuantileTransformer
         packet_rate = float(row["packet_rate"])
         byte_rate = float(row["byte_rate"])
         flow_count = float(row["flow_count"])
@@ -69,139 +74,142 @@ class OfflineSDNEnv:
         controller_cpu = float(row["controller_cpu"])
         attack_indicator = float(row["attack_indicator"])
 
-        # attack_indicator: 0.0, 0.2, 0.4, 0.6, 0.8, 1.0
         attack_label = int(round(attack_indicator * 5))
 
-        # =========================
-        # 1. QoS / system penalty
-        # =========================
-        # Penalty này phải nhỏ, nếu không reward sẽ âm nặng.
+        # QoS penalty nhỏ thôi, tránh làm reward luôn âm nặng
         qos_penalty = (
-            0.20 * latency +
-            0.35 * packet_loss +
-            0.15 * controller_cpu +
-            0.15 * flow_growth_rate
+            0.10 * latency +
+            0.20 * packet_loss +
+            0.10 * controller_cpu +
+            0.10 * flow_growth_rate
         )
 
-        # =========================
-        # 2. Action cost
-        # =========================
-        # Hành động càng mạnh thì càng tốn chi phí.
+        # Tăng cost isolate để tránh PPO/DQN chọn isolate quá nhiều
         action_costs = {
             0: 0.00,  # no_action
             1: 0.10,  # block
             2: 0.08,  # limit bandwidth
             3: 0.12,  # redirect honeypot
-            4: 0.25,  # isolate device
+            4: 0.65,  # isolate device
         }
 
         action_cost = action_costs.get(action, 0.20)
 
-        # =========================
-        # 3. Switching penalty
-        # =========================
-        # Phạt nhỏ nếu đổi action liên tục.
-        switching_penalty = 0.05 if action != self.previous_action else 0.0
+        switching_penalty = 0.03 if action != self.previous_action else 0.0
 
         # =========================
-        # 4. Security reward
+        # Security reward
         # =========================
 
-        # Normal traffic
+        # 0 = normal
         if attack_label == 0:
             if action == 0:
-                security_reward = 1.20
+                security_reward = 2.00
             elif action == 2:
-                # limit bandwidth trên normal vẫn sai nhưng nhẹ hơn block/isolate
-                security_reward = -0.60
+                security_reward = -1.00
             elif action == 3:
-                security_reward = -0.80
+                security_reward = -1.20
             elif action == 1:
-                security_reward = -1.00
+                security_reward = -1.50
             elif action == 4:
-                security_reward = -1.40
+                security_reward = -2.00
             else:
-                security_reward = -1.00
+                security_reward = -1.50
 
-        # DDoS
+        # 1 = ddos
         elif attack_label == 1:
             if action == 2:
-                security_reward = 1.60
-            elif action in [1, 3]:
-                security_reward = 1.10
-            elif action == 4:
-                security_reward = 0.60
-            else:
-                security_reward = -1.50
-
-        # Flow overflow
-        elif attack_label == 2:
-            if action in [1, 2]:
+                security_reward = 2.00
+            elif action == 1:
                 security_reward = 1.50
-            elif action == 4:
-                security_reward = 0.90
             elif action == 3:
-                security_reward = 0.40
+                security_reward = 1.20
+            elif action == 4:
+                security_reward = 0.20
+            elif action == 0:
+                security_reward = -2.20
             else:
                 security_reward = -1.50
 
-        # IP spoofing
+        # 2 = flow_overflow
+        elif attack_label == 2:
+            if action == 1:
+                security_reward = 2.00
+            elif action == 2:
+                security_reward = 1.80
+            elif action == 4:
+                security_reward = 0.50
+            elif action == 3:
+                security_reward = 0.30
+            elif action == 0:
+                security_reward = -2.20
+            else:
+                security_reward = -1.50
+
+        # 3 = ip_spoofing
         elif attack_label == 3:
-            if action in [1, 4]:
-                security_reward = 1.60
+            if action == 1:
+                security_reward = 2.00
+            elif action == 4:
+                security_reward = 1.40
             elif action == 3:
                 security_reward = 1.00
             elif action == 2:
-                security_reward = 0.40
+                security_reward = 0.30
+            elif action == 0:
+                security_reward = -2.30
             else:
-                security_reward = -1.60
+                security_reward = -1.50
 
-        # Packet-in flood
+        # 4 = packet_in_flood
         elif attack_label == 4:
-            if action in [1, 2]:
-                security_reward = 1.50
+            if action == 2:
+                security_reward = 2.00
+            elif action == 1:
+                security_reward = 1.80
             elif action == 4:
-                security_reward = 0.90
-            elif action == 3:
                 security_reward = 0.50
+            elif action == 3:
+                security_reward = 0.40
+            elif action == 0:
+                security_reward = -2.30
             else:
-                security_reward = -1.60
+                security_reward = -1.50
 
-        # Port scanning
+        # 5 = port_scanning
         elif attack_label == 5:
-            if action in [1, 3]:
-                security_reward = 1.50
+            if action == 3:
+                security_reward = 2.00
+            elif action == 1:
+                security_reward = 1.80
             elif action == 2:
-                security_reward = 0.90
+                security_reward = 0.80
             elif action == 4:
-                security_reward = 0.60
+                security_reward = 0.30
+            elif action == 0:
+                security_reward = -2.00
             else:
-                security_reward = -1.40
+                security_reward = -1.50
 
         else:
             security_reward = -1.0
 
-        # =========================
-        # 5. Severity bonus
-        # =========================
-        # Nếu attack mạnh và agent chọn hành động phòng thủ, thưởng thêm nhẹ.
         risk_score = (
-            0.25 * packet_rate +
-            0.20 * byte_rate +
+            0.20 * packet_rate +
+            0.15 * byte_rate +
+            0.15 * flow_count +
             0.20 * flow_growth_rate +
-            0.20 * src_ip_entropy +
+            0.15 * src_ip_entropy +
             0.15 * controller_cpu
         )
-
+        
+        severity_bonus = 0.0
         if attack_label != 0 and action != 0:
-            severity_bonus = 0.30 * risk_score
-        else:
-            severity_bonus = 0.0
+            severity_bonus = 0.40 * risk_score
 
-        # Nếu normal mà dùng action mạnh khi risk thấp thì phạt thêm.
         false_positive_penalty = 0.0
-        if attack_label == 0 and action != 0 and risk_score < 0.40:
-            false_positive_penalty = 0.30
+        if attack_label == 0 and action != 0:
+            false_positive_penalty = 0.50
 
         reward = (
             security_reward
@@ -212,5 +220,4 @@ class OfflineSDNEnv:
             - false_positive_penalty
         )
 
-        # Giữ reward trong khoảng vừa phải để train ổn định.
-        return float(np.clip(reward, -2.0, 2.0))
+        return float(np.clip(reward, -3.0, 3.0))
