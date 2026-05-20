@@ -47,17 +47,33 @@ class OnlineSDNEnv:
     # STEP
     # ==========================================
     def step(self, action):
+        action = int(action)
+
+        # Lấy state trước khi apply action
+        state_before = self._get_state()
+
+        # Apply action vào ONOS
         self._apply_action(action)
 
-        time.sleep(1)
+        # Chờ mạng phản ứng sau khi cài flow/meter
+        time.sleep(self.polling_interval)
 
-        self.previous_action = int(action)
-        self.builder.prev_action = int(action)
+        # Lấy state sau khi apply action
+        next_state = self._get_state()
 
-        state = self._get_state()
-        reward = self._compute_reward(state, action)
+        # Tính reward online dựa trên state trước/sau
+        reward = self._compute_online_reward(
+            state_before=state_before,
+            next_state=next_state,
+            action=action
+        )
 
-        return state, reward, False, {}
+        self.previous_action = action
+        self.builder.prev_action = action
+
+        done = False
+
+        return next_state, reward, done, False, {}
     # ==========================================
     # STATE COLLECTION
     # ==========================================
@@ -357,19 +373,86 @@ class OnlineSDNEnv:
     # ==========================================
     # REWARD ONLINE
     # ==========================================
-    def _compute_reward(self, state, action):
-        flow_growth_rate = state[3]
-        latency = state[5]
-        packet_loss = state[6]
-        controller_cpu = state[7]
+    def _compute_online_reward(self, state_before, next_state, action):
+        action = int(action)
 
-        qos_penalty = (
-            0.5 * flow_growth_rate +
-            1.0 * latency +
-            2.0 * packet_loss +
-            0.5 * controller_cpu
+        # State format:
+        # 0 packet_rate
+        # 1 byte_rate
+        # 2 flow_count
+        # 3 flow_growth_rate
+        # 4 src_ip_entropy
+        # 5 latency
+        # 6 packet_loss
+        # 7 controller_cpu
+        # 8 previous_action
+
+        before_packet_rate = float(state_before[0])
+        before_flow_growth = float(state_before[3])
+        before_entropy = float(state_before[4])
+        before_latency = float(state_before[5])
+        before_loss = float(state_before[6])
+        before_cpu = float(state_before[7])
+
+        after_packet_rate = float(next_state[0])
+        after_flow_growth = float(next_state[3])
+        after_entropy = float(next_state[4])
+        after_latency = float(next_state[5])
+        after_loss = float(next_state[6])
+        after_cpu = float(next_state[7])
+
+        # Risk trước và sau khi apply action
+        risk_before = (
+            0.25 * before_packet_rate +
+            0.25 * before_flow_growth +
+            0.20 * before_entropy +
+            0.15 * before_latency +
+            0.10 * before_loss +
+            0.05 * before_cpu
         )
 
-        switching_penalty = 0.3 if action != self.previous_action else 0.0
+        risk_after = (
+            0.25 * after_packet_rate +
+            0.25 * after_flow_growth +
+            0.20 * after_entropy +
+            0.15 * after_latency +
+            0.10 * after_loss +
+            0.05 * after_cpu
+        )
 
-        return float(1.0 - qos_penalty - switching_penalty)
+        # Nếu action làm risk giảm thì thưởng
+        improvement = risk_before - risk_after
+
+        # Chi phí hành động
+        action_costs = {
+            0: 0.00,
+            1: 0.10,
+            2: 0.08,
+            3: 0.12,
+            4: 0.50,
+        }
+
+        action_cost = action_costs.get(action, 0.20)
+
+        # Phạt đổi action liên tục
+        switching_penalty = 0.05 if action != self.previous_action else 0.0
+
+        # Nếu risk thấp mà vẫn dùng action mạnh thì phạt false positive
+        false_positive_penalty = 0.0
+        if risk_before < 0.30 and action != 0:
+            false_positive_penalty = 0.60
+
+        # Nếu risk cao mà no_action thì phạt
+        miss_attack_penalty = 0.0
+        if risk_before > 0.55 and action == 0:
+            miss_attack_penalty = 0.80
+
+        reward = (
+            1.5 * improvement
+            - action_cost
+            - switching_penalty
+            - false_positive_penalty
+            - miss_attack_penalty
+        )
+
+        return float(np.clip(reward, -2.0, 2.0))
