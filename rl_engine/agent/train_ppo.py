@@ -22,6 +22,7 @@ from mlflow.tracking import MlflowClient
 
 # Bổ sung nếu chưa có trong config: 
 # STATE_DIM = 7; ACTION_DIM = 5; WINDOW_SIZE = 50; MAX_EPISODES = 500; MAX_STEPS = 1000;
+load_dotenv()
 client = MlflowClient()
 # DIRECTORY STRUCTURE
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -46,8 +47,12 @@ PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
 IS_CI = os.getenv("CI", "false").lower() == "true"
 
 if not IS_CI:
+    os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("MINIO_ROOT_USER", "minioadmin")
+    os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin")
+    os.environ["MLFLOW_S3_ENDPOINT_URL"] = os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://s3:9005")
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    
     mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
-    # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("SDN_Autonomous_Security")
 
@@ -224,8 +229,8 @@ def train_multi_seeds_ppo():
         print("LOGGING MODEL NOW")
         logging.warning("No best PPO agent found. Using last trained agent.")
         best_agent_overall = trained_agent  # Lấy agent cuối cùng làm fallback
+    
     model_path = os.path.join(MODELS_DIR, "ppo_model.pth")
-
     assert best_agent_overall is not None # Đảm bảo có agent tốt nhất để lưu
 
     torch.save(
@@ -304,21 +309,46 @@ def train_multi_seeds_ppo():
 
             mlflow.pytorch.log_model(
                 best_agent_overall.model,
-                artifact_path="model",
-                registered_model_name="SDN_PPO_Model"
+                artifact_path="model"
             )
 
             mlflow.log_metric("final_mean_reward", float(mean_rewards[-1]))
             mlflow.log_metric("best_mean_reward", float(np.max(mean_rewards)))
 
-            mlflow.log_artifact(model_path)
-            mlflow.log_artifact(summary_path)
-            mlflow.log_artifact(metrics_path)
+            if os.path.exists(model_path):
+                mlflow.log_artifact(model_path)
+            if os.path.exists(summary_path):
+                mlflow.log_artifact(summary_path)
+            if os.path.exists(metrics_path):
+                mlflow.log_artifact(metrics_path)
 
-            print("[+] PPO model logged successfully!")
+            data_file = "data/processed/train_data.csv"
+            if os.path.exists(data_file):
+                mlflow.log_artifact(data_file)
+
+            print("[+] Artifacts and Model logged successfully!")
+
+            # FIX 3: Đăng ký version thủ công
+            run_id = mlflow.active_run().info.run_id
+            
+            try:
+                # Kiểm tra xem tên đăng ký này đã tồn tại chưa
+                client.get_registered_model("SDN_PPO_Model")
+            except Exception:
+                print("Registered model not found. Creating 'SDN_PPO_Model'...")
+                client.create_registered_model("SDN_PPO_Model")
+
+            print(f"Creating model version for run {run_id}...")
+            client.create_model_version(
+                name="SDN_PPO_Model",
+                source=f"{mlflow.get_artifact_uri()}/model",
+                run_id=run_id
+            )
+            print("[+] Model Version Registered Successfully!")
 
         except Exception as e:
-            print("MLflow logging failed:", e)
+            print("[-] MLflow logging failed. Traceback:")
+            traceback.print_exc()
             
     if not IS_CI:
         mlflow.end_run()
