@@ -87,10 +87,10 @@ class OfflineSDNEnv:
         # Tăng cost isolate để tránh PPO/DQN chọn isolate quá nhiều
         action_costs = {
             0: 0.00,  # no_action
-            1: 0.10,  # block
+            1: 0.12,  # block
             2: 0.08,  # limit bandwidth
-            3: 0.12,  # redirect honeypot
-            4: 0.65,  # isolate device
+            3: 0.10,  # redirect honeypot
+            4: 0.75,  # isolate device
         }
 
         action_cost = action_costs.get(action, 0.20)
@@ -104,90 +104,93 @@ class OfflineSDNEnv:
         # 0 = normal
         if attack_label == 0:
             if action == 0:
-                security_reward = 2.00
+                security_reward = 2.50
             elif action == 2:
-                security_reward = -1.00
-            elif action == 3:
-                security_reward = -1.20
-            elif action == 1:
-                security_reward = -1.50
-            elif action == 4:
                 security_reward = -2.00
+            elif action == 3:
+                security_reward = -2.50
+            elif action == 1:
+                security_reward = -3.50
+            elif action == 4:
+                security_reward = -4.50
             else:
-                security_reward = -1.50
+                security_reward = -3.00
 
         # 1 = ddos
         elif attack_label == 1:
             if action == 2:
-                security_reward = 2.00
+                security_reward = 2.50
             elif action == 1:
-                security_reward = 1.50
+                security_reward = 0.80
             elif action == 3:
-                security_reward = 1.20
+                security_reward = 0.40
             elif action == 4:
-                security_reward = 0.20
+                security_reward = -0.80
             elif action == 0:
-                security_reward = -2.20
+                security_reward = -3.00
             else:
                 security_reward = -1.50
 
         # 2 = flow_overflow
         elif attack_label == 2:
             if action == 1:
-                security_reward = 2.00
+                security_reward = 2.50
             elif action == 2:
-                security_reward = 1.80
+                security_reward = 2.00
             elif action == 4:
                 security_reward = 0.50
             elif action == 3:
-                security_reward = 0.30
+                security_reward = -0.50
             elif action == 0:
-                security_reward = -2.20
+                security_reward = -3.00
             else:
                 security_reward = -1.50
 
         # 3 = ip_spoofing
         elif attack_label == 3:
-            if action == 1:
-                security_reward = 2.00
+            # isolate chỉ nên rất tốt khi risk cao
+            if action == 4 and risk_score >= 0.55:
+                security_reward = 2.80
+            elif action == 1:
+                security_reward = 2.20
             elif action == 4:
-                security_reward = 1.40
+                security_reward = 1.20
             elif action == 3:
-                security_reward = 1.00
+                security_reward = 0.80
             elif action == 2:
-                security_reward = 0.30
+                security_reward = -0.30
             elif action == 0:
-                security_reward = -2.30
+                security_reward = -3.20
             else:
                 security_reward = -1.50
 
         # 4 = packet_in_flood
         elif attack_label == 4:
             if action == 2:
-                security_reward = 2.00
+                security_reward = 2.60
             elif action == 1:
-                security_reward = 1.80
+                security_reward = 1.70
             elif action == 4:
-                security_reward = 0.50
+                security_reward = 0.30
             elif action == 3:
-                security_reward = 0.40
+                security_reward = -0.30
             elif action == 0:
-                security_reward = -2.30
+                security_reward = -3.20
             else:
                 security_reward = -1.50
 
         # 5 = port_scanning
         elif attack_label == 5:
             if action == 3:
-                security_reward = 2.00
+                security_reward = 2.80
             elif action == 1:
-                security_reward = 1.80
-            elif action == 2:
                 security_reward = 0.80
-            elif action == 4:
+            elif action == 2:
                 security_reward = 0.30
+            elif action == 4:
+                security_reward = -0.50
             elif action == 0:
-                security_reward = -2.00
+                security_reward = -2.80
             else:
                 security_reward = -1.50
 
@@ -202,14 +205,14 @@ class OfflineSDNEnv:
             0.15 * src_ip_entropy +
             0.15 * controller_cpu
         )
-        
+
         severity_bonus = 0.0
         if attack_label != 0 and action != 0:
             severity_bonus = 0.40 * risk_score
 
         false_positive_penalty = 0.0
         if attack_label == 0 and action != 0:
-            false_positive_penalty = 0.50
+            false_positive_penalty = 1.20
 
         reward = (
             security_reward
@@ -220,4 +223,4 @@ class OfflineSDNEnv:
             - false_positive_penalty
         )
 
-        return float(np.clip(reward, -3.0, 3.0))
+        return float(np.clip(reward, -5.0, 3.0))
