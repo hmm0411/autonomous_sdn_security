@@ -57,7 +57,7 @@ services:
       - MLFLOW_S3_ENDPOINT_URL=http://s3:9005
     # command: >
     #   sh -c "python train_dqn.py && sleep 5"
-    entrypoint: ["sh", "-c", "python train_dqn.py"]
+    entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_dqn"]
   # Container chạy PPO
   rl-agent-ppo:
     restart: "no"
@@ -77,7 +77,8 @@ services:
       - MLFLOW_S3_ENDPOINT_URL=http://s3:9005
     # command: >
     #   sh -c "python train_ppo.py && sleep 5"
-    entrypoint: ["sh", "-c", "python train_ppo.py"]
+    # THAY DÒNG CŨ BẰNG DÒNG NÀY:
+    entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_ppo"]
   #   restart: on-failure
   # rl-serving:
   #   build: .
