@@ -17,7 +17,7 @@ MAX_EPISODES = 30
 MAX_STEPS = 500
 WINDOW_SIZE = 50
 
-clip_eps = 0.15
-entropy_coef = 0.02
+clip_eps = 0.10
+entropy_coef = 0.08
 value_coef = 0.5
 LR_PPO = 1e-4
