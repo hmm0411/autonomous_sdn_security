@@ -10,6 +10,8 @@ import torch
 import gc
 from torch.optim.lr_scheduler import LinearLR
 import time
+from dotenv import load_dotenv
+
 
 from rl_engine.online_env import OnlineSDNEnv
 from rl_engine.offline_env import OfflineSDNEnv
