@@ -399,7 +399,8 @@ def rollback_model(model_name):
     print(f"Rollback → {model_name} v{previous.version}")    
 
 if __name__ == "__main__":
-    start_http_server(9000)
+    PORT = 9002
+    start_http_server(PORT)
     logging.getLogger().setLevel(logging.INFO)
     logging.info(f"[DQN] Prometheus metrics server started on port 9000")
     train_multi_seeds_dqn()
