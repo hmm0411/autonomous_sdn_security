@@ -385,7 +385,7 @@ def rollback_model(model_name):
     print(f"Rollback → {model_name} v{previous.version}")  
 
 if __name__ == "__main__":
-    PORT = 9001
+    PORT = 9003
     start_http_server(PORT)
     logging.getLogger().setLevel(logging.INFO)
     logging.info(f"[PPO] Prometheus metrics server started on port {PORT}")
