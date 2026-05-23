@@ -2,6 +2,7 @@ import requests
 import numpy as np
 import logging
 from typing import Dict, Any, Optional
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class ControllerClient:
         if self.use_mock:
             return self._get_mock_state()
         
+        time.sleep(30)
         try:
             response = requests.get(
                 f"{self.controller_url}/state",

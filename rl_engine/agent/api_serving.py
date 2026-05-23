@@ -3,6 +3,7 @@ import argparse
 from flask import Flask, request, jsonify
 import numpy as np
 import os
+import gunicorn
 
 # KHÔNG IMPORT FILE TRAIN TRỰC TIẾP, HÃY IMPORT CLASS AGENT TỪ FILE ĐỊNH NGHĨA AGENT (dqn_agent.py)
 from rl_engine.agent.dqn_agent import DQNAgent 
@@ -13,10 +14,14 @@ app = Flask(__name__)
 model_type = os.getenv("MODEL_TYPE", "dqn")
 if model_type == "dqn":
     agent = DQNAgent(9, 5)
-    agent.load("models/dqn_model.pth")
+    model_path = "models/dqn_model.pth"
+    print(f"DEBUG: Đang load model tại: {os.path.abspath(model_path)}")
+    agent.load(model_path)
 else:
     agent = PPOAgent()
-    agent.load("models/ppo_model.pth")
+    model_path = "models/ppo_model.pth"
+    print(f"DEBUG: Đang load model tại: {os.path.abspath(model_path)}")
+    agent.load(model_path)
 
 
 @app.route('/predict', methods=['POST'])
