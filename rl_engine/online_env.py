@@ -12,7 +12,7 @@ class OnlineSDNEnv:
 
     def __init__(
         self,
-        controller_url="http://35.240.135.171:8181/onos/v1",
+        controller_url="http://controller:8181/onos/v1",
         username="onos",
         password="rocks",
         polling_interval=2

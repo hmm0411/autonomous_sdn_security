@@ -1,4 +1,5 @@
 import time
+import prometheus_client
 import requests
 import pandas as pd
 import numpy as np
@@ -6,8 +7,9 @@ import os
 from requests.auth import HTTPBasicAuth
 from datetime import datetime
 import random
+from prometheus_client import start_http_server, Gauge
 
-ONOS_URL = "http://localhost:8181/onos/v1"
+ONOS_URL = "http://controller:8181/onos/v1"
 AUTH = HTTPBasicAuth("onos", "rocks")
 LOG_FILE = "logs/live_metrics.csv"
 
@@ -122,4 +124,5 @@ def run_pipeline():
         time.sleep(2) # Polling mỗi 2 giây
 
 if __name__ == "__main__":
+    start_http_server(8000) 
     run_pipeline()

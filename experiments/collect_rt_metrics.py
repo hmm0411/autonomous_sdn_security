@@ -8,7 +8,7 @@ DURATION = 60        # số giây log
 def main():
 
     env = OnlineSDNEnv(
-        controller_url="http://35.240.135.171:8181/onos/v1"
+        controller_url="http://controller:8181/onos/v1"
     )
 
     state = env.reset()

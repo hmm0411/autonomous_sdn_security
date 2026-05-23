@@ -8,7 +8,7 @@ from rl_engine.config import STATE_DIM, ACTION_DIM
 
 
 env = OnlineSDNEnv(
-    controller_url="http://35.240.135.171:8181/onos/v1"
+    controller_url="http://controller:8181/onos/v1"
 )
 
 timeline_dqn = []
