@@ -291,11 +291,11 @@ services:
       - sdn-net
     entrypoint: >
       /bin/sh -c "
-      sleep 5;
-      # Gọi vào cổng 9005 của s3 nội bộ
+      sleep 10;
       mc alias set myminio http://s3:9005 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
       mc mb myminio/mlflow-artifacts || true;
-      mc policy set public myminio/mlflow-artifacts;
+      # Cấu trúc lệnh mới của MinIO để set public
+      mc anonymous set download myminio/mlflow-artifacts;
       exit 0;
       "
 
