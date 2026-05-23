@@ -37,7 +37,6 @@ class OnlineSDNEnv:
     # ==========================================
     def reset(self):
         self.previous_action = 0
-        self.builder.prev_action = 0
         self.prev_packets = 0
         self.prev_bytes = 0
         self.prev_time = time.time()
@@ -69,7 +68,7 @@ class OnlineSDNEnv:
         )
 
         self.previous_action = action
-        self.builder.prev_action = action
+        # self.builder.prev_action = action
 
         done = False
 

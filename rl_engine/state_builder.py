@@ -1,21 +1,12 @@
 from collections import deque
-import os
-import joblib
 import numpy as np
 
 class StateBuilder:
-    def __init__(self, scaler_path="/app/models/scaler.pkl"):
+    def __init__(self):
         self.packet_buf = deque(maxlen=3)
         self.byte_buf = deque(maxlen=3)
         self.cpu_buf = deque(maxlen=3)
         self.flow_growth_buf = deque(maxlen=5)
-
-        if os.path.exists(scaler_path):
-            self.scaler = joblib.load(scaler_path)
-            print(f"[+] Loaded scaler: {scaler_path}")
-        else:
-            self.scaler = None
-            print(f"[WARN] Scaler not found: {scaler_path}")
 
     def _preprocess_raw(self, raw):
         packet_rate = np.log1p(max(0.0, float(raw.get("packet_rate", 0.0))))
@@ -38,35 +29,11 @@ class StateBuilder:
         controller_cpu = float(np.mean(self.cpu_buf))
         flow_growth_rate = float(np.max(self.flow_growth_buf))
 
-        return np.array([[
-            packet_rate,
-            byte_rate,
-            flow_count,
-            flow_growth_rate,
-            src_ip_entropy,
-            latency,
-            packet_loss,
-            controller_cpu,
-        ]], dtype=np.float32)
-
-    def build(self, raw):
-        raw_vector = self._preprocess_raw(raw)
-
-        if self.scaler is not None:
-            scaled = self.scaler.transform(raw_vector)[0]
-        else:
-            scaled = raw_vector[0]
-
-        # Chỉ giữ lại đúng 8 giá trị từ scaler
-        state = np.array([
-            scaled[0],
-            scaled[1],
-            scaled[2],
-            scaled[3],
-            scaled[4],
-            scaled[5],
-            scaled[6],
-            scaled[7]
+        # Trả về đúng 8 feature RAW
+        return np.array([
+            packet_rate, byte_rate, flow_count, flow_growth_rate,
+            src_ip_entropy, latency, packet_loss, controller_cpu
         ], dtype=np.float32)
 
-        return state
+    def build(self, raw):
+        return self._preprocess_raw(raw)

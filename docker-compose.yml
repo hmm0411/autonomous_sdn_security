@@ -304,6 +304,9 @@ services:
     container_name: rl-serving-dqn
     networks:
       - sdn-net
+    ports:
+      - "8000:8000" # Port cho Flask API
+      - "9002:9002" # THÊM DÒNG NÀY: Port cho Prometheus Metrics cào dữ liệu
     entrypoint: ["python", "-m", "rl_engine.agent.api_serving", "--port", "8000"]
     # command: python3 -m rl_engine.agent.api_serving --port 8000
     environment:
@@ -324,6 +327,9 @@ services:
       - sdn-net
     volumes:
       - .:/app
+    ports:
+      - "8001:8001" # Port cho Flask API
+      - "9003:9003" # THÊM DÒNG NÀY: Port cho Prometheus Metrics cào dữ liệu
     # command: python3 -m rl_engine.agent.api_serving --port 
     entrypoint: ["python", "-m", "rl_engine.agent.api_serving", "--port", "8001"]
     environment:
