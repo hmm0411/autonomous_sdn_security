@@ -3,22 +3,18 @@ import requests
 ONOS_URL = "http://controller:8181/onos/v1"
 AUTH = ("onos", "rocks")
 
+DEVICE_ID = "of:0000000000000001" 
+ONOS_URL = "http://controller:8181/onos/v1"
+
 def execute_action(action):
+    # Dùng headers để ONOS hiểu bạn đang gửi JSON
+    headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
     try:
-        if action == 0:
-            print("Quyết định: Bình thường (No Action)")
-            pass
-    #           no_action_id: int = 0
-    # block_action_id: int = 1
-    # limit_bw_action_id: int = 2
-    # redirect_action_id: int = 3
-    # isolate_action_id: int = 4
-        elif action == 1:
-            print("Quyết định: TẤN CÔNG! Ra lệnh chặn dòng dữ liệu...")
-            # Ví dụ: Xóa tất cả các flow rule để chặn mạng tạm thời
-            # Hoặc bạn có thể gọi API add flow rule để drop IP cụ thể
-            requests.delete(f"{ONOS_URL}/flows/application/org.onosproject.cli", auth=AUTH)
-            print("Đã áp dụng policy chặn mạng lên ONOS.")
+        if action == 1: # BLOCK
+            # URL chuẩn của ONOS để xóa flow rule:
+            url = f"{ONOS_URL}/flows/{DEVICE_ID}"
+            response = requests.delete(url, auth=AUTH, headers=headers)
+            print(f"Action 1 status: {response.status_code}")
         elif action == 2:
             print("Quyết định: Giới hạn băng thông (Rate Limit)")
             # Ví dụ: Gọi API để thêm flow rule với instruction là RATE_LIMIT

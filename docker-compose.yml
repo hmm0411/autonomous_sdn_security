@@ -154,8 +154,7 @@ services:
     container_name: control_loop
     depends_on:
       - controller
-      - rl-agent-dqn
-      - rl-agent-ppo
+      - rl-serving
       - mlflow
     networks:
       - sdn-net
@@ -298,6 +297,21 @@ services:
       mc anonymous set download myminio/mlflow-artifacts;
       exit 0;
       "
+
+  rl-serving:
+    build: .
+    container_name: rl-serving
+    networks:
+      - sdn-net
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+      - MLFLOW_S3_ENDPOINT_URL=http://s3:9005
+    depends_on:
+      - mlflow
+      - s3
+    command: python -m rl_engine.agent.api_serving
 
 volumes:
   mlflow_data:

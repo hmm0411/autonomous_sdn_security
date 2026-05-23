@@ -27,6 +27,10 @@ while True:
     raw = get_state()
     state = np.array(state_builder.build(raw), dtype=np.float32)
 
+    model_to_use = "dqn"
+
+    action, model_name = get_action(state, model_type=model_to_use)
+    
     if not validate_state(state):
         continue
 
