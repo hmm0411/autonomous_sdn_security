@@ -313,12 +313,16 @@ services:
     depends_on:
       - mlflow
       - s3
+    volumes:
+      - .:/app
 
   rl-serving-ppo:
     build: .
     container_name: rl-serving-ppo
     networks:
       - sdn-net
+    volumes:
+      - .:/app
     command: sh -c "pip install flask numpy torch && python -m rl_engine.agent.api_serving --port 8001"
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
@@ -328,7 +332,7 @@ services:
     depends_on:
       - mlflow
       - s3
-      
+
 volumes:
   mlflow_data:
   prometheus_data:

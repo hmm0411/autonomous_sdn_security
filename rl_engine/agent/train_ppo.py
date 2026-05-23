@@ -22,6 +22,7 @@ from rl_engine.logger import Logger
 from rl_engine.utils import set_seed
 from rl_engine.config import *
 from mlops.mlflow_manager import get_best_model
+from rl_engine.metrics import *
 
 load_dotenv()
 client = MlflowClient()
@@ -37,11 +38,12 @@ os.makedirs(RUNS_DIR, exist_ok=True)
 # ==========================================
 # CẤU HÌNH PROMETHEUS METRICS
 # ==========================================
-PROM_REWARD = Gauge('episode_reward', 'Phần thưởng thô của Episode', ['agent'])
-PROM_REWARD_MEAN = Gauge('episode_reward_mean', 'Phần thưởng trung bình', ['agent'])
-PROM_REWARD_STD = Gauge('episode_reward_std', 'Độ lệch chuẩn phần thưởng', ['agent'])
-PROM_REWARD_BEST = Gauge('episode_reward_best', 'Kỷ lục phần thưởng tốt nhất', ['agent'])
-PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
+# PROM_REWARD = Gauge('episode_reward', 'Phần thưởng thô của Episode', ['agent'])
+# PROM_REWARD_MEAN = Gauge('episode_reward_mean', 'Phần thưởng trung bình', ['agent'])
+# PROM_REWARD_STD = Gauge('episode_reward_std', 'Độ lệch chuẩn phần thưởng', ['agent'])
+# PROM_REWARD_BEST = Gauge('episode_reward_best', 'Kỷ lục phần thưởng tốt nhất', ['agent'])
+# PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
+
 
 # ==========================================
 # CẤU HÌNH MLOPS & CI/CD
@@ -122,11 +124,11 @@ def run_single_seed_ppo(seed_value, df_train, parent_run=False):
             seed_lrs.append(current_lr)
 
             # Prometheus
-            PROM_REWARD.labels(agent='ppo').set(episode_reward)
-            PROM_REWARD_MEAN.labels(agent='ppo').set(mean_reward)
-            PROM_REWARD_STD.labels(agent='ppo').set(std_reward)
-            PROM_REWARD_BEST.labels(agent='ppo').set(float(best_reward_so_far))
-            PROM_LOSS.labels(agent='ppo').set(float(total_loss))
+            EPISODE_REWARD.labels(model_type='ppo').set(episode_reward)
+            EPISODE_REWARD_MEAN.labels(model_type='ppo').set(mean_reward)
+            EPISODE_REWARD_STD.labels(model_type='ppo').set(std_reward)
+            EPISODE_REWARD_BEST.labels(model_type='ppo').set(float(best_reward_so_far))
+            TRAINING_LOSS.labels(model_type='ppo').set(float(total_loss))
 
             # MLflow Logging
             if not IS_CI and parent_run:

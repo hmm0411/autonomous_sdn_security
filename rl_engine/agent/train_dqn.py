@@ -22,17 +22,18 @@ from rl_engine.logger import Logger
 from rl_engine.config import *
 from rl_engine.utils import set_seed
 from mlops.mlflow_manager import get_best_model
+from rl_engine.metrics import *
 
 load_dotenv()
 
-# ==========================================
-# CẤU HÌNH PROMETHEUS METRICS
-# ==========================================
-PROM_REWARD = Gauge('episode_reward', 'Phần thưởng thô của Episode', ['agent'])
-PROM_REWARD_MEAN = Gauge('episode_reward_mean', 'Phần thưởng trung bình', ['agent'])
-PROM_REWARD_STD = Gauge('episode_reward_std', 'Độ lệch chuẩn phần thưởng', ['agent'])
-PROM_REWARD_BEST = Gauge('episode_reward_best', 'Kỷ lục phần thưởng tốt nhất', ['agent'])
-PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
+# # ==========================================
+# # CẤU HÌNH PROMETHEUS METRICS
+# # ==========================================
+# PROM_REWARD = Gauge('episode_reward', 'Phần thưởng thô của Episode', ['agent'])
+# PROM_REWARD_MEAN = Gauge('episode_reward_mean', 'Phần thưởng trung bình', ['agent'])
+# PROM_REWARD_STD = Gauge('episode_reward_std', 'Độ lệch chuẩn phần thưởng', ['agent'])
+# PROM_REWARD_BEST = Gauge('episode_reward_best', 'Kỷ lục phần thưởng tốt nhất', ['agent'])
+# PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
 
 # ==========================================
 # CẤU HÌNH DIRECTORY STRUCTURE
@@ -131,12 +132,11 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=False):
             )
 
             # Prometheus
-            PROM_REWARD.labels(agent='dqn').set(episode_reward)
-            PROM_REWARD_MEAN.labels(agent='dqn').set(mean_reward)
-            PROM_REWARD_STD.labels(agent='dqn').set(std_reward)
-            PROM_REWARD_BEST.labels(agent='dqn').set(float(best_reward_so_far))
-            PROM_LOSS.labels(agent='dqn').set(avg_loss)
-            
+            EPISODE_REWARD.labels(model_type='dqn').set(episode_reward)
+            EPISODE_REWARD_MEAN.labels(model_type='dqn').set(mean_reward)
+            EPISODE_REWARD_STD.labels(model_type='dqn').set(std_reward)
+            EPISODE_REWARD_BEST.labels(model_type='dqn').set(float(best_reward_so_far))
+            TRAINING_LOSS.labels(model_type='dqn').set(avg_loss)
             # MLflow Logging
             if not IS_CI and parent_run:
                 try:

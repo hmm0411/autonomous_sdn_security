@@ -17,6 +17,7 @@ reward_calc = Reward()
 
 print("AUTO MODEL CONTROL LOOP STARTED")
 
+
 def baseline_policy(state):
     return 0
     
@@ -30,7 +31,7 @@ while True:
     model_to_use = "dqn"
 
     action, model_name = get_action(state, model_type=model_to_use)
-    
+
     if not validate_state(state):
         continue
 
