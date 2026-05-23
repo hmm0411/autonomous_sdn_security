@@ -12,8 +12,7 @@ rule_files:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets:
-            - alertmanager:9093
+        - targets: ["alertmanager:9093"]
 
 # Scrape configurations
 scrape_configs:
@@ -58,3 +57,8 @@ scrape_configs:
     scrape_interval: 2s
     static_configs:
       - targets: ["sdn-defense-agent:8000"]
+
+  - job_name: "minio_storage"
+    metrics_path: /minio/v2/metrics/cluster
+    static_configs:
+      - targets: ["minio:9000"]
