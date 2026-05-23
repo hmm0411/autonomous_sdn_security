@@ -3,11 +3,8 @@ import os
 import joblib
 import numpy as np
 
-
 class StateBuilder:
-    def __init__(self, scaler_path="models/scaler.pkl"):
-        self.prev_action = 0
-
+    def __init__(self, scaler_path="/app/models/scaler.pkl"):
         self.packet_buf = deque(maxlen=3)
         self.byte_buf = deque(maxlen=3)
         self.cpu_buf = deque(maxlen=3)
@@ -60,6 +57,7 @@ class StateBuilder:
         else:
             scaled = raw_vector[0]
 
+        # Chỉ giữ lại đúng 8 giá trị từ scaler
         state = np.array([
             scaled[0],
             scaled[1],
@@ -68,11 +66,7 @@ class StateBuilder:
             scaled[4],
             scaled[5],
             scaled[6],
-            scaled[7],
-            float(self.prev_action) / 4.0
+            scaled[7]
         ], dtype=np.float32)
 
         return state
-
-    def update_action(self, action):
-        self.prev_action = action

@@ -1,9 +1,7 @@
 import argparse
-
 from flask import Flask, request, jsonify
 import numpy as np
 import os
-import gunicorn
 
 # KHÔNG IMPORT FILE TRAIN TRỰC TIẾP, HÃY IMPORT CLASS AGENT TỪ FILE ĐỊNH NGHĨA AGENT (dqn_agent.py)
 from rl_engine.agent.dqn_agent import DQNAgent 
@@ -28,6 +26,9 @@ else:
 def predict():
     data = request.get_json()
     state = np.array(data['state'])
+    
+    if len(state) != 8:
+        return jsonify({"error": f"Invalid state size. Expected 8, got {len(state)}"}), 400
     
     result = agent.select_action(state)
     
