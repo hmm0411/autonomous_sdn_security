@@ -3,11 +3,16 @@ import numpy as np
 
 RL_ENDPOINTS = {
     "dqn": "http://rl-agent-dqn:8000/predict",
-    "ppo": "http://rl-agent-ppo:8000/predict"
+    "ppo": "http://rl-agent-ppo:8001/predict"
 }
 
 def get_action(state, model_type="dqn"):
-    url = RL_ENDPOINTS.get(model_type, RL_ENDPOINTS["dqn"])
+    # Cần xác định port dựa trên loại model
+    port = 8000 if model_type == "dqn" else 8001
+    # Hostname cũng nên linh hoạt theo service:
+    host = "rl-serving-dqn" if model_type == "dqn" else "rl-serving-ppo"
+    url = f"http://{host}:{port}/predict"
+    
     try:
         payload = {"state": state.tolist() if isinstance(state, np.ndarray) else state}
         res = requests.post(url, json=payload, timeout=2.0)

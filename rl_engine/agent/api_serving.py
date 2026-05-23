@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import numpy as np
-
+import argparse
+import os
 from rl_engine.agent.train_dqn import DQNAgent
 from rl_engine.agent.train_ppo import PPOAgent
 
@@ -8,15 +9,23 @@ from rl_engine.agent.train_ppo import PPOAgent
 dqn_agent = DQNAgent(9, 5)  
 ppo_agent = PPOAgent()
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--port", type=int, default=8000)
+args = parser.parse_args()
+
 app = Flask(__name__)
+
+# Logic chọn model dựa trên biến môi trường MODEL_TYPE
+model_type = os.getenv("MODEL_TYPE", "dqn")
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    data = request.get_json() # Dùng get_json() an toàn hơn
-    if not data or 'state' not in data:
-        return jsonify({"error": "Invalid request"}), 400
-        
-    state = np.array(data['state'])
-    # Gọi hàm dự đoán của agent ở đây
-    # action = trained_agent.select_action(state) 
-    return jsonify({"action": 1, "model": "dqn"})
+    # ... logic lấy model tương ứng ...
+    return jsonify({"action": 1, "model": model_type})
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+    
+    app.run(host='0.0.0.0', port=args.port)

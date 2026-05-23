@@ -298,20 +298,19 @@ services:
       exit 0;
       "
 
-  rl-serving:
+  rl-serving-dqn:
     build: .
-    container_name: rl-serving
+    container_name: rl-serving-dqn
     networks:
       - sdn-net
-    environment:
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
-      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
-      - MLFLOW_S3_ENDPOINT_URL=http://s3:9005
-    depends_on:
-      - mlflow
-      - s3
-    command: sh -c "pip install flask numpy torch && python -m rl_engine.agent.api_serving"
+    command: sh -c "pip install flask numpy torch && python -m rl_engine.agent.api_serving --port 8000"
+
+  rl-serving-ppo:
+    build: .
+    container_name: rl-serving-ppo
+    networks:
+      - sdn-net
+    command: sh -c "pip install flask numpy torch && python -m rl_engine.agent.api_serving --port 8001"
 
 volumes:
   mlflow_data:
