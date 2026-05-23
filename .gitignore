@@ -10,7 +10,6 @@ venv/
 *.log
 results/
 *.csv
-*.json
 *.log
 tmp/
 *.tmp

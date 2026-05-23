@@ -1,0 +1,169 @@
+{
+    "id": null,
+    "title": "SDN RL Observability Dashboard",
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "5s",
+    "panels": [
+        {
+            "type": "timeseries",
+            "title": "Reward Comparison",
+            "targets": [
+                {
+                    "expr": "rl_reward{agent=\"dqn\"}",
+                    "legendFormat": "DQN"
+                },
+                {
+                    "expr": "rl_reward{agent=\"ppo\"}",
+                    "legendFormat": "PPO"
+                },
+                {
+                    "expr": "rl_reward{agent=\"baseline\"}",
+                    "legendFormat": "Baseline"
+                }
+            ],
+            "gridPos": {
+                "x": 0,
+                "y": 0,
+                "w": 12,
+                "h": 8
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Latency Comparison",
+            "targets": [
+                {
+                    "expr": "rl_latency{agent=\"dqn\"}",
+                    "legendFormat": "DQN"
+                },
+                {
+                    "expr": "rl_latency{agent=\"ppo\"}",
+                    "legendFormat": "PPO"
+                }
+            ],
+            "gridPos": {
+                "x": 12,
+                "y": 0,
+                "w": 12,
+                "h": 8
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Packet Loss",
+            "targets": [
+                {
+                    "expr": "rl_packet_loss{agent=\"dqn\"}",
+                    "legendFormat": "DQN"
+                },
+                {
+                    "expr": "rl_packet_loss{agent=\"ppo\"}",
+                    "legendFormat": "PPO"
+                }
+            ],
+            "gridPos": {
+                "x": 0,
+                "y": 8,
+                "w": 12,
+                "h": 8
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Flow Count",
+            "targets": [
+                {
+                    "expr": "rl_flow_count{agent=\"dqn\"}",
+                    "legendFormat": "DQN"
+                },
+                {
+                    "expr": "rl_flow_count{agent=\"ppo\"}",
+                    "legendFormat": "PPO"
+                }
+            ],
+            "gridPos": {
+                "x": 12,
+                "y": 8,
+                "w": 12,
+                "h": 8
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Controller CPU",
+            "targets": [
+                {
+                    "expr": "rl_controller_cpu{agent=\"dqn\"}",
+                    "legendFormat": "DQN"
+                },
+                {
+                    "expr": "rl_controller_cpu{agent=\"ppo\"}",
+                    "legendFormat": "PPO"
+                }
+            ],
+            "gridPos": {
+                "x": 0,
+                "y": 16,
+                "w": 12,
+                "h": 8
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Queue Length",
+            "targets": [
+                {
+                    "expr": "rl_queue_length{agent=\"dqn\"}",
+                    "legendFormat": "DQN"
+                },
+                {
+                    "expr": "rl_queue_length{agent=\"ppo\"}",
+                    "legendFormat": "PPO"
+                }
+            ],
+            "gridPos": {
+                "x": 12,
+                "y": 16,
+                "w": 12,
+                "h": 8
+            }
+        },
+        {
+            "type": "stat",
+            "title": "Current Selected Model",
+            "targets": [
+                {
+                    "expr": "rl_model_selected"
+                }
+            ],
+            "gridPos": {
+                "x": 0,
+                "y": 24,
+                "w": 6,
+                "h": 4
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "Action Distribution",
+            "targets": [
+                {
+                    "expr": "rl_action{agent=\"dqn\"}",
+                    "legendFormat": "DQN"
+                },
+                {
+                    "expr": "rl_action{agent=\"ppo\"}",
+                    "legendFormat": "PPO"
+                }
+            ],
+            "gridPos": {
+                "x": 6,
+                "y": 24,
+                "w": 18,
+                "h": 4
+            }
+        }
+    ]
+}
