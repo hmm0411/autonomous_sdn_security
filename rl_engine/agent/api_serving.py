@@ -1,6 +1,13 @@
 from flask import Flask, request, jsonify
 import numpy as np
-# Import agent của bạn ở đây
+
+from rl_engine.agent.train_dqn import DQNAgent
+from rl_engine.agent.train_ppo import PPOAgent
+
+# Khởi tạo các agent
+dqn_agent = DQNAgent(9, 5)  
+ppo_agent = PPOAgent()
+
 app = Flask(__name__)
 
 @app.route('/predict', methods=['POST'])

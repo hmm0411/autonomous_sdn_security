@@ -57,7 +57,7 @@ services:
       - MLFLOW_S3_ENDPOINT_URL=http://s3:9005
     # command: >
     #   sh -c "python train_dqn.py && sleep 5"
-    entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_dqn"]
+    entrypoint: ["sh", "-c", "python -m rl_engine.agent.api_serving"]
   # Container chạy PPO
   rl-agent-ppo:
     restart: "no"
@@ -311,7 +311,7 @@ services:
     depends_on:
       - mlflow
       - s3
-    command: python -m rl_engine.agent.api_serving
+    command: sh -c "pip install flask numpy torch && python -m rl_engine.agent.api_serving"
 
 volumes:
   mlflow_data:
