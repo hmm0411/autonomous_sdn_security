@@ -2,8 +2,11 @@ from flask import Flask, request, jsonify
 import numpy as np
 import argparse
 import os
+import sys
 from rl_engine.agent.train_dqn import DQNAgent
 from rl_engine.agent.train_ppo import PPOAgent
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # Khởi tạo các agent
 dqn_agent = DQNAgent(9, 5)  
@@ -24,7 +27,7 @@ if model_type == "dqn":
 elif model_type == "ppo":
     agent = PPOAgent()
     # Tải model PPO
-    
+
 @app.route('/predict', methods=['POST'])
 def predict():
     # ... logic lấy model tương ứng ...
