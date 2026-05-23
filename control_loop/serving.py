@@ -31,7 +31,7 @@ def load_models():
             model_uri = f"models:/{best_model.name}/Production"
             model = mlflow.pytorch.load_model(model_uri)
 
-            scaler = joblib.load("models/scaler.pkl")
+            scaler = joblib.load("/app/models/scaler.pkl")
 
             print(f"[+] Loaded model: {model_uri}")
             return

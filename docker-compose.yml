@@ -304,7 +304,7 @@ services:
     container_name: rl-serving-dqn
     networks:
       - sdn-net
-    command: sh -c "pip install flask numpy torch && python -m rl_engine.agent.api_serving --port 8000"
+    command: python3 -m rl_engine.agent.api_serving --port 8000
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
@@ -323,7 +323,7 @@ services:
       - sdn-net
     volumes:
       - .:/app
-    command: sh -c "pip install flask numpy torch && python -m rl_engine.agent.api_serving --port 8001"
+    command: python3 -m rl_engine.agent.api_serving --port 8001
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}

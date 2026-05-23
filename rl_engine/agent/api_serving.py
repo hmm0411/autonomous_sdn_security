@@ -14,12 +14,12 @@ app = Flask(__name__)
 model_type = os.getenv("MODEL_TYPE", "dqn")
 if model_type == "dqn":
     agent = DQNAgent(9, 5)
-    model_path = "models/dqn_model.pth"
+    model_path = "/app/models/dqn_model.pth"
     print(f"DEBUG: Đang load model tại: {os.path.abspath(model_path)}")
     agent.load(model_path)
 else:
     agent = PPOAgent()
-    model_path = "models/ppo_model.pth"
+    model_path = "/app/models/ppo_model.pth"
     print(f"DEBUG: Đang load model tại: {os.path.abspath(model_path)}")
     agent.load(model_path)
 

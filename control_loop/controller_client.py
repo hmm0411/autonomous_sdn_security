@@ -1,3 +1,5 @@
+import time
+
 import requests
 
 ONOS_URL = "http://controller:8181/onos/v1"
@@ -7,8 +9,16 @@ DEVICE_ID = "of:0000000000000001"
 ONOS_URL = "http://controller:8181/onos/v1"
 
 def execute_action(action):
-    # Dùng headers để ONOS hiểu bạn đang gửi JSON
     headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
+    # Không để return ở đây
+    try:
+        if action == 1:
+            url = f"{ONOS_URL}/flows/{DEVICE_ID}"
+            response = requests.delete(url, auth=AUTH, headers=headers)
+            print(f"Action 1 status: {response.status_code}")
+        # ... các action khác ...
+    except Exception as e:
+        print(f"Lỗi: {e}")
     try:
         if action == 1: # BLOCK
             # URL chuẩn của ONOS để xóa flow rule:
