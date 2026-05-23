@@ -18,6 +18,13 @@ app = Flask(__name__)
 # Logic chọn model dựa trên biến môi trường MODEL_TYPE
 model_type = os.getenv("MODEL_TYPE", "dqn")
 
+if model_type == "dqn":
+    agent = DQNAgent(9, 5)
+    # Tải model đã train từ MLflow/MinIO
+elif model_type == "ppo":
+    agent = PPOAgent()
+    # Tải model PPO
+    
 @app.route('/predict', methods=['POST'])
 def predict():
     # ... logic lấy model tương ứng ...
