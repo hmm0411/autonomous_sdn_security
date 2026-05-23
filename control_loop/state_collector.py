@@ -2,7 +2,7 @@ import requests
 import time
 import numpy as np
 
-ONOS_URL = "http://onos:8181/onos/v1"
+ONOS_URL = "http://controller:8181/onos/v1"
 AUTH = ("onos", "rocks")
 
 prev_packets = 0

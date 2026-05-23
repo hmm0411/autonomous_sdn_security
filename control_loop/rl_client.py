@@ -1,6 +1,6 @@
 import requests
 
-RL_URL = "http://rl-serving:8000/predict"
+RL_URL = "http://rl-agent-dqn:8000/predict"
 
 def get_action(state):
     try:
