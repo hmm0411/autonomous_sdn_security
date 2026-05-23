@@ -1,3 +1,6 @@
-mlflow
-prometheus_client
+torch
+numpy
 pandas
+mlflow
+prometheus-client
+python-dotenv

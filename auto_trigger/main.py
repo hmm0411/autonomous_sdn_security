@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
-    data = request.json
+    data = request.json or {}
     
     # Duyệt qua các cảnh báo nhận được từ Alertmanager
     if 'alerts' in data:

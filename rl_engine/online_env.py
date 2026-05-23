@@ -92,6 +92,14 @@ class OnlineSDNEnv:
             )
 
         raw = self.collector.get_raw_state()
+
+        if raw is None:
+            print("Cảnh báo: Không kết nối được ONOS! Dùng state mặc định.")
+            raw = {
+                "packet_rate": 0.0, "byte_rate": 0.0, "flow_count": 0,
+                "flow_growth_rate": 0.0, "src_ip_entropy": 0.0,
+                "latency": 0.0, "packet_loss": 0.0, "controller_cpu": 0.0
+            }
         state = self.builder.build(raw)
 
         print(

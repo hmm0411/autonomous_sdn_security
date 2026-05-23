@@ -1,0 +1,112 @@
+# ==========================================
+# 1. DQN AGENT (DEPLOYMENT & SERVICE)
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rl-agent-dqn
+  labels:
+    app: rl-agent-dqn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rl-agent-dqn
+  template:
+    metadata:
+      labels:
+        app: rl-agent-dqn
+    spec:
+      containers:
+        - name: dqn-agent
+          image: hmm0411/sdn-rl-agent:latest
+          # Ép container này chỉ chạy code DQN
+          command: ["sh", "-c", "python3 -m rl_engine.agent.train_dqn"]
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5000" # Tên service mlflow trên k8s
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://s3:9005" # Tên service minio trên k8s
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: ACCESS_KEY
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: SECRET_KEY
+          ports:
+            - containerPort: 9002
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rl-agent-dqn
+  labels:
+    app: rl-agent-dqn
+spec:
+  selector:
+    app: rl-agent-dqn
+  ports:
+    - protocol: TCP
+      port: 9002
+      targetPort: 9002
+
+---
+# ==========================================
+# 2. PPO AGENT (DEPLOYMENT & SERVICE)
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rl-agent-ppo
+  labels:
+    app: rl-agent-ppo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rl-agent-ppo
+  template:
+    metadata:
+      labels:
+        app: rl-agent-ppo
+    spec:
+      containers:
+        - name: ppo-agent
+          image: hmm0411/sdn-rl-agent:latest
+          # Ép container này chỉ chạy code PPO
+          command: ["sh", "-c", "python3 -m rl_engine.agent.train_ppo"]
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5000"
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://s3:9005"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: ACCESS_KEY
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: SECRET_KEY
+          ports:
+            - containerPort: 9003
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rl-agent-ppo
+  labels:
+    app: rl-agent-ppo
+spec:
+  selector:
+    app: rl-agent-ppo
+  ports:
+    - protocol: TCP
+      port: 9003
+      targetPort: 9003
