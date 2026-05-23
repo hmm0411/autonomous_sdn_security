@@ -1,43 +1,39 @@
 groups:
   - name: sdn_rl_alerts
-    interval: 30s
     rules:
-      # High training loss alert
-      - alert: HighTrainingLoss
-        expr: rate(training_loss[5m]) > 1.0
+      - alert: Low_Reward_Detected
+        # Cảnh báo nếu Reward trung bình của DQN rớt xuống dưới -600
+        expr: episode_reward_mean{agent="dqn"} < -600
         for: 5m
         labels:
-          severity: warning
+          severity: critical
         annotations:
-          summary: "High training loss detected"
-          description: "Training loss is above 1.0 for {{ $labels.agent }}"
-
-      # Low reward alert
-      - alert: LowReward
-        expr: rl_reward < 0
-        for: 10m
+          summary: "DQN Reward đang quá thấp!"
+          description: "Reward trung bình của DQN là {{ $value }} trong 5 phút qua. Cần Rollback hoặc Retrain."
+      - alert: PPO_Reward_Drop
+        # Cảnh báo nếu Reward trung bình của PPO rớt xuống dưới -500
+        expr: episode_reward_mean{agent="ppo"} < -500
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PPO Reward đang quá thấp!"
+          description: "Reward trung bình của PPO là {{ $value }} trong 5 phút qua. Cần Rollback hoặc Retrain."
+      - alert: Control_Loop_Anomaly
+        # Cảnh báo nếu latency của control loop vượt quá 100ms
+        expr: control_loop_latency_seconds > 0.1
+        for: 1m
         labels:
           severity: warning
         annotations:
-          summary: "Low episode reward"
-          description: "Episode reward is negative for {{ $labels.agent }}"
-
-      # Controller down
-      - alert: ControllerDown
-        expr: up{job="onos"} == 0
+          summary: "Độ trễ của Control Loop đang cao!"
+          description: "Latency của control loop là {{ $value }} giây. Cần kiểm tra hiệu suất hệ thống."
+      - alert: SDN_Defense_Anomaly
+        # Cảnh báo nếu attack_indicator của SDN Defense Agent là 1
+        expr: attack_indicator == 1
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "ONOS Controller is down"
-          description: "ONOS Controller has been unreachable for 1 minute"
-
-      # Agent down
-      - alert: TrainingAgentDown
-        expr: up{job=~"dqn-agent|ppo-agent"} == 0
-        for: 2m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Training agent is down"
-          description: "{{ $labels.job }} has been unreachable for 2 minutes"
+          summary: "SDN Defense Agent phát hiện tấn công!"
+          description: "Attack indicator là {{ $value }}. Cần kiểm tra hệ thống ngay lập tức."

@@ -20,12 +20,12 @@ scrape_configs:
   # Prometheus itself
   - job_name: "prometheus"
     static_configs:
-      - targets: [ "localhost:9090" ]
+      - targets: ["localhost:9090"]
 
   # ONOS Controller
   - job_name: "onos"
     static_configs:
-      - targets: [ "controller:8181" ]
+      - targets: ["controller:8181"]
     metrics_path: "/onos/v1/metrics"
     basic_auth:
       username: "onos"
@@ -34,37 +34,27 @@ scrape_configs:
   # MLflow
   - job_name: "mlflow"
     static_configs:
-      - targets: [ "mlflow:5000" ]
+      - targets: ["mlflow:5000"]
 
   # DQN Agent (Prometheus metrics)
-  - job_name: "dqn-agent"
+  - job_name: "rl-agent-dqn"
+    scrape_interval: 5s
     static_configs:
-      - targets: [ "rl-agent-dqn:9100" ]
-    scrape_interval: 10s
+      - targets: ["rl-agent-dqn:9002"]
 
   # PPO Agent (Prometheus metrics)
-  - job_name: "ppo-agent"
+  - job_name: "rl-agent-ppo"
+    scrape_interval: 5s
     static_configs:
-      - targets: [ "rl-agent-ppo:9101" ]
-    scrape_interval: 10s
+      - targets: ["rl-agent-ppo:9003"]
 
   # Control Loop (Runtime metrics)
   - job_name: "control_loop"
     static_configs:
-      - targets: [ "control_loop:8000" ]
+      - targets: ["control_loop:8000"]
     scrape_interval: 10s
 
-  - job_name: 'sdn-defense-agent'
+  - job_name: "sdn-defense-agent"
     scrape_interval: 2s
     static_configs:
-      - targets: ['sdn-defense-agent:8000']
-
-  - job_name: 'rl-agent-dqn'
-    scrape_interval: 2s
-    static_configs:
-      - targets: ['rl-agent-dqn:9000']
-
-  - job_name: 'rl-agent-ppo'
-    scrape_interval: 2s
-    static_configs:
-      - targets: ['rl-agent-ppo:9001']
+      - targets: ["sdn-defense-agent:8000"]
