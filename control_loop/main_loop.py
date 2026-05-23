@@ -5,14 +5,13 @@ from rl_engine.state_builder import StateBuilder
 from control_loop.controller_client import execute_action
 from rl_engine.reward import Reward
 
-from control_loop.rl_client import call_model
+# 1. Sửa tên hàm import thành get_action
+from control_loop.rl_client import get_action
 from control_loop.metrics import update_metrics
 from control_loop.state_collector import get_state
 
 STATE_DIM = 9
 SLEEP_TIME = 2
-
-RL_URL = "http://localhost:8000/predict"
 
 state_builder = StateBuilder()
 reward_calc = Reward()
@@ -32,14 +31,16 @@ while True:
     if not validate_state(state):
         continue
 
-    action = call_model(RL_URL, state)
+    # 2. Hứng 2 giá trị trả về và chỉ truyền vào biến state
+    action, model_name = get_action(state)
 
     reward = reward_calc.calculate(raw, action)
 
     execute_action(action)
 
-    update_metrics(state, reward, "AUTO", action)
+    # 3. Thay chữ "AUTO" bằng model_name để Grafana hiển thị tên model thực tế (DQN hoặc PPO)
+    update_metrics(state, reward, model_name, action)
 
-    print(f"[AUTO] action={action} | reward={reward}")
+    print(f"[{model_name}] action={action} | reward={reward}")
 
     time.sleep(SLEEP_TIME)
