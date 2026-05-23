@@ -32,11 +32,6 @@ while True:
 
     action, model_name = get_action(state, model_type=model_to_use)
 
-    if not validate_state(state):
-        continue
-
-    action, model_name = get_action(state)
-
     reward = reward_calc.calculate(raw, action)
     execute_action(action)
     update_metrics(state, reward, model_name, action)
