@@ -55,11 +55,11 @@ services:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - MLFLOW_S3_ENDPOINT_URL=http://s3:9005
-      - AWS_DEFAULT_REGION=us-east-1 # BẮT BUỘC PHẢI CÓ để tránh lỗi Signature của boto3
+      - AWS_DEFAULT_REGION=us-east-1 
       - MLFLOW_S3_IGNORE_TLS=true
-    # command: >
-    #   sh -c "python train_dqn.py && sleep 5"
-    entrypoint: ["sh", "-c", "python -m rl_engine.agent.api_serving"]
+    # THAY ĐỔI Ở ĐÂY: Dùng lệnh giữ container sống ngầm để chờ lệnh exec
+    command: tail -f /dev/null
+
   # Container chạy PPO
   rl-agent-ppo:
     restart: "no"
@@ -77,12 +77,10 @@ services:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - MLFLOW_S3_ENDPOINT_URL=http://s3:9005
-      - AWS_DEFAULT_REGION=us-east-1 # BẮT BUỘC PHẢI CÓ để tránh lỗi Signature của boto3
+      - AWS_DEFAULT_REGION=us-east-1
       - MLFLOW_S3_IGNORE_TLS=true
-    # command: >
-    #   sh -c "python train_ppo.py && sleep 5"
-    # THAY DÒNG CŨ BẰNG DÒNG NÀY:
-    entrypoint: ["sh", "-c", "python -m rl_engine.agent.train_ppo"]
+    # THAY ĐỔI Ở ĐÂY: Dùng lệnh giữ container sống ngầm để chờ lệnh exec
+    command: tail -f /dev/null
   #   restart: on-failure
   # rl-serving:
   #   build: .

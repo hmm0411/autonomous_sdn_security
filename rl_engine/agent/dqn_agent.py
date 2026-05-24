@@ -42,7 +42,6 @@ class DQNAgent:
     # =============================
     # ACTION SELECTION
     # =============================
-    @mlflow.trace(name="dqn_select_action")
     def select_action(self, state):
 
         if np.random.random() < self.epsilon:
@@ -58,7 +57,6 @@ class DQNAgent:
     # =============================
     # TRAIN UPDATE
     # =============================
-    @mlflow.trace(name="dqn_update")
     def update(self, batch):
 
         states, actions, rewards, next_states, dones = batch
