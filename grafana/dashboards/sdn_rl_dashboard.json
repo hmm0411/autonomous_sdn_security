@@ -1,26 +1,18 @@
 {
-    "id": null,
-    "title": "SDN RL Observability Dashboard",
-    "timezone": "browser",
-    "schemaVersion": 38,
-    "version": 1,
+    "title": "SDN RL Observability Dashboard (Full)",
     "refresh": "5s",
     "panels": [
         {
             "type": "timeseries",
-            "title": "Reward Comparison",
+            "title": "Reward Performance",
             "targets": [
                 {
-                    "expr": "rl_reward{agent=\"dqn\"}",
-                    "legendFormat": "DQN"
+                    "expr": "episode_reward{agent='dqn'}",
+                    "legendFormat": "DQN Reward"
                 },
                 {
-                    "expr": "rl_reward{agent=\"ppo\"}",
-                    "legendFormat": "PPO"
-                },
-                {
-                    "expr": "rl_reward{agent=\"baseline\"}",
-                    "legendFormat": "Baseline"
+                    "expr": "episode_reward{agent='ppo'}",
+                    "legendFormat": "PPO Reward"
                 }
             ],
             "gridPos": {
@@ -32,15 +24,11 @@
         },
         {
             "type": "timeseries",
-            "title": "Latency Comparison",
+            "title": "Network Throughput (Packet Rate)",
             "targets": [
                 {
-                    "expr": "rl_latency{agent=\"dqn\"}",
-                    "legendFormat": "DQN"
-                },
-                {
-                    "expr": "rl_latency{agent=\"ppo\"}",
-                    "legendFormat": "PPO"
+                    "expr": "sdn_packet_rate",
+                    "legendFormat": "Packet Rate (pps)"
                 }
             ],
             "gridPos": {
@@ -52,15 +40,15 @@
         },
         {
             "type": "timeseries",
-            "title": "Packet Loss",
+            "title": "System Latency & Flow Count",
             "targets": [
                 {
-                    "expr": "rl_packet_loss{agent=\"dqn\"}",
-                    "legendFormat": "DQN"
+                    "expr": "sdn_latency_ms",
+                    "legendFormat": "Latency (ms)"
                 },
                 {
-                    "expr": "rl_packet_loss{agent=\"ppo\"}",
-                    "legendFormat": "PPO"
+                    "expr": "sdn_flow_count",
+                    "legendFormat": "Active Flows"
                 }
             ],
             "gridPos": {
@@ -72,15 +60,15 @@
         },
         {
             "type": "timeseries",
-            "title": "Flow Count",
+            "title": "Training Loss History",
             "targets": [
                 {
-                    "expr": "rl_flow_count{agent=\"dqn\"}",
-                    "legendFormat": "DQN"
+                    "expr": "training_loss{agent='dqn'}",
+                    "legendFormat": "DQN Loss"
                 },
                 {
-                    "expr": "rl_flow_count{agent=\"ppo\"}",
-                    "legendFormat": "PPO"
+                    "expr": "training_loss{agent='ppo'}",
+                    "legendFormat": "PPO Loss"
                 }
             ],
             "gridPos": {
@@ -91,78 +79,39 @@
             }
         },
         {
-            "type": "timeseries",
-            "title": "Controller CPU",
+            "type": "gauge",
+            "title": "Controller CPU Load",
             "targets": [
                 {
-                    "expr": "rl_controller_cpu{agent=\"dqn\"}",
-                    "legendFormat": "DQN"
-                },
-                {
-                    "expr": "rl_controller_cpu{agent=\"ppo\"}",
-                    "legendFormat": "PPO"
+                    "expr": "sdn_controller_cpu",
+                    "legendFormat": "CPU %"
                 }
             ],
             "gridPos": {
                 "x": 0,
                 "y": 16,
-                "w": 12,
-                "h": 8
-            }
-        },
-        {
-            "type": "timeseries",
-            "title": "Queue Length",
-            "targets": [
-                {
-                    "expr": "rl_queue_length{agent=\"dqn\"}",
-                    "legendFormat": "DQN"
-                },
-                {
-                    "expr": "rl_queue_length{agent=\"ppo\"}",
-                    "legendFormat": "PPO"
-                }
-            ],
-            "gridPos": {
-                "x": 12,
-                "y": 16,
-                "w": 12,
-                "h": 8
+                "w": 8,
+                "h": 6
             }
         },
         {
             "type": "stat",
-            "title": "Current Selected Model",
+            "title": "Model Status",
             "targets": [
                 {
-                    "expr": "rl_model_selected"
-                }
-            ],
-            "gridPos": {
-                "x": 0,
-                "y": 24,
-                "w": 6,
-                "h": 4
-            }
-        },
-        {
-            "type": "timeseries",
-            "title": "Action Distribution",
-            "targets": [
-                {
-                    "expr": "rl_action{agent=\"dqn\"}",
-                    "legendFormat": "DQN"
+                    "expr": "up{job='rl-agent-dqn'} == 1",
+                    "legendFormat": "DQN Agent Ready"
                 },
                 {
-                    "expr": "rl_action{agent=\"ppo\"}",
-                    "legendFormat": "PPO"
+                    "expr": "up{job='rl-agent-ppo'} == 1",
+                    "legendFormat": "PPO Agent Ready"
                 }
             ],
             "gridPos": {
-                "x": 6,
-                "y": 24,
-                "w": 18,
-                "h": 4
+                "x": 8,
+                "y": 16,
+                "w": 8,
+                "h": 6
             }
         }
     ]
