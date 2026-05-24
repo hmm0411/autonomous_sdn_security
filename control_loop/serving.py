@@ -57,12 +57,12 @@ def load_models():
                 print(f"[*] Thử load file local /app/models/{MODEL_TYPE}_model.pth...")
                 if MODEL_TYPE == "dqn":
                     from rl_engine.agent.dqn_agent import DQNAgent
-                    local_agent = DQNAgent(9, 5)
+                    local_agent = DQNAgent(8, 5)
                     local_agent.load("/app/models/dqn_model.pth")
                     model = local_agent.q_net
                 else:
                     from rl_engine.agent.ppo_agent import PPOAgent
-                    local_agent = PPOAgent() 
+                    local_agent = PPOAgent(8, 5) 
                     local_agent.load("/app/models/ppo_model.pth")
                     model = local_agent.model
                 
@@ -92,7 +92,7 @@ def predict():
             
         state_raw = data["state"]
 
-        if len(state_raw) != 9:
+        if len(state_raw) != 8:
             return jsonify({"error": "invalid state size"}), 400
 
         # Transform và chuyển sang Tensor

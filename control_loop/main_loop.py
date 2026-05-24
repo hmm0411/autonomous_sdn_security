@@ -26,7 +26,6 @@ def validate_state(state):
 print("Đang chờ ONOS khởi động (khoảng 30 giây)...")
 while True:
     try:
-        # Thử gọi (ping) ONOS
         res = requests.get("http://controller:8181/onos/v1/flows", auth=("onos", "rocks"), timeout=2)
         if res.status_code in [200, 401]:
             print("ONOS đã sẵn sàng!")
@@ -35,23 +34,34 @@ while True:
         print("ONOS chưa lên, đợi thêm 5 giây...")
         time.sleep(5)
 
+# --- THÊM ĐOẠN NÀY ĐỂ ĐỢI API SERVING SẴN SÀNG ---
+print("Đang chờ RL API Serving (DQN) khởi động...")
+while True:
+    try:
+        # Gọi thử vào endpoint /health
+        res = requests.get("http://rl-serving-dqn:8000/health", timeout=2)
+        if res.status_code == 200:
+            print("RL API Serving (DQN) đã sẵn sàng!")
+            break
+    except Exception:
+        print("RL API chưa sẵn sàng, đợi 5 giây...")
+        time.sleep(5)
+# --------------------------------------------------
+
 while True:
     raw = get_state()
     state = np.array(state_builder.build(raw), dtype=np.float32)
 
     model_to_use = "dqn"
 
-    # Lấy cả 2 action từ API
+    # Lấy action từ API
     action_prod, action_staging, model_name = get_action(state, model_type=model_to_use)
 
     # Tính toán phần thưởng
     reward_prod = reward_calc.calculate(raw, action_prod)
     reward_staging = reward_calc.calculate(raw, action_staging)
 
-    # CHỈ THỰC THI ACTION CỦA PRODUCTION LÊN ONOS
     execute_action(action_prod)
-
-    # Hàm update_metrics (Ghi log vào Prometheus ở port 9100)
     update_metrics(state, reward_prod, reward_staging, model_name, action_prod)
 
     print(f"[{model_name}] Prod Action={action_prod} (R={reward_prod}) | Staging Action={action_staging} (R={reward_staging})")
