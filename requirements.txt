@@ -4,3 +4,4 @@ pandas
 mlflow
 prometheus-client
 python-dotenv
+boto3

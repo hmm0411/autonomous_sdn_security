@@ -6,6 +6,8 @@ import os
 # KHÔNG IMPORT FILE TRAIN TRỰC TIẾP, HÃY IMPORT CLASS AGENT TỪ FILE ĐỊNH NGHĨA AGENT (dqn_agent.py)
 from rl_engine.agent.dqn_agent import DQNAgent 
 from rl_engine.agent.ppo_agent import PPOAgent
+from rl_engine.metrics import *
+from prometheus_client import start_http_server
 
 app = Flask(__name__)
 
@@ -39,12 +41,24 @@ def predict():
         action = result[0]
     else:
         action = result
-        
+    
+    EPISODE_REWARD.labels(agent=model_type).set(float(action))  # Cập nhật metric reward (giả định 0 cho demo)
+    EPISODE_REWARD_MEAN.labels(agent=model_type).set(float(action))  # Cập nhật metric reward mean (giả định 0 cho demo)
+    EPISODE_REWARD_STD.labels(agent=model_type).set(float(action))
+    EPISODE_REWARD_BEST.labels(agent=model_type).set(float(action))
+    TRAINING_LOSS.labels(agent=model_type).set(0.0)  # C
+    
     return jsonify({"action": int(action), "model": model_type})
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
+    
+    # KÍCH HOẠT SERVER METRICS
+    # Nếu là DQN dùng port 9002, PPO dùng 9003
+    metrics_port = 9002 if model_type == "dqn" else 9003
+    start_http_server(metrics_port)
+    print(f"[+] Prometheus metrics server started on port {metrics_port}")
     
     app.run(host='0.0.0.0', port=args.port)
