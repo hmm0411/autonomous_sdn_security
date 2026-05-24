@@ -1,10 +1,20 @@
-flask
-numpy
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Core
 torch
+numpy
+pandas
+scikit-learn
+flask
+gunicorn
+python-dotenv
+requests
+
+# MLOps & Monitoring
 mlflow
 boto3
-prometheus_client
-python-dotenv
-scikit-learn
-pandas
-gunicorn
+prometheus-client
+gymnasium
+tensorboard
+matplotlib
+seaborn
