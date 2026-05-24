@@ -325,6 +325,12 @@ def train_multi_seeds_ppo():
                 "author": "Ha My Nguyen"
             })
 
+            print("[*] Đang vẽ biểu đồ trung bình lên MLflow Parent Run...")
+            for ep in range(len(mean_rewards)):
+                mlflow.log_metric("avg_reward_all_seeds", float(mean_rewards[ep]), step=ep)
+                mlflow.log_metric("avg_loss_all_seeds", float(mean_losses[ep]), step=ep)
+                mlflow.log_metric("avg_lr_all_seeds", float(mean_lrs[ep]), step=ep)
+
             # 3. LƯU SCALER
             scaler_path = os.path.join(MODELS_DIR, "scaler.pkl")
             if os.path.exists(scaler_path): 

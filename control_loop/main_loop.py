@@ -45,15 +45,15 @@ while True:
     # Lấy cả 2 action từ API
     action_prod, action_staging, model_name = get_action(state, model_type=model_to_use)
 
-    # Tính toán phần thưởng (giả lập trên cùng một trạng thái mạng)
+    # Tính toán phần thưởng
     reward_prod = reward_calc.calculate(raw, action_prod)
     reward_staging = reward_calc.calculate(raw, action_staging)
 
     # CHỈ THỰC THI ACTION CỦA PRODUCTION LÊN ONOS
     execute_action(action_prod)
         
-    # Hàm update_metrics (cần sửa lại bên metrics.py để nhận 2 reward)
+    # Hàm update_metrics
     update_metrics(state, reward_prod, reward_staging, model_name, action_prod)
 
     print(f"[{model_name}] Prod Action={action_prod} (R={reward_prod}) | Staging Action={action_staging} (R={reward_staging})")
-time.sleep(SLEEP_TIME)
+    time.sleep(SLEEP_TIME)
