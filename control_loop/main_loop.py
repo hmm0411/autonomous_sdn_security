@@ -17,10 +17,9 @@ reward_calc = Reward()
 
 print("AUTO MODEL CONTROL LOOP STARTED")
 
-
 def baseline_policy(state):
     return 0
-    
+
 def validate_state(state):
     return state is not None and len(state) == STATE_DIM
 
@@ -29,7 +28,7 @@ while True:
     try:
         # Thử gọi (ping) ONOS
         res = requests.get("http://controller:8181/onos/v1/flows", auth=("onos", "rocks"), timeout=2)
-        if res.status_code in [200, 401]: # Kết nối thành công
+        if res.status_code in [200, 401]:
             print("ONOS đã sẵn sàng!")
             break
     except Exception:
@@ -51,7 +50,7 @@ while True:
 
     # CHỈ THỰC THI ACTION CỦA PRODUCTION LÊN ONOS
     execute_action(action_prod)
-        
+
     # Hàm update_metrics
     update_metrics(state, reward_prod, reward_staging, model_name, action_prod)
 
