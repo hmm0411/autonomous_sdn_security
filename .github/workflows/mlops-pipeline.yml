@@ -1,0 +1,37 @@
+name: MLOps Autonomous SDN CI/CD
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Linting Tools
+        run: pip install flake8
+      - name: Check Python Syntax Errors (Lint)
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+  build-and-push:
+    needs: code-quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Control Loop Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./control_loop/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/sdn-control-loop:latest

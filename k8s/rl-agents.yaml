@@ -21,7 +21,7 @@ spec:
         - name: dqn-agent
           image: hmm0411/sdn-rl-agent:latest
           # Ép container này chỉ chạy code DQN
-          command: ["sh", "-c", "python3 -m rl_engine.agent.train_dqn"]
+          command: ["tail", "-f", "/dev/null"]
           env:
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow:5000" # Tên service mlflow trên k8s
@@ -78,7 +78,7 @@ spec:
         - name: ppo-agent
           image: hmm0411/sdn-rl-agent:latest
           # Ép container này chỉ chạy code PPO
-          command: ["sh", "-c", "python3 -m rl_engine.agent.train_ppo"]
+          command: ["tail", "-f", "/dev/null"]
           env:
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow:5000"

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller
+  namespace: sdn-security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: controller
+  template:
+    metadata:
+      labels:
+        app: controller
+    spec:
+      containers:
+        - name: onos
+          image: onosproject/onos:2.7.0
+          ports:
+            - containerPort: 8181 # Web GUI & REST API
+            - containerPort: 6653 # OpenFlow
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: controller
+  namespace: sdn-security
+spec:
+  selector:
+    app: controller
+  ports:
+    - name: web
+      port: 8181
+      targetPort: 8181
+    - name: openflow
+      port: 6653
+      targetPort: 6653

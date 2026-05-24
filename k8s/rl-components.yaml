@@ -1,0 +1,86 @@
+# ==========================================
+# RL AGENTS (Trạm chờ chờ lệnh train ngầm)
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rl-agent-dqn
+  namespace: sdn-security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rl-agent-dqn
+  template:
+    metadata:
+      labels:
+        app: rl-agent-dqn
+    spec:
+      containers:
+        - name: agent
+          image: hmm0411/sdn-rl-agent:latest
+          command: ["tail", "-f", "/dev/null"] # Ngủ đông chờ lệnh
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5000"
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://s3:9005"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: ACCESS_KEY
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: SECRET_KEY
+---
+# ==========================================
+# RL SERVING (API Dự đoán)
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rl-serving-dqn
+  namespace: sdn-security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rl-serving-dqn
+  template:
+    metadata:
+      labels:
+        app: rl-serving-dqn
+    spec:
+      containers:
+        - name: serving
+          image: hmm0411/sdn-rl-serving:latest
+          command: ["python", "serving.py", "--port", "8000"]
+          env:
+            - name: MODEL_TYPE
+              value: "dqn"
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5000"
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://s3:9005"
+          ports:
+            - containerPort: 8000
+            - containerPort: 9002 # Prometheus metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rl-serving-dqn
+  namespace: sdn-security
+spec:
+  selector:
+    app: rl-serving-dqn
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+    - name: metrics
+      port: 9002
+      targetPort: 9002
