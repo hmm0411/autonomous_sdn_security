@@ -1,8 +1,5 @@
 from prometheus_client import start_http_server, Gauge
 
-from rl_engine.agent import agent
-
-
 reward_g = Gauge('rl_reward', 'Reward', ['model_type', 'stage'])
 latency_g = Gauge('rl_latency', 'Latency', ['model_type'])
 packet_loss_g = Gauge('rl_packet_loss', 'Packet loss', ['model_type'])

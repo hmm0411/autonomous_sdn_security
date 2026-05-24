@@ -8,7 +8,6 @@ from rl_engine.reward import Reward
 from control_loop.rl_client import get_action
 from control_loop.metrics import update_metrics
 from control_loop.state_collector import get_state
-from rl_engine.logger import ppo_reward_gauge, dqn_reward_gauge
 
 STATE_DIM = 8
 SLEEP_TIME = 2
@@ -52,14 +51,8 @@ while True:
     # CHỈ THỰC THI ACTION CỦA PRODUCTION LÊN ONOS
     execute_action(action_prod)
 
-    # Hàm update_metrics
+    # Hàm update_metrics (Ghi log vào Prometheus ở port 9100)
     update_metrics(state, reward_prod, reward_staging, model_name, action_prod)
-
-    # Cập nhật các metric cho Prometheus
-    if model_name == "dqn":
-        dqn_reward_gauge.set(reward_prod)
-    elif model_name == "ppo":
-        ppo_reward_gauge.set(reward_prod)
 
     print(f"[{model_name}] Prod Action={action_prod} (R={reward_prod}) | Staging Action={action_staging} (R={reward_staging})")
     time.sleep(SLEEP_TIME)
