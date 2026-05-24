@@ -17,3 +17,14 @@ prometheus_client
 pandas
 tensorboard
 torch
+boto3
+flask
+numpy
+torch
+mlflow
+boto3
+prometheus_client
+python-dotenv
+scikit-learn
+pandas
+gunicorn

@@ -58,7 +58,7 @@ if __name__ == '__main__':
     # KÍCH HOẠT SERVER METRICS
     # Nếu là DQN dùng port 9002, PPO dùng 9003
     metrics_port = 9002 if model_type == "dqn" else 9003
-    start_http_server(metrics_port)
+    start_http_server(metrics_port, addr='0.0.0.0')
     print(f"[+] Prometheus metrics server started on port {metrics_port}")
     
     app.run(host='0.0.0.0', port=args.port)
