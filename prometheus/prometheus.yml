@@ -30,27 +30,38 @@ scrape_configs:
       username: "onos"
       password: "rocks"
 
-  # # MLflow
-  # - job_name: "mlflow"
-  #   static_configs:
-  #     - targets: ["mlflow:5000"]
-
-  # DQN Agent (Prometheus metrics)
-  - job_name: "rl-agent-dqn"
-    scrape_interval: 5s
+  # MLflow
+  - job_name: "mlflow"
     static_configs:
+      - targets: ["mlflow:5000"]
+
+  # Cấu hình "cào" dữ liệu từ quá trình huấn luyện DQN (Container rl-agent-dqn)
+  - job_name: "rl-agent-dqn"
+    static_configs:
+      # Sửa tên host thành 'rl-agent-dqn' và cổng '9002'
+      - targets: ["rl-agent-dqn:9002"]
+
+  # Cấu hình "cào" dữ liệu từ quá trình huấn luyện PPO (Container rl-agent-ppo)
+  - job_name: "rl-agent-ppo"
+    static_configs:
+      # Sửa tên host thành 'rl-agent-ppo' và cổng '9003'
+      - targets: ["rl-agent-ppo:9003"]
+
+  # Cấu hình "cào" dữ liệu từ quá trình dự đoán (Inference) của DQN
+  - job_name: "rl-serving-dqn"
+    static_configs:
+      # Sửa tên host thành 'rl-serving-dqn' và cổng '9002'
       - targets: ["rl-serving-dqn:9002"]
 
-  # PPO Agent (Prometheus metrics)
-  - job_name: "rl-agent-ppo"
-    scrape_interval: 5s
+  # Cấu hình "cào" dữ liệu từ quá trình dự đoán (Inference) của PPO
+  - job_name: "rl-serving-ppo"
     static_configs:
+      # Sửa tên host thành 'rl-serving-ppo' và cổng '9003'
       - targets: ["rl-serving-ppo:9003"]
-
   # Control Loop (Runtime metrics)
   - job_name: "control_loop"
     static_configs:
-      - targets: ["control_loop:8000"]
+      - targets: ["control_loop:9100"]
     scrape_interval: 10s
 
   - job_name: "sdn-defense-agent"
@@ -61,4 +72,4 @@ scrape_configs:
   - job_name: "minio_storage"
     metrics_path: /minio/v2/metrics/cluster
     static_configs:
-      - targets: ["s3:9000"]
+      - targets: ["s3:9005"]

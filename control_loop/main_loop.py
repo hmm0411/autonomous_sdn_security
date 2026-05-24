@@ -9,7 +9,7 @@ from control_loop.rl_client import get_action
 from control_loop.metrics import update_metrics
 from control_loop.state_collector import get_state
 
-STATE_DIM = 9
+STATE_DIM = 8
 SLEEP_TIME = 2
 
 state_builder = StateBuilder()
@@ -43,17 +43,17 @@ while True:
     model_to_use = "dqn"
 
     # Lấy cả 2 action từ API
-        action_prod, action_staging, model_name = get_action(state, model_type=model_to_use)
+    action_prod, action_staging, model_name = get_action(state, model_type=model_to_use)
 
-        # Tính toán phần thưởng (giả lập trên cùng một trạng thái mạng)
-        reward_prod = reward_calc.calculate(raw, action_prod)
-        reward_staging = reward_calc.calculate(raw, action_staging)
+    # Tính toán phần thưởng (giả lập trên cùng một trạng thái mạng)
+    reward_prod = reward_calc.calculate(raw, action_prod)
+    reward_staging = reward_calc.calculate(raw, action_staging)
 
-        # CHỈ THỰC THI ACTION CỦA PRODUCTION LÊN ONOS
-        execute_action(action_prod)
+    # CHỈ THỰC THI ACTION CỦA PRODUCTION LÊN ONOS
+    execute_action(action_prod)
         
-        # Hàm update_metrics (cần sửa lại bên metrics.py để nhận 2 reward)
-        update_metrics(state, reward_prod, reward_staging, model_name, action_prod)
+    # Hàm update_metrics (cần sửa lại bên metrics.py để nhận 2 reward)
+    update_metrics(state, reward_prod, reward_staging, model_name, action_prod)
 
-        print(f"[{model_name}] Prod Action={action_prod} (R={reward_prod}) | Staging Action={action_staging} (R={reward_staging})")
-    time.sleep(SLEEP_TIME)
+    print(f"[{model_name}] Prod Action={action_prod} (R={reward_prod}) | Staging Action={action_staging} (R={reward_staging})")
+time.sleep(SLEEP_TIME)

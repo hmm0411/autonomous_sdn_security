@@ -58,6 +58,7 @@ services:
       - AWS_DEFAULT_REGION=us-east-1 
       - MLFLOW_S3_IGNORE_TLS=true
     # THAY ĐỔI Ở ĐÂY: Dùng lệnh giữ container sống ngầm để chờ lệnh exec
+    entrypoint: [""]
     command: tail -f /dev/null
 
   # Container chạy PPO
@@ -80,6 +81,7 @@ services:
       - AWS_DEFAULT_REGION=us-east-1
       - MLFLOW_S3_IGNORE_TLS=true
     # THAY ĐỔI Ở ĐÂY: Dùng lệnh giữ container sống ngầm để chờ lệnh exec
+    entrypoint: [""]
     command: tail -f /dev/null
   #   restart: on-failure
   # rl-serving:
@@ -156,6 +158,8 @@ services:
       context: .
       dockerfile: ./control_loop/Dockerfile
     container_name: control_loop
+    ports:
+      - "9100:9100" # Port cho Prometheus Metrics cào dữ liệu
     depends_on:
       - controller
       - rl-serving-dqn
@@ -166,6 +170,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - MLFLOW_TRACKING_URI=http://mlflow:5000
+    restart: on-failure
         
   # Prometheus
   prometheus:
