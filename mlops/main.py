@@ -2,6 +2,9 @@ import os
 import logging
 from flask import Flask, request, jsonify
 from prometheus_client import Counter, Histogram, generate_latest
+import subprocess
+import threading
+import requests
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -12,80 +15,83 @@ app = Flask(__name__)
 alerts_received = Counter('alerts_received_total', 'Total alerts received', ['severity'])
 webhook_processing_time = Histogram('webhook_processing_seconds', 'Time to process webhook')
 
+def run_retrain_pipeline():
+    """Chạy ngầm pipeline để không block Webhook response"""
+    logger.info("[*] Kích hoạt Automated Data Pipeline...")
+    try:
+        logger.info("-> Chạy Data Processor...")
+        subprocess.run(["python", "/app/rl_engine/data_processor.py"], check=True)
+        
+        logger.info("-> Bắt đầu Retrain Model...")
+        # Ở đây bạn có thể cấu hình gọi dqn hoặc ppo tùy logic
+        subprocess.run(["python", "/app/rl_engine/agent/train_dqn.py"], check=True)
+        
+        logger.info("[+] Retrain hoàn tất. Model mới đã đẩy lên MLflow (Staging).")
+    except Exception as e:
+        logger.error(f"[-] Pipeline Retrain thất bại: {e}")
+
+def run_promote_pipeline():
+    """Chạy ngầm pipeline thăng cấp model"""
+    logger.info("[*] Kích hoạt Automated Promote Pipeline...")
+    try:
+        # Bước 1: Gọi script thăng cấp trên MLflow
+        logger.info("-> Chuyển trạng thái model trên MLflow Registry...")
+        subprocess.run(["python", "/app/mlops/promote.py"], check=True)
+        
+        # Bước 2: Bắn tín hiệu để API Serving reload lại model mới
+        logger.info("-> Bắn tín hiệu Reload cho API Serving...")
+        try:
+            requests.post("http://rl-serving-dqn:8000/reload", timeout=5)
+            requests.post("http://rl-serving-ppo:8001/reload", timeout=5)
+        except requests.exceptions.RequestException as req_err:
+            logger.warning(f"Lỗi gọi Reload API (Có thể container chưa bật): {req_err}")
+            
+        logger.info("[+] Promote hoàn tất. Model mới đã làm chủ mạng!")
+    except Exception as e:
+        logger.error(f"[-] Pipeline Promote thất bại: {e}")
+
 @app.route('/webhook', methods=['POST'])
 @webhook_processing_time.time()
 def handle_alert():
-    """Handle alerts from AlertManager"""
     try:
         data = request.json
-        
-        # Check if data is None
-        if data is None:
-            logger.warning("Received empty webhook payload")
-            return jsonify({'error': 'Empty payload'}), 400
-        
-        logger.info(f"Received alert: {data}")
-        
-        # Count alerts by severity
-        alerts = data.get('alerts', [])
-        if not alerts:
-            logger.warning("No alerts in payload")
-            return jsonify({'status': 'ok', 'alerts_count': 0}), 200
-        
-        for alert in alerts:
-            severity = alert.get('labels', {}).get('severity', 'unknown')
-            alerts_received.labels(severity=severity).inc()
-            logger.info(f"Processed alert with severity: {severity}")
-        
-        return jsonify({'status': 'ok', 'alerts_count': len(alerts)}), 200
-    except TypeError as e:
-        logger.error(f"Type error processing alert: {e}")
-        return jsonify({'error': 'Invalid payload format'}), 400
+        if not data or 'alerts' not in data:
+            return jsonify({'status': 'ok'}), 200
+            
+        for alert in data['alerts']:
+            alert_name = alert.get('labels', {}).get('alertname', '')
+            status = alert.get('status')
+            
+            # 1. TRIGGER AUTO-RETRAIN (Khi điểm thấp)
+            if alert_name in ["Low_Reward_Detected", "PPO_Reward_Drop"] and status == "firing":
+                logger.warning(f"Phát hiện {alert_name}. Trigger Auto-Retrain!")
+                threading.Thread(target=run_retrain_pipeline).start()
+                
+            # 2. TRIGGER AUTO-PROMOTE (Khi Shadow Model làm tốt hơn)
+            elif alert_name == "Staging_Outperforms_Production" and status == "firing":
+                logger.warning("Shadow Model thắng Production! Trigger Auto-Promote!")
+                threading.Thread(target=run_promote_pipeline).start()
+                
+        return jsonify({'status': 'triggered'}), 200
     except Exception as e:
-        logger.error(f"Error processing alert: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint"""
     return jsonify({'status': 'healthy'}), 200
 
 @app.route('/metrics', methods=['GET'])
 def metrics():
-    """Prometheus metrics endpoint"""
     return generate_latest()
 
 @app.route('/', methods=['GET'])
-
 def index():
-    """Root endpoint"""
     return jsonify({
         'service': 'MLOps Auto-Trigger',
-        'version': '1.0.0',
-        'endpoints': {
-            '/webhook': 'POST - Receive alerts from AlertManager',
-            '/health': 'GET - Health check',
-            '/metrics': 'GET - Prometheus metrics',
-            '/': 'GET - This endpoint'
-        }
+        'endpoints': ['/webhook', '/health', '/metrics']
     }), 200
-
-@app.errorhandler(404)
-def not_found(error):
-    """Handle 404 errors"""
-    logger.warning(f"Route not found: {request.path}")
-    return jsonify({'error': 'Not found', 'path': request.path}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    """Handle 500 errors"""
-    logger.error(f"Internal server error: {error}")
-    return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5001))
     host = os.getenv('HOST', '0.0.0.0')
-    debug = os.getenv('DEBUG', 'False').lower() == 'true'
-    
-    logger.info(f"Starting MLOps Auto-Trigger service on {host}:{port}")
-    app.run(host=host, port=port, debug=debug)
+    app.run(host=host, port=port)

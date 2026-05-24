@@ -37,3 +37,14 @@ groups:
         annotations:
           summary: "SDN Defense Agent phát hiện tấn công!"
           description: "Attack indicator là {{ $value }}. Cần kiểm tra hệ thống ngay lập tức."
+
+      - alert: Staging_Outperforms_Production
+        # Tính trung bình reward trong 3 phút, nếu Staging cao hơn Prod 0.5 điểm thì trigger
+        expr: avg_over_time(rl_reward{stage="staging"}[3m]) > (avg_over_time(rl_reward{stage="production"}[3m]) + 0.5)
+        for: 2m
+        labels:
+          severity: critical
+          action: promote_model
+        annotations:
+          summary: "Model Staging đang hoạt động tốt hơn Production!"
+          description: "Điểm reward của Staging vượt trội hơn Production trong 3 phút qua. Đang tiến hành thăng cấp tự động."

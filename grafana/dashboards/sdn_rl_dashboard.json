@@ -113,6 +113,142 @@
                 "w": 8,
                 "h": 6
             }
+        },
+        {
+            "type": "timeseries",
+            "title": "DQN Epsilon Decay (Exploration Rate)",
+            "targets": [
+                {
+                    "expr": "dqn_epsilon",
+                    "legendFormat": "Epsilon"
+                }
+            ],
+            "gridPos": {
+                "x": 16,
+                "y": 16,
+                "w": 8,
+                "h": 6
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "min": 0,
+                    "max": 1
+                }
+            }
+        },
+        {
+            "type": "timeseries",
+            "title": "RL Action History (Real-time)",
+            "targets": [
+                {
+                    "expr": "sdn_rl_action",
+                    "legendFormat": "Action Taken"
+                }
+            ],
+            "gridPos": {
+                "x": 0,
+                "y": 22,
+                "w": 16,
+                "h": 8
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "points",
+                        "pointSize": 6,
+                        "lineStyle": {
+                            "fill": "solid"
+                        }
+                    },
+                    "min": -0.5,
+                    "max": 4.5,
+                    "mappings": [
+                        {
+                            "type": "value",
+                            "options": {
+                                "0": {
+                                    "text": "0: Normal",
+                                    "color": "green"
+                                },
+                                "1": {
+                                    "text": "1: Block (Drop)",
+                                    "color": "red"
+                                },
+                                "2": {
+                                    "text": "2: Limit Bandwidth",
+                                    "color": "orange"
+                                },
+                                "3": {
+                                    "text": "3: Redirect",
+                                    "color": "yellow"
+                                },
+                                "4": {
+                                    "text": "4: Isolate Device",
+                                    "color": "purple"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "type": "gauge",
+            "title": "Current Threat Level",
+            "targets": [
+                {
+                    "expr": "sdn_threat_level",
+                    "legendFormat": "Threat Status"
+                }
+            ],
+            "gridPos": {
+                "x": 16,
+                "y": 22,
+                "w": 8,
+                "h": 8
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "min": 0,
+                    "max": 2,
+                    "mappings": [
+                        {
+                            "type": "value",
+                            "options": {
+                                "0": {
+                                    "text": "SAFE",
+                                    "color": "green"
+                                },
+                                "1": {
+                                    "text": "WARNING",
+                                    "color": "orange"
+                                },
+                                "2": {
+                                    "text": "CRITICAL",
+                                    "color": "red"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "orange",
+                                "value": 1
+                            },
+                            {
+                                "color": "red",
+                                "value": 2
+                            }
+                        ]
+                    }
+                }
+            }
         }
     ]
 }

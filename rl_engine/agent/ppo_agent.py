@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from typing import Optional, Tuple
-
+import mlflow
 from rl_engine.config import GAMMA, LR_PPO, clip_eps, entropy_coef, value_coef  
 
 
@@ -55,7 +55,6 @@ state = [
     latency,            # 5
     packet_loss,        # 6
     controller_cpu,     # 7
-    previous_action     # 8, normalized 0-1
 ]
 """
 
@@ -115,6 +114,7 @@ state = [
             "Unsupported state type. Expected dict, list, tuple, or np.ndarray."
         )
 
+    @mlflow.trace(name="ppo_select_action")
     def select_action(self, state) -> Tuple[int, float]:
         """
         Stochastic action selection for training
@@ -135,6 +135,7 @@ state = [
         self.last_action = int(action.item())
         return self.last_action, float(log_prob.item())
 
+    @mlflow.trace(name="ppo_select_greedy_action")
     def select_greedy_action(self, state) -> int:
         """
         Deterministic action selection for evaluation/inference
@@ -151,9 +152,12 @@ state = [
         self.last_action = action
         return action
 
+    @mlflow.trace(name="ppo_predict")
     def predict(self, state) -> int:
         return self.select_greedy_action(state)
 
+
+    @mlflow.trace(name="ppo_compute_returns")
     def compute_returns(self, rewards, dones):
         returns = []
         R = 0.0
@@ -166,6 +170,7 @@ state = [
 
         return torch.tensor(returns, dtype=torch.float32, device=self.device)
 
+    @mlflow.trace(name="ppo_update")
     def update(self, states, actions, log_probs_old, rewards, dones):
         if len(states) == 0:
             raise ValueError("Empty batch passed to update().")
@@ -209,6 +214,7 @@ state = [
             "entropy": float(entropy.item()),
         }
 
+    @mlflow.trace(name="ppo_save")
     def save(self, path: str) -> None:
         torch.save(
             {
@@ -221,6 +227,7 @@ state = [
             path,
         )
 
+    @mlflow.trace(name="ppo_load")
     def load(self, path: str) -> None:
         checkpoint = torch.load(path, map_location=self.device)
 

@@ -1,6 +1,6 @@
 import time
 import numpy as np
-
+import requests
 from rl_engine.state_builder import StateBuilder
 from control_loop.controller_client import execute_action
 from rl_engine.reward import Reward
@@ -24,17 +24,36 @@ def baseline_policy(state):
 def validate_state(state):
     return state is not None and len(state) == STATE_DIM
 
+print("Đang chờ ONOS khởi động (khoảng 30 giây)...")
+while True:
+    try:
+        # Thử gọi (ping) ONOS
+        res = requests.get("http://controller:8181/onos/v1/flows", auth=("onos", "rocks"), timeout=2)
+        if res.status_code in [200, 401]: # Kết nối thành công
+            print("ONOS đã sẵn sàng!")
+            break
+    except Exception:
+        print("ONOS chưa lên, đợi thêm 5 giây...")
+        time.sleep(5)
+
 while True:
     raw = get_state()
     state = np.array(state_builder.build(raw), dtype=np.float32)
 
     model_to_use = "dqn"
 
-    action, model_name = get_action(state, model_type=model_to_use)
+    # Lấy cả 2 action từ API
+        action_prod, action_staging, model_name = get_action(state, model_type=model_to_use)
 
-    reward = reward_calc.calculate(raw, action)
-    execute_action(action)
-    update_metrics(state, reward, model_name, action)
+        # Tính toán phần thưởng (giả lập trên cùng một trạng thái mạng)
+        reward_prod = reward_calc.calculate(raw, action_prod)
+        reward_staging = reward_calc.calculate(raw, action_staging)
 
-    print(f"[{model_name}] action={action} | reward={reward}")
+        # CHỈ THỰC THI ACTION CỦA PRODUCTION LÊN ONOS
+        execute_action(action_prod)
+        
+        # Hàm update_metrics (cần sửa lại bên metrics.py để nhận 2 reward)
+        update_metrics(state, reward_prod, reward_staging, model_name, action_prod)
+
+        print(f"[{model_name}] Prod Action={action_prod} (R={reward_prod}) | Staging Action={action_staging} (R={reward_staging})")
     time.sleep(SLEEP_TIME)

@@ -19,8 +19,8 @@ def get_action(state, model_type="dqn"):
         
         if res.status_code == 200:
             data = res.json()
-            return int(data.get("action", 0)), data.get("model", model_type)
+            return int(data.get("action", 0)), int(data.get("action_staging", 0)), data.get("model", model_type)
     except Exception as e:
         print(f"RL API Connection error for {model_type}: {e}")
     
-    return 0, "fallback"
+    return 0, 0, model_type

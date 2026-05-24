@@ -19,20 +19,22 @@ def main():
 
     for step in range(DURATION):
 
-        packet_rate = state[0]
-        byte_rate   = state[1]
-        flow_count  = state[2]
-        entropy     = state[3]
-        latency     = state[4]
-        drop_rate   = state[5]
-        queue_len   = state[6]
-        cpu         = state[7]
+        # Cập nhật chuẩn 8 chiều mới nhất
+        packet_rate      = state[0]
+        byte_rate        = state[1]
+        flow_count       = state[2]
+        flow_growth_rate = state[3]
+        entropy          = state[4]
+        latency          = state[5]
+        drop_rate        = state[6]
+        cpu              = state[7]
 
         print(
             f"[{step}] "
             f"Pkt={packet_rate:.2f} | "
             f"Byte={byte_rate:.2f} | "
             f"Flow={flow_count:.2f} | "
+            f"Growth={flow_growth_rate:.2f} | "
             f"Drop={drop_rate:.4f} | "
             f"Lat={latency:.2f}"
         )
@@ -42,15 +44,19 @@ def main():
             "packet_rate": packet_rate,
             "byte_rate": byte_rate,
             "flow_count": flow_count,
+            "flow_growth_rate": flow_growth_rate,
             "entropy": entropy,
             "latency": latency,
             "drop_rate": drop_rate,
-            "queue_length": queue_len,
             "controller_cpu": cpu,
             "scenario": SCENARIO
         })
 
-        state, _, _, _ = env.step(0)
+        # Do môi trường online env trả về tuple 4 giá trị + info (hoặc 5 tùy version Gym)
+        # Bắt đủ số lượng trả về tránh lỗi ValueError
+        next_state, reward, terminated, truncated, info = env.step(0)
+            
+        state = next_state
         time.sleep(1)
 
     df = pd.DataFrame(logs)

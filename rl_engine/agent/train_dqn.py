@@ -6,12 +6,11 @@ import traceback
 import numpy as np
 import pandas as pd
 import torch
+import mlflow.pytorch
 
 import mlflow
-from mlflow.tracking import MlflowClient
 from prometheus_client import start_http_server, Gauge
 from dotenv import load_dotenv
-from mlflow.pytorch import log_model as mlflow_pytorch_log_model
 
 # Import từ source code của bạn
 from rl_engine.online_env import OnlineSDNEnv
@@ -23,17 +22,11 @@ from rl_engine.config import *
 from rl_engine.utils import set_seed
 from mlops.mlflow_manager import get_best_model
 from rl_engine.metrics import *
+from mlflow.pytorch import log_model as mlflow_pytorch_log_model
+from mlflow.tracking import MlflowClient
+from mlflow.models.signature import infer_signature
 
 load_dotenv()
-
-# # ==========================================
-# # CẤU HÌNH PROMETHEUS METRICS
-# # ==========================================
-# PROM_REWARD = Gauge('episode_reward', 'Phần thưởng thô của Episode', ['agent'])
-# PROM_REWARD_MEAN = Gauge('episode_reward_mean', 'Phần thưởng trung bình', ['agent'])
-# PROM_REWARD_STD = Gauge('episode_reward_std', 'Độ lệch chuẩn phần thưởng', ['agent'])
-# PROM_REWARD_BEST = Gauge('episode_reward_best', 'Kỷ lục phần thưởng tốt nhất', ['agent'])
-# PROM_LOSS = Gauge('training_loss', 'Loss của mô hình', ['agent'])
 
 # ==========================================
 # CẤU HÌNH DIRECTORY STRUCTURE
@@ -49,13 +42,13 @@ os.makedirs(RUNS_DIR, exist_ok=True)
 # CẤU HÌNH MLOPS & CI/CD
 # ==========================================
 IS_CI = os.getenv("CI", "false").lower() == "true"
-client = MlflowClient()
 
 if not IS_CI:
     os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("MINIO_ROOT_USER", "minioadmin")
     os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin")
     os.environ["MLFLOW_S3_ENDPOINT_URL"] = os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://s3:9005")
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    os.environ["MLFLOW_S3_IGNORE_TLS"] = "true"
     
     mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
     mlflow.set_tracking_uri(mlflow_uri)
@@ -132,20 +125,25 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=False):
             )
 
             # Prometheus
-            EPISODE_REWARD.labels(model_type='dqn').set(episode_reward)
-            EPISODE_REWARD_MEAN.labels(model_type='dqn').set(mean_reward)
-            EPISODE_REWARD_STD.labels(model_type='dqn').set(std_reward)
-            EPISODE_REWARD_BEST.labels(model_type='dqn').set(float(best_reward_so_far))
-            TRAINING_LOSS.labels(model_type='dqn').set(avg_loss)
+            EPISODE_REWARD.labels(agent='dqn').set(episode_reward)
+            EPISODE_REWARD_MEAN.labels(agent='dqn').set(mean_reward)
+            EPISODE_REWARD_STD.labels(agent='dqn').set(std_reward)
+            EPISODE_REWARD_BEST.labels(agent='dqn').set(float(best_reward_so_far))
+            TRAINING_LOSS.labels(agent='dqn').set(avg_loss)
+            
             # MLflow Logging
             if not IS_CI and parent_run:
                 try:
-                    # Log metric vào child run thay vì parent run
                     mlflow.log_metric("reward_raw", float(episode_reward), step=episode)
                     mlflow.log_metric("reward_mean", mean_reward, step=episode)
                     mlflow.log_metric("reward_std", std_reward, step=episode)
                     mlflow.log_metric("reward_best", float(best_reward_so_far), step=episode)
                     mlflow.log_metric("loss", avg_loss, step=episode)
+                    mlflow.log_metric("epsilon", epsilon, step=episode)
+                    mlflow.log_metric("actions_mean", float(np.mean(actions_in_episode)), step=episode)
+                    mlflow.log_metric("actions_std", float(np.std(actions_in_episode)), step=episode)
+                    mlflow.log_metric("actions_min", float(np.min(actions_in_episode)), step=episode)
+                    mlflow.log_metric("actions_max", float(np.max(actions_in_episode)), step=episode)
                 except Exception as e: 
                     logging.error(f"Lỗi MLflow ở DQN Seed {seed_value}: {e}")
             
@@ -161,7 +159,9 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=False):
     return {
         "rewards": seed_rewards,
         "losses": seed_losses,
-        "epsilons": seed_epsilons
+        "epsilons": seed_epsilons,
+        "best_reward": best_reward_so_far,
+        "final_epsilon": epsilon
     }, agent
 
 
@@ -190,11 +190,10 @@ def train_multi_seeds_dqn():
             "episodes": MAX_EPISODES  
         })
         mlflow.log_param("seeds", str(seeds))
-        mlflow.set_tags({"project": "NT548", "type": "RL", "env": "production", "author": "Ha My Nguyen"})
 
     best_agent_overall = None
     best_overall_mean = -float('inf')
-    trained_agent = None  # FIX: Khởi tạo biến để tránh UnboundLocalError
+    trained_agent = None
     
     all_results = {"rewards": [], "losses": [], "epsilons": []}
 
@@ -216,7 +215,7 @@ def train_multi_seeds_dqn():
         if trained_agent is None:
             raise ValueError("Không có agent nào được huấn luyện. Vui lòng kiểm tra lại cấu hình seeds.")
         logging.warning("No best agent found. Using the last trained agent as fallback.")
-        best_agent_overall = trained_agent  # FIX: Sử dụng agent cuối cùng làm fallback thay vì gán None
+        best_agent_overall = trained_agent 
 
     model_path = os.path.join(MODELS_DIR, "dqn_model.pth")
     
@@ -236,6 +235,8 @@ def train_multi_seeds_dqn():
     std_rewards = np.std(np_rewards, axis=0)
     mean_losses = np.mean(np_losses, axis=0)
     std_losses = np.std(np_losses, axis=0)
+    mean_epsilons = np.mean(np.array(all_results["epsilons"]), axis=0)
+    std_epsilons = np.std(np.array(all_results["epsilons"]), axis=0)
 
     try:
         os.makedirs(os.path.join(RUNS_DIR, "models"), exist_ok=True)
@@ -245,7 +246,9 @@ def train_multi_seeds_dqn():
             'mean_reward': mean_rewards,
             'std_reward': std_rewards,
             'mean_loss': mean_losses,
-            'std_loss': std_losses
+            'std_loss': std_losses,
+            'mean_epsilon': mean_epsilons,
+            'std_epsilon': std_epsilons
         })
         summary_path = os.path.join(RUNS_DIR, "models", "dqn_summary_results.csv")
         summary_df.to_csv(summary_path, index=False)
@@ -268,7 +271,9 @@ def train_multi_seeds_dqn():
             'best_reward': [max(all_results["rewards"][i]) for i in range(len(seeds))],
             'mean_reward': [np.mean(all_results["rewards"][i]) for i in range(len(seeds))],
             'final_loss': [all_results["losses"][i][-1] for i in range(len(seeds))],
-            'mean_loss': [np.mean(all_results["losses"][i]) for i in range(len(seeds))]
+            'mean_loss': [np.mean(all_results["losses"][i]) for i in range(len(seeds))],
+            'final_epsilon': [all_results["epsilons"][i][-1] for i in range(len(seeds))],
+            'mean_epsilon': [np.mean(all_results["epsilons"][i]) for i in range(len(seeds))]
         })
         metrics_path = os.path.join(RUNS_DIR, "models", "dqn_metrics_by_seed.csv")
         metrics_df.to_csv(metrics_path, index=False)
@@ -280,34 +285,47 @@ def train_multi_seeds_dqn():
     logging.info(f"\nĐã hoàn thành DQN Multi-seed training")
     logging.info(f"Final Mean Reward: {float(mean_rewards[-1]):.2f} ± {float(std_rewards[-1]):.2f}")
     
-    # MLflow Model Registration
+    # ==========================================
+    # CẬP NHẬT: MLflow Model Registration (TỰ ĐỘNG)
+    # ==========================================
     if not IS_CI and best_agent_overall is not None:
         try:
             print("[*] Logging model to MLflow...")
-            mlflow_pytorch_log_model(best_agent_overall.q_net, artifact_path="model")
+            
+            # 1. TẠO MODEL SIGNATURE
+            # Khởi tạo dữ liệu mẫu chuẩn 8-Dim để MLflow hiểu schema
+            sample_state = np.zeros((1, 8), dtype=np.float32)
+            sample_action = np.array([0]) 
+            signature = infer_signature(sample_state, sample_action)
+
+            # Sử dụng registered_model_name để tự động sinh version mới trên MLflow
+            mlflow.pytorch.log_model(
+                pytorch_model=best_agent_overall.q_net,
+                artifact_path="model",
+                registered_model_name="SDN_DQN_Model", 
+                signature=signature
+            )
+            
+            mlflow.set_tags({
+                "project": "NT548",
+                "environment": "production",
+                "algorithm": "DQN",
+                "state_dim": "8",
+                "author": "Ha My Nguyen"
+            })
+            
             mlflow.log_metric("final_mean_reward", float(mean_rewards[-1]))
             mlflow.log_metric("best_mean_reward", float(np.max(mean_rewards)))
+
+            # 3. LƯU SCALER.PKL LÀM PREPROCESSOR ARTIFACT
+            scaler_path = os.path.join(MODELS_DIR, "scaler.pkl")
+            if os.path.exists(scaler_path): 
+                mlflow.log_artifact(scaler_path, artifact_path="preprocessor")
 
             if os.path.exists(model_path): mlflow.log_artifact(model_path)
             if os.path.exists(data_path): mlflow.log_artifact(data_path)
 
-            current_run = mlflow.active_run()
-            if current_run is None:
-                raise RuntimeError("Không tìm thấy Active Run!")
-            
-            run_id = current_run.info.run_id
-
-            try:
-                client.get_registered_model("SDN_DQN_Model")
-            except Exception:
-                client.create_registered_model("SDN_DQN_Model")
-
-            client.create_model_version(
-                name="SDN_DQN_Model",
-                source=f"{mlflow.get_artifact_uri()}/model",
-                run_id=run_id
-            )
-            print("[+] Model Version Registered Successfully!")
+            print("[+] Model Logged and Registered Successfully!")
 
         except Exception as e:
             print("[-] MLflow logging failed. Traceback:")
@@ -315,37 +333,6 @@ def train_multi_seeds_dqn():
 
     if not IS_CI:
         mlflow.end_run()
-
-def promote_best_model():
-    best_model, _ = get_best_model()
-    
-    # FIX: Check None để loại bỏ warning từ Pylance và tránh lỗi runtime
-    if best_model is None:
-        print("[-] Không tìm thấy model nào để promote lên Production.")
-        return
-        
-    client.transition_model_version_stage(
-        name=best_model.name,
-        version=best_model.version,
-        stage="Production"
-    )
-    print(f"Promote {best_model.name} v{best_model.version} → Production")
-
-def rollback_model(model_name):
-    versions = client.search_model_versions(f"name='{model_name}'")
-    
-    # FIX: Đảm bảo versions không bị rỗng hoặc None
-    if not versions or len(versions) < 2:
-        print("Không đủ version để rollback")
-        return
-
-    previous = sorted(versions, key=lambda x: int(x.version))[-2]
-    client.transition_model_version_stage(
-        name=model_name,
-        version=previous.version,
-        stage="Production"
-    )
-    print(f"Rollback → {model_name} v{previous.version}")    
 
 if __name__ == "__main__":
     PORT = 9002

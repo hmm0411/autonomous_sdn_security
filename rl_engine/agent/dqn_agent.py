@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-
+import mlflow
 from rl_engine.config import GAMMA, LR_DQN, TARGET_UPDATE, ACTION_DIM, EPS_START
 
 
@@ -42,6 +42,7 @@ class DQNAgent:
     # =============================
     # ACTION SELECTION
     # =============================
+    @mlflow.trace(name="dqn_select_action")
     def select_action(self, state):
 
         if np.random.random() < self.epsilon:
@@ -57,6 +58,7 @@ class DQNAgent:
     # =============================
     # TRAIN UPDATE
     # =============================
+    @mlflow.trace(name="dqn_update")
     def update(self, batch):
 
         states, actions, rewards, next_states, dones = batch

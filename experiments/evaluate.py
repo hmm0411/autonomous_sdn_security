@@ -1,5 +1,4 @@
 import datetime
-
 import numpy as np
 import pandas as pd
 import torch
@@ -9,8 +8,9 @@ from rl_engine.agent.dqn_agent import DQNAgent
 from rl_engine.agent.ppo_agent import PPOAgent
 from experiments.baseline_rule import BaselineRuleBasedAgent
 from rl_engine.config import *
+from typing import Any
 
-def evaluate_agent(env, agent, episodes=20, max_steps=1000):
+def evaluate_agent(env, agent, episodes=20, max_steps=1000) -> dict[str, Any]:
 
     episode_rewards = []
     switching_rates = []
@@ -35,6 +35,7 @@ def evaluate_agent(env, agent, episodes=20, max_steps=1000):
 
             action = int(action)
 
+            # Chuẩn Gymnasium: trả về 5 giá trị
             next_state, reward, terminated, truncated, _ = env.step(action)
 
             total_reward += reward
@@ -78,22 +79,18 @@ def main():
     print("Evaluating DQN...")
     dqn = DQNAgent(STATE_DIM, ACTION_DIM)
     if os.path.exists(DQN_MODEL_PATH):
-        checkpoint = torch.load(DQN_MODEL_PATH, map_location=torch.device('cpu'))
-        dqn.q_net.load_state_dict(checkpoint["model_state_dict"])
-        # dqn.q_net.load_state_dict(torch.load(DQN_MODEL_PATH, map_location=torch.device('cpu')))
-        # dqn.q_net.load_state_dict(torch.load(DQN_MODEL_PATH))
-        dqn.q_net.load_state_dict(checkpoint["model_state_dict"])
+        # Dùng hàm load() có sẵn của Agent cho gọn và an toàn, giống PPO
+        dqn.load(DQN_MODEL_PATH)
         dqn.q_net.eval()  # Đặt mô hình ở chế độ đánh giá
         
         res = evaluate_agent(env, dqn)
         res['model'] = "DQN"
         all_results.append(res)
     else:
-        dqn_result = "Không tìm thấy model DQN."
+        print("Không tìm thấy model DQN.")
 
     # 4. Đánh giá PPO
     print("Evaluating PPO...")
-    # Nếu PPOAgent của bạn bọc thư viện stable_baselines3
     ppo = PPOAgent(STATE_DIM, ACTION_DIM)
     if os.path.exists(PPO_MODEL_PATH):
         ppo.load(PPO_MODEL_PATH)
@@ -101,7 +98,7 @@ def main():
         res['model'] = "PPO"
         all_results.append(res)
     else:
-        ppo_result = "Không tìm thấy model PPO."
+        print("Không tìm thấy model PPO.")
 
     # 5. Đánh giá Rule-based
     print("Evaluating Rule-based...")
@@ -110,13 +107,12 @@ def main():
     res['model'] = "Rule-based"
     all_results.append(res)
 
-    #6 Lưu kết quả vào file CSV để tiện cho việc vẽ biểu đồ sau này
+    # 6. Lưu kết quả vào file CSV để tiện cho việc vẽ biểu đồ sau này
     results_df = pd.DataFrame(all_results)
-    csv_filename = f"evaluation_summary.csv"
+    csv_filename = "evaluation_summary.csv"
     results_csv_path = os.path.join(RESULTS_DIR, csv_filename)
     results_df.to_csv(results_csv_path, index=False)
     print(f"Đã lưu kết quả đánh giá vào: {results_csv_path}")
-
 
     # In kết quả tổng hợp
     print("\n" + "="*45)
