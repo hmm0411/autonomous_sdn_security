@@ -1,6 +1,5 @@
 import numpy as np
 
-
 class OfflineSDNEnv:
     def __init__(self, dataframe, max_steps_per_episode=1000):
         self.df = dataframe.reset_index(drop=True)
@@ -45,9 +44,8 @@ class OfflineSDNEnv:
         return next_state, reward, done, False, {}
 
     def _get_state(self):
+        # CHUẨN 8 CHIỀU: Đưa vào mạng Neural
         row = self.df.iloc[self.idx]
-
-        previous_action_norm = self.previous_action / 4.0
 
         return np.array([
             row["packet_rate"],
@@ -58,7 +56,6 @@ class OfflineSDNEnv:
             row["latency"],
             row["packet_loss"],
             row["controller_cpu"],
-            previous_action_norm
         ], dtype=np.float32)
 
     def _compute_reward(self, action, row):
@@ -72,8 +69,9 @@ class OfflineSDNEnv:
         latency = float(row["latency"])
         packet_loss = float(row["packet_loss"])
         controller_cpu = float(row["controller_cpu"])
+        
+        # ĐÂY LÀ NHÃN: Chỉ dùng để tính đúng/sai, không nằm trong State
         attack_indicator = float(row["attack_indicator"])
-
         attack_label = int(round(attack_indicator * 5))
 
         # QoS penalty nhỏ thôi, tránh làm reward luôn âm nặng
@@ -84,7 +82,6 @@ class OfflineSDNEnv:
             0.10 * flow_growth_rate
         )
 
-        # Tăng cost isolate để tránh PPO/DQN chọn isolate quá nhiều
         action_costs = {
             0: 0.00,  # no_action
             1: 0.12,  # block
@@ -94,14 +91,6 @@ class OfflineSDNEnv:
         }
 
         action_cost = action_costs.get(action, 0.20)
-
-        switching_penalty = 0.03 if action != self.previous_action else 0.0
-
-        # =========================
-        # Security reward
-        # =========================
-        action_cost = action_costs.get(action, 0.20)
-        
         switching_penalty = 0.03 if action != self.previous_action else 0.0
 
         risk_score = (
@@ -112,6 +101,10 @@ class OfflineSDNEnv:
             0.15 * src_ip_entropy +
             0.15 * controller_cpu
         )
+
+        # =========================
+        # Security reward
+        # =========================
         # 0 = normal
         if attack_label == 0:
             if action == 0:
