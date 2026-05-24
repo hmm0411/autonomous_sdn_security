@@ -30,6 +30,9 @@ spec:
       containers:
         - name: minio
           image: minio/minio:latest
+          volumes:
+            - name: data
+              mountPath: /data
           command:
             [
               "server",
@@ -55,6 +58,7 @@ spec:
           ports:
             - containerPort: 9005
             - containerPort: 9001
+
 ---
 apiVersion: v1
 kind: Service
