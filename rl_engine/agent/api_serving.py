@@ -9,6 +9,10 @@ import joblib
 from prometheus_client import start_http_server, Counter, Histogram
 from mlflow.artifacts import download_artifacts
 
+from control_loop.serving import MODEL_TYPE
+
+from control_loop.serving import MODEL_TYPE
+
 app = Flask(__name__)
 
 model_type = os.getenv("MODEL_TYPE", "dqn").strip().lower()
@@ -69,6 +73,10 @@ def load_models():
 
 # Gọi hàm load ngay khi khởi động
 load_models()
+    
+@app.route("/health", methods=["GET"])
+def health():
+    return {"status": "ok", "model_type": MODEL_TYPE}
 
 @app.route('/predict', methods=['POST'])
 def predict():
