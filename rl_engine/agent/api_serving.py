@@ -9,18 +9,20 @@ from rl_engine.agent.ppo_agent import PPOAgent
 
 app = Flask(__name__)
 
-model_type = os.getenv("MODEL_TYPE", "dqn")
-if model_type == "dqn":
-    agent = DQNAgent(8, 5)
-    model_path = "/app/models/dqn_model.pth"
-    print(f"DEBUG: Đang load model tại: {os.path.abspath(model_path)}")
-    agent.load(model_path)
-else:
-    agent = PPOAgent()
-    model_path = "/app/models/ppo_model.pth"
-    print(f"DEBUG: Đang load model tại: {os.path.abspath(model_path)}")
-    agent.load(model_path)
+model_type = os.getenv("MODEL_TYPE", "dqn").strip().lower()
 
+if model_type == "dqn":
+    agent = DQNAgent(state_dim=8, action_dim=5)
+    model_path = "/app/models/dqn_model.pth"
+    print(f"DEBUG: Đang load DQN tại: {model_path}")
+    agent.load(model_path)
+    
+elif model_type == "ppo":
+    # PHẢI LÀ PPOAgent
+    agent = PPOAgent(state_dim=8, action_dim=5) 
+    model_path = "/app/models/ppo_model.pth"
+    print(f"DEBUG: Đang load PPO tại: {model_path}")
+    agent.load(model_path)
 
 @app.route('/predict', methods=['POST'])
 def predict():
