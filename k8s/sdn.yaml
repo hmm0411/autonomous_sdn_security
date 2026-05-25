@@ -13,6 +13,7 @@ spec:
       labels:
         app: controller
     spec:
+      hostNetwork: true
       containers:
         - name: onos
           image: onosproject/onos:2.7.0

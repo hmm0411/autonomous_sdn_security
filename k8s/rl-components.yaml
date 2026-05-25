@@ -86,6 +86,7 @@ spec:
         - name: data-volume
           hostPath:
             path: /home/g23520964/autonomous_sdn_security/data
+            type: Directory
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -118,3 +119,4 @@ spec:
         - name: data-volume
           hostPath:
             path: /home/g23520964/autonomous_sdn_security/data
+            type: Directory
