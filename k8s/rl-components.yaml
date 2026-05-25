@@ -15,8 +15,11 @@ spec:
       containers:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
-          command: ["/bin/sh", "-c", "ls -R /app > /debug.txt && sleep 3600"]
+          command: ["python", "-u", "control_loop/serving.py"]
+          args: ["--port", "8000"]
           env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
             - name: PYTHONPATH
               value: "/app"
             - name: MODEL_TYPE
@@ -40,8 +43,11 @@ spec:
       containers:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
-          command: ["/bin/sh", "-c", "ls -R /app > /debug.txt && sleep 3600"]
+          command: ["python", "-u", "control_loop/serving.py"]
+          args: ["--port", "8001"]
           env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
             - name: PYTHONPATH
               value: "/app"
             - name: MODEL_TYPE
