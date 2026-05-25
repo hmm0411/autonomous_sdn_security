@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sdn-training-cronjob
+  namespace: sdn-security
+spec:
+  # Chạy lúc 00:00 hàng ngày (hoặc thay đổi theo nhu cầu)
+  schedule: "0 0 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: trainer
+              image: hmm0411/sdn-rl-training:latest # Đảm bảo image này chứa code train
+              command: ["python", "train.py"]
+              env:
+                - name: MLFLOW_TRACKING_URI
+                  value: "http://mlflow:5000"
+          restartPolicy: OnFailure

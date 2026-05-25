@@ -54,3 +54,53 @@ spec:
               value: "ppo"
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow:5000"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rl-agent-dqn
+  namespace: sdn-security
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: rl-agent-dqn } }
+  template:
+    metadata: { labels: { app: rl-agent-dqn } }
+    spec:
+      containers:
+        - name: trainer
+          image: hmm0411/sdn-rl-agent:latest
+          command: ["python", "rl_engine/agent/train_dqn.py"]
+          env:
+            - name: PYTHONPATH
+              value: "/app"
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5000"
+            - name: MINIO_ROOT_USER
+              value: "minioadmin"
+            - name: MINIO_ROOT_PASSWORD
+              value: "minioadmin"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rl-agent-ppo
+  namespace: sdn-security
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: rl-agent-ppo } }
+  template:
+    metadata: { labels: { app: rl-agent-ppo } }
+    spec:
+      containers:
+        - name: trainer
+          image: hmm0411/sdn-rl-agent:latest
+          command: ["python", "rl_engine/agent/train_ppo.py"]
+          env:
+            - name: PYTHONPATH
+              value: "/app"
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5000"
+            - name: MINIO_ROOT_USER
+              value: "minioadmin"
+            - name: MINIO_ROOT_PASSWORD
+              value: "minioadmin"
