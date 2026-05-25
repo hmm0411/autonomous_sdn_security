@@ -5,6 +5,9 @@ metadata:
   namespace: sdn-security
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: rl-serving-dqn
   template:
     metadata:
       labels:
@@ -13,12 +16,7 @@ spec:
       containers:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
-          command:
-            [
-              "/bin/sh",
-              "-c",
-              "pip install -r requirements.txt && python serving.py --port 8000",
-            ]
+          command: ["python", "serving.py", "--port", "8000"]
           env:
             - name: PYTHONPATH
               value: "/app"
@@ -36,6 +34,9 @@ metadata:
   namespace: sdn-security
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: rl-serving-ppo
   template:
     metadata:
       labels:
@@ -44,12 +45,7 @@ spec:
       containers:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
-          command:
-            [
-              "/bin/sh",
-              "-c",
-              "pip install -r requirements.txt && python serving.py --port 8001",
-            ]
+          command: ["python", "serving.py", "--port", "8001"]
           env:
             - name: PYTHONPATH
               value: "/app"
