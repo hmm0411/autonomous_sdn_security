@@ -15,8 +15,7 @@ spec:
       containers:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
-          command: ["python", "/app/serving.py"]
-          args: ["--port", "8000"]
+          command: ["/bin/sh", "-c", "ls -R /app > /debug.txt && sleep 3600"]
           env:
             - name: PYTHONPATH
               value: "/app"
@@ -41,8 +40,7 @@ spec:
       containers:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
-          command: ["python", "/app/serving.py"]
-          args: ["--port", "8001"]
+          command: ["/bin/sh", "-c", "ls -R /app > /debug.txt && sleep 3600"]
           env:
             - name: PYTHONPATH
               value: "/app"
