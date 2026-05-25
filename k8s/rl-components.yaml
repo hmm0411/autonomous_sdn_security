@@ -79,6 +79,13 @@ spec:
               value: "minioadmin"
             - name: MINIO_ROOT_PASSWORD
               value: "minioadmin"
+          volumeMounts:
+            - name: data-volume
+              mountPath: /app/data
+      volumes:
+        - name: data-volume
+          hostPath:
+            path: /home/g23520964/autonomous_sdn_security/data
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -104,3 +111,9 @@ spec:
               value: "minioadmin"
             - name: MINIO_ROOT_PASSWORD
               value: "minioadmin"
+          volumeMounts:
+            - name: data-volume
+              mountPath: /app/data
+      volumes:
+        - name: data-volume
+          hostPath: /home/g23520964/autonomous_sdn_security/data
