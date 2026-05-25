@@ -13,7 +13,12 @@ spec:
       containers:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
-          command: ["python", "serving.py", "--port", "8000"]
+          command:
+            [
+              "/bin/sh",
+              "-c",
+              "pip install -r requirements.txt && python serving.py --port 8000",
+            ]
           env:
             - name: PYTHONPATH
               value: "/app"
@@ -21,6 +26,8 @@ spec:
               value: "dqn"
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow:5000"
+          securityContext:
+          runAsUser: 0
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -37,7 +44,12 @@ spec:
       containers:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
-          command: ["python", "serving.py", "--port", "8001"]
+          command:
+            [
+              "/bin/sh",
+              "-c",
+              "pip install -r requirements.txt && python serving.py --port 8001",
+            ]
           env:
             - name: PYTHONPATH
               value: "/app"
@@ -45,3 +57,5 @@ spec:
               value: "ppo"
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow:5000"
+          securityContext:
+            runAsUser: 0

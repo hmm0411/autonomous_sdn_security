@@ -16,20 +16,24 @@ metadata:
 spec:
   serviceName: "s3"
   replicas: 1
-  selector:
-    matchLabels:
-      app: s3
+  selector: { matchLabels: { app: s3 } }
   template:
     metadata:
-      labels:
-        app: s3
+      labels: { app: s3 }
     spec:
+      initContainers: # Thêm initContainer để cấp quyền data
+        - name: fix-permissions
+          image: busybox
+          command: ["chown", "-R", "1000:1000", "/data"]
+          volumeMounts: [{ name: data, mountPath: /data }]
       containers:
         - name: minio
           image: minio/minio:latest
           volumeMounts: [{ name: data, mountPath: /data }]
-          command:
+          command: ["/usr/bin/docker-entrypoint.sh"]
+          args:
             [
+              "minio",
               "server",
               "/data",
               "--address",
@@ -46,8 +50,7 @@ spec:
                 { secretKeyRef: { name: minio-credentials, key: SECRET_KEY } }
       volumes:
         - name: data
-          hostPath:
-            path: /var/lib/rancher/k3s/storage/minio-data
+          hostPath: { path: /var/lib/rancher/k3s/storage/minio-data }
 ---
 apiVersion: apps/v1
 kind: Deployment

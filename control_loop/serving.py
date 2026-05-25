@@ -19,6 +19,7 @@ MODEL_TYPE = os.getenv("MODEL_TYPE", "dqn").lower()
 
 model = None
 scaler = None
+model = mlflow.pytorch.load_model("models:/sdn-rl-model/Production")
 
 app = Flask(__name__)
 
