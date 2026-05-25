@@ -15,8 +15,8 @@ metadata:
   name: job-creator-role
   namespace: sdn-security
 rules:
-  - apiGroups: ["batch", "extensions"]
-    resources: ["jobs"]
+  - apiGroups: ["batch", "apps"]
+    resources: ["jobs", "deployments"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

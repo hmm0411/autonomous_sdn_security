@@ -3,6 +3,9 @@
 # ==========================================
 apiVersion: apps/v1
 kind: Deployment
+env:
+  - name: PYTHONPATH
+    value: "/app"
 metadata:
   name: rl-agent-dqn
   labels:
@@ -60,6 +63,9 @@ spec:
 # ==========================================
 apiVersion: apps/v1
 kind: Deployment
+env:
+  - name: PYTHONPATH
+    value: "/app"
 metadata:
   name: rl-agent-ppo
   labels:
@@ -74,6 +80,9 @@ spec:
       labels:
         app: rl-agent-ppo
     spec:
+      env:
+        - name: PYTHONPATH
+          value: "/app"
       containers:
         - name: ppo-agent
           image: hmm0411/sdn-rl-agent:latest
@@ -104,6 +113,9 @@ metadata:
   labels:
     app: rl-agent-ppo
 spec:
+  env:
+    - name: PYTHONPATH
+      value: "/app"
   selector:
     app: rl-agent-ppo
   ports:
