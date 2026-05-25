@@ -1,124 +1,47 @@
-# ==========================================
-# 1. DQN AGENT (DEPLOYMENT & SERVICE)
-# ==========================================
 apiVersion: apps/v1
 kind: Deployment
-env:
-  - name: PYTHONPATH
-    value: "/app"
 metadata:
-  name: rl-agent-dqn
-  labels:
-    app: rl-agent-dqn
+  name: rl-serving-dqn
+  namespace: sdn-security
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: rl-agent-dqn
+  selector: { matchLabels: { app: rl-serving-dqn } }
   template:
     metadata:
-      labels:
-        app: rl-agent-dqn
+      labels: { app: rl-serving-dqn }
     spec:
       containers:
-        - name: dqn-agent
-          image: hmm0411/sdn-rl-agent:latest
-          # Ép container này chỉ chạy code DQN
-          command: ["tail", "-f", "/dev/null"]
+        - name: serving
+          image: hmm0411/sdn-rl-serving:latest
+          command: ["python", "serving.py", "--port", "8000"]
           env:
-            - name: MLFLOW_TRACKING_URI
-              value: "http://mlflow:5000" # Tên service mlflow trên k8s
-            - name: MLFLOW_S3_ENDPOINT_URL
-              value: "http://s3:9005" # Tên service minio trên k8s
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: minio-credentials
-                  key: ACCESS_KEY
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: minio-credentials
-                  key: SECRET_KEY
-          ports:
-            - containerPort: 9002
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: rl-agent-dqn
-  labels:
-    app: rl-agent-dqn
-spec:
-  selector:
-    app: rl-agent-dqn
-  ports:
-    - protocol: TCP
-      port: 9002
-      targetPort: 9002
-
----
-# ==========================================
-# 2. PPO AGENT (DEPLOYMENT & SERVICE)
-# ==========================================
-apiVersion: apps/v1
-kind: Deployment
-env:
-  - name: PYTHONPATH
-    value: "/app"
-metadata:
-  name: rl-agent-ppo
-  labels:
-    app: rl-agent-ppo
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: rl-agent-ppo
-  template:
-    metadata:
-      labels:
-        app: rl-agent-ppo
-    spec:
-      env:
-        - name: PYTHONPATH
-          value: "/app"
-      containers:
-        - name: ppo-agent
-          image: hmm0411/sdn-rl-agent:latest
-          # Ép container này chỉ chạy code PPO
-          command: ["tail", "-f", "/dev/null"]
-          env:
+            - name: PYTHONPATH
+              value: "/app"
+            - name: MODEL_TYPE
+              value: "dqn"
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow:5000"
-            - name: MLFLOW_S3_ENDPOINT_URL
-              value: "http://s3:9005"
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: minio-credentials
-                  key: ACCESS_KEY
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: minio-credentials
-                  key: SECRET_KEY
-          ports:
-            - containerPort: 9003
 ---
-apiVersion: v1
-kind: Service
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: rl-agent-ppo
-  labels:
-    app: rl-agent-ppo
+  name: rl-serving-ppo
+  namespace: sdn-security
 spec:
-  env:
-    - name: PYTHONPATH
-      value: "/app"
-  selector:
-    app: rl-agent-ppo
-  ports:
-    - protocol: TCP
-      port: 9003
-      targetPort: 9003
+  replicas: 1
+  selector: { matchLabels: { app: rl-serving-ppo } }
+  template:
+    metadata:
+      labels: { app: rl-serving-ppo }
+    spec:
+      containers:
+        - name: serving
+          image: hmm0411/sdn-rl-serving:latest
+          command: ["python", "serving.py", "--port", "8001"]
+          env:
+            - name: PYTHONPATH
+              value: "/app"
+            - name: MODEL_TYPE
+              value: "ppo"
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5000"

@@ -5,18 +5,18 @@ metadata:
   namespace: sdn-security
 spec:
   replicas: 1
+  selector: { matchLabels: { app: control-loop } }
   template:
     metadata:
-      labels:
-        app: control-loop
+      labels: { app: control-loop }
     spec:
       containers:
         - name: loop
           image: hmm0411/sdn-control-loop:latest
+          command: ["python", "control_loop/main_loop.py"]
           env:
             - name: PYTHONPATH
               value: "/app"
-          command: ["python", "control_loop/main_loop.py"]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -25,16 +25,16 @@ metadata:
   namespace: sdn-security
 spec:
   replicas: 1
+  selector: { matchLabels: { app: auto-trigger } }
   template:
     metadata:
-      labels:
-        app: auto-trigger
+      labels: { app: auto-trigger }
     spec:
       serviceAccountName: auto-trigger-sa
       containers:
         - name: trigger
           image: hmm0411/sdn-auto-trigger:latest
+          command: ["python", "main.py"]
           env:
             - name: PYTHONPATH
               value: "/app"
-          command: ["python", "main.py"]

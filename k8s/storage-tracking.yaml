@@ -27,9 +27,7 @@ spec:
       containers:
         - name: minio
           image: minio/minio:latest
-          volumeMounts:
-            - name: data
-              mountPath: /data
+          volumeMounts: [{ name: data, mountPath: /data }]
           command:
             [
               "server",
@@ -58,10 +56,10 @@ metadata:
   namespace: sdn-security
 spec:
   replicas: 1
+  selector: { matchLabels: { app: mlflow } }
   template:
     metadata:
-      labels:
-        app: mlflow
+      labels: { app: mlflow }
     spec:
       containers:
         - name: mlflow
