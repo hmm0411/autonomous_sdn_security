@@ -116,4 +116,5 @@ spec:
               mountPath: /app/data
       volumes:
         - name: data-volume
-          hostPath: /home/g23520964/autonomous_sdn_security/data
+          hostPath:
+            path: /home/g23520964/autonomous_sdn_security/data
