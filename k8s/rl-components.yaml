@@ -84,3 +84,49 @@ spec:
     - name: metrics
       port: 9002
       targetPort: 9002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rl-serving-ppo
+  namespace: sdn-security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rl-serving-ppo
+  template:
+    metadata:
+      labels:
+        app: rl-serving-ppo
+    spec:
+      containers:
+        - name: serving
+          image: hmm0411/sdn-rl-serving:latest
+          command: ["python", "serving.py", "--port", "8001"]
+          env:
+            - name: MODEL_TYPE
+              value: "ppo"
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5000"
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://s3:9005"
+          ports:
+            - containerPort: 8001
+            - containerPort: 9003 # Prometheus metrics cho PPO
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rl-serving-ppo
+  namespace: sdn-security
+spec:
+  selector:
+    app: rl-serving-ppo
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+    - name: metrics
+      port: 9003
+      targetPort: 9003

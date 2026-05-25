@@ -35,6 +35,8 @@ def run_promote_pipeline():
     logger.info("[*] Kích hoạt Automated Promote Pipeline...")
     try:
         # Bước 1: Gọi script thăng cấp trên MLflow
+        result = subprocess.run(["python", "/app/experiments/evaluate.py"], capture_output=True, text=True)
+        logger.info(f"-> Kết quả đánh giá: {result.stdout}")
         logger.info("-> Chuyển trạng thái model trên MLflow Registry...")
         subprocess.run(["python", "/app/mlops/promote.py"], check=True)
         

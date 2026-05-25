@@ -30,7 +30,8 @@ spec:
       containers:
         - name: minio
           image: minio/minio:latest
-          volumes:
+          # --- CẤU HÌNH MOUNT CHÍNH XÁC Ở ĐÂY ---
+          volumeMounts:
             - name: data
               mountPath: /data
           command:
@@ -58,6 +59,11 @@ spec:
           ports:
             - containerPort: 9005
             - containerPort: 9001
+      # --- CẤU HÌNH VOLUME Ở CẤP CAO NHẤT CỦA POD SPEC ---
+      volumes:
+        - name: data
+          hostPath:
+            path: /var/lib/rancher/k3s/storage/minio-data
 
 ---
 apiVersion: v1
