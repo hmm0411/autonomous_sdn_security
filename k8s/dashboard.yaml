@@ -12,13 +12,20 @@ spec:
       containers:
         - name: dashboard
           image: python:3.10-slim
-          command:
+          # Cài đặt thư viện trước, rồi mới chạy lệnh
+          command: ["/bin/bash", "-c"]
+          args:
             [
-              "sh",
-              "-c",
               "pip install streamlit pandas numpy requests prometheus_client && streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0",
             ]
           ports: [{ containerPort: 8501 }]
+          volumeMounts:
+            - name: app-source
+              mountPath: /app
+      volumes:
+        - name: app-source
+          hostPath:
+            path: /home/g23520964/autonomous_sdn_security # Đảm bảo đường dẫn này đúng trên VM
 ---
 apiVersion: v1
 kind: Service
