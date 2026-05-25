@@ -38,3 +38,18 @@ spec:
     - name: metrics
       port: 9002
       targetPort: 9002
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rl-serving-ppo
+  namespace: sdn-security
+spec:
+  selector: { app: rl-serving-ppo }
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+    - name: metrics
+      port: 9003
+      targetPort: 9003

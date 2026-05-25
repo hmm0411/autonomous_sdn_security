@@ -3,6 +3,7 @@ FROM python:3.10-slim
 
 # 2. Thư mục làm việc và User non-root
 WORKDIR /app
+COPY . .
 RUN useradd -m -r appuser && chown appuser /app
 
 # 3. Cài đặt hệ thống (Xóa sạch supervisor, git, curl)

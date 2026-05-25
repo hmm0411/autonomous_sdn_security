@@ -1,3 +1,4 @@
+# k8s/rl-components.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,20 +6,17 @@ metadata:
   namespace: sdn-security
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: rl-serving-dqn
+  selector: { matchLabels: { app: rl-serving-dqn } }
   template:
     metadata:
-      labels:
-        app: rl-serving-dqn
+      labels: { app: rl-serving-dqn }
     spec:
-      securityContext:
-        runAsUser: 0
+      securityContext: { runAsUser: 0 }
       containers:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
-          command: ["python", "serving.py", "--port", "8000"]
+          command: ["python", "/app/serving.py"]
+          args: ["--port", "8000"]
           env:
             - name: PYTHONPATH
               value: "/app"
@@ -26,8 +24,6 @@ spec:
               value: "dqn"
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow:5000"
-          securityContext:
-          runAsUser: 0
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -36,20 +32,17 @@ metadata:
   namespace: sdn-security
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: rl-serving-ppo
+  selector: { matchLabels: { app: rl-serving-ppo } }
   template:
     metadata:
-      labels:
-        app: rl-serving-ppo
+      labels: { app: rl-serving-ppo }
     spec:
-      securityContext:
-        runAsUser: 0
+      securityContext: { runAsUser: 0 }
       containers:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
-          command: ["python", "serving.py", "--port", "8001"]
+          command: ["python", "/app/serving.py"]
+          args: ["--port", "8001"]
           env:
             - name: PYTHONPATH
               value: "/app"
@@ -57,5 +50,3 @@ spec:
               value: "ppo"
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow:5000"
-          securityContext:
-            runAsUser: 0
