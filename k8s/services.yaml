@@ -27,7 +27,7 @@ spec:
   ports:
     - port: 5000
       targetPort: 5000
-      nodePort: 30006 # Truy cập qua http://<IP>:30006
+      nodePort: 30007 # Truy cập qua http://<IP>:30007
 ---
 apiVersion: v1
 kind: Service
