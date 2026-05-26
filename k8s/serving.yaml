@@ -138,7 +138,14 @@ spec:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
           command:
-            ["python", "-u", "rl_engine/agent/api_serving.py", "--port", "8000"]
+            [
+              "python",
+              "-u",
+              "-m",
+              "rl_engine.agent.api_serving",
+              "--port",
+              "8000",
+            ]
           ports: [{ containerPort: 8000 }, { containerPort: 9002 }]
           resources:
             requests: { cpu: "200m", memory: "256Mi" }
@@ -202,7 +209,14 @@ spec:
         - name: serving
           image: hmm0411/sdn-rl-serving:latest
           command:
-            ["python", "-u", "rl_engine/agent/api_serving.py", "--port", "8001"]
+            [
+              "python",
+              "-u",
+              "-m",
+              "rl_engine.agent.api_serving",
+              "--port",
+              "8001",
+            ]
           ports: [{ containerPort: 8001 }, { containerPort: 9003 }]
           resources:
             requests: { cpu: "200m", memory: "256Mi" }
@@ -345,7 +359,7 @@ spec:
       containers:
         - name: trigger
           image: hmm0411/sdn-auto-trigger:latest
-          command: ["python", "main.py"]
+          command: ["python", "-m", "mlops.main"]
           ports: [{ containerPort: 5001 }]
           env:
             - name: PYTHONPATH

@@ -96,7 +96,7 @@ spec:
           containers:
             - name: trainer
               image: hmm0411/sdn-rl-agent:latest
-              command: ["python", "rl_engine/agent/train_dqn.py"]
+              command: ["python", "-m", "rl_engine.agent.train_dqn"]
               env:
                 - name: PYTHONPATH
                   value: "/app"
@@ -141,7 +141,7 @@ spec:
           containers:
             - name: trainer
               image: hmm0411/sdn-rl-agent:latest
-              command: ["python", "rl_engine/agent/train_ppo.py"]
+              command: ["python", "-m", "rl_engine.agent.train_ppo"]
               env:
                 - name: PYTHONPATH
                   value: "/app"
@@ -182,7 +182,7 @@ spec:
       containers:
         - name: trigger
           image: hmm0411/sdn-auto-trigger:latest
-          command: ["python", "mlops/main.py"] # PATH ĐÃ ĐƯỢC FIX
+          command: ["python", "-m", "mlops.main"] # PATH ĐÃ ĐƯỢC FIX
           env:
             - name: PYTHONPATH
               value: "/app"
