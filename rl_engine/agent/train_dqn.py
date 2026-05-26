@@ -21,7 +21,7 @@ from rl_engine.replay_buffer import ReplayBuffer
 from rl_engine.logger import Logger
 from rl_engine.config import *
 from rl_engine.utils import set_seed
-from mlops.mlflow_manager import get_best_model
+from mlops.manager import get_best_model
 from rl_engine.metrics import *
 from mlflow.pytorch import log_model as mlflow_pytorch_log_model
 from mlflow.tracking import MlflowClient

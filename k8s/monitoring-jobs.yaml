@@ -169,3 +169,24 @@ spec:
           volumes:
             - name: app-vol
               hostPath: { path: /home/g23520964/autonomous_sdn_security }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: auto-trigger, namespace: sdn-security }
+spec:
+  selector: { matchLabels: { app: auto-trigger } }
+  template:
+    metadata: { labels: { app: auto-trigger } }
+    spec:
+      serviceAccountName: auto-trigger-sa
+      containers:
+        - name: trigger
+          image: hmm0411/sdn-auto-trigger:latest
+          command: ["python", "mlops/main.py"] # PATH ĐÃ ĐƯỢC FIX
+          env:
+            - name: PYTHONPATH
+              value: "/app"
+          volumeMounts: [{ name: app-vol, mountPath: /app }]
+      volumes:
+        - name: app-vol
+          hostPath: { path: /home/g23520964/autonomous_sdn_security }

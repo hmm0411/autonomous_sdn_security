@@ -16,6 +16,7 @@ mlflow
 boto3
 s3fs
 prometheus-client
+kubernetes
 
 # RL & Visualization
 gymnasium
