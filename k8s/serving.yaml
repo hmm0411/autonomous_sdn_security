@@ -45,7 +45,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: s3-setup
-          image: minio/mc:latest
+          image: minio/minio:latest
           env:
             - name: MINIO_PROMETHEUS_AUTH_TYPE
               value: "public"
