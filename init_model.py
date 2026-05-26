@@ -4,7 +4,9 @@ import torch
 import os
 from rl_engine.agent.dqn_agent import DQNAgent
 from rl_engine.config import STATE_DIM, ACTION_DIM
+from dotenv import load_dotenv
 
+load_dotenv()  # Load biến môi trường từ .env
 mlflow.set_tracking_uri("http://localhost:30007") # Dùng port NodePort
 mlflow.set_experiment("SDN_Autonomous_Security")
 

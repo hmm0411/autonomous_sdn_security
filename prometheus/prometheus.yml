@@ -25,7 +25,7 @@ scrape_configs:
   - job_name: "onos"
     static_configs:
       - targets: ["controller:8181"]
-    metrics_path: "/onos/v1/metrics"
+    metrics_path: "/onos/v1/network/configuration"
     basic_auth:
       username: "onos"
       password: "rocks"
@@ -68,3 +68,5 @@ scrape_configs:
     metrics_path: /minio/v2/metrics/cluster
     static_configs:
       - targets: ["s3:9005"]
+    params:
+      auth: ["public"]

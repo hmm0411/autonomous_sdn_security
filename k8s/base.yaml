@@ -101,7 +101,7 @@ data:
         static_configs: [{ targets: ["localhost:9090"] }]
       - job_name: "onos"
         static_configs: [{ targets: ["controller:8181"] }]
-        metrics_path: "/onos/v1/metrics"
+        metrics_path: "/onos/v1/network/configuration"
         basic_auth: { username: "onos", password: "rocks" }
       - job_name: "rl-serving-dqn"
         static_configs: [{ targets: ["rl-serving-dqn:9002"] }]
@@ -197,92 +197,257 @@ data:
       "title": "SDN RL Observability Dashboard (Full)",
       "refresh": "5s",
       "panels": [
-        {
-          "type": "timeseries", "title": "Reward Performance",
-          "targets": [
-            { "expr": "episode_reward{agent='dqn'}", "legendFormat": "DQN Reward" },
-            { "expr": "episode_reward{agent='ppo'}", "legendFormat": "PPO Reward" }
-          ],
-          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 }
-        },
-        {
-          "type": "timeseries", "title": "Network Throughput (Packet Rate)",
-          "targets": [{ "expr": "sdn_packet_rate", "legendFormat": "Packet Rate (pps)" }],
-          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 }
-        },
-        {
-          "type": "timeseries", "title": "System Latency & Flow Count",
-          "targets": [
-            { "expr": "sdn_latency_ms", "legendFormat": "Latency (ms)" },
-            { "expr": "sdn_flow_count", "legendFormat": "Active Flows" }
-          ],
-          "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 }
-        },
-        {
-          "type": "timeseries", "title": "Training Loss History",
-          "targets": [
-            { "expr": "training_loss{agent='dqn'}", "legendFormat": "DQN Loss" },
-            { "expr": "training_loss{agent='ppo'}", "legendFormat": "PPO Loss" }
-          ],
-          "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 }
-        },
-        {
-          "type": "gauge", "title": "Controller CPU Load",
-          "targets": [{ "expr": "sdn_controller_cpu", "legendFormat": "CPU %" }],
-          "gridPos": { "x": 0, "y": 16, "w": 8, "h": 6 }
-        },
-        {
-          "type": "stat", "title": "Model Status",
-          "targets": [
-            { "expr": "up{job='rl-agent-dqn'} == 1", "legendFormat": "DQN Agent Ready" },
-            { "expr": "up{job='rl-agent-ppo'} == 1", "legendFormat": "PPO Agent Ready" }
-          ],
-          "gridPos": { "x": 8, "y": 16, "w": 8, "h": 6 }
-        },
-        {
-          "type": "timeseries", "title": "DQN Epsilon Decay",
-          "targets": [{ "expr": "dqn_epsilon", "legendFormat": "Epsilon" }],
-          "gridPos": { "x": 16, "y": 16, "w": 8, "h": 6 },
-          "fieldConfig": { "defaults": { "min": 0, "max": 1 } }
-        },
-        {
-          "type": "timeseries", "title": "RL Action History (Real-time)",
-          "targets": [{ "expr": "sdn_rl_action", "legendFormat": "Action Taken" }],
-          "gridPos": { "x": 0, "y": 22, "w": 16, "h": 8 },
-          "fieldConfig": {
-            "defaults": {
-              "custom": { "drawStyle": "points", "pointSize": 6 },
-              "min": -0.5, "max": 4.5,
-              "mappings": [
-                { "type": "value", "options": {
-                    "0": { "text": "0: Normal", "color": "green" },
-                    "1": { "text": "1: Block", "color": "red" },
-                    "2": { "text": "2: Limit BW", "color": "orange" },
-                    "3": { "text": "3: Redirect", "color": "yellow" },
-                    "4": { "text": "4: Isolate", "color": "purple" }
-                }}
-              ]
-            }
-          }
-        },
-        {
-          "type": "gauge", "title": "Current Threat Level",
-          "targets": [{ "expr": "sdn_threat_level", "legendFormat": "Threat Status" }],
-          "gridPos": { "x": 16, "y": 22, "w": 8, "h": 8 },
-          "fieldConfig": {
-            "defaults": {
-              "min": 0, "max": 2,
-              "mappings": [
-                { "type": "value", "options": { "0": { "text": "SAFE", "color": "green" }, "1": { "text": "WARN", "color": "orange" }, "2": { "text": "CRIT", "color": "red" } } }
+          {
+              "type": "timeseries",
+              "title": "Reward Performance",
+              "targets": [
+                  {
+                      "expr": "episode_reward{agent='dqn'}",
+                      "legendFormat": "DQN Reward"
+                  },
+                  {
+                      "expr": "episode_reward{agent='ppo'}",
+                      "legendFormat": "PPO Reward"
+                  }
               ],
-              "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 2 } ] }
-            }
+              "gridPos": {
+                  "x": 0,
+                  "y": 0,
+                  "w": 12,
+                  "h": 8
+              }
+          },
+          {
+              "type": "timeseries",
+              "title": "Network Throughput (Packet Rate)",
+              "targets": [
+                  {
+                      "expr": "sdn_packet_rate",
+                      "legendFormat": "Packet Rate (pps)"
+                  }
+              ],
+              "gridPos": {
+                  "x": 12,
+                  "y": 0,
+                  "w": 12,
+                  "h": 8
+              }
+          },
+          {
+              "type": "timeseries",
+              "title": "System Latency & Flow Count",
+              "targets": [
+                  {
+                      "expr": "sdn_latency_ms",
+                      "legendFormat": "Latency (ms)"
+                  },
+                  {
+                      "expr": "sdn_flow_count",
+                      "legendFormat": "Active Flows"
+                  }
+              ],
+              "gridPos": {
+                  "x": 0,
+                  "y": 8,
+                  "w": 12,
+                  "h": 8
+              }
+          },
+          {
+              "type": "timeseries",
+              "title": "Training Loss History",
+              "targets": [
+                  {
+                      "expr": "training_loss{agent='dqn'}",
+                      "legendFormat": "DQN Loss"
+                  },
+                  {
+                      "expr": "training_loss{agent='ppo'}",
+                      "legendFormat": "PPO Loss"
+                  }
+              ],
+              "gridPos": {
+                  "x": 12,
+                  "y": 8,
+                  "w": 12,
+                  "h": 8
+              }
+          },
+          {
+              "type": "gauge",
+              "title": "Controller CPU Load",
+              "targets": [
+                  {
+                      "expr": "sdn_controller_cpu",
+                      "legendFormat": "CPU %"
+                  }
+              ],
+              "gridPos": {
+                  "x": 0,
+                  "y": 16,
+                  "w": 8,
+                  "h": 6
+              }
+          },
+          {
+              "type": "stat",
+              "title": "Model Status",
+              "targets": [
+                  {
+                      "expr": "up{job='rl-agent-dqn'} == 1",
+                      "legendFormat": "DQN Agent Ready"
+                  },
+                  {
+                      "expr": "up{job='rl-agent-ppo'} == 1",
+                      "legendFormat": "PPO Agent Ready"
+                  }
+              ],
+              "gridPos": {
+                  "x": 8,
+                  "y": 16,
+                  "w": 8,
+                  "h": 6
+              }
+          },
+          {
+              "type": "timeseries",
+              "title": "DQN Epsilon Decay (Exploration Rate)",
+              "targets": [
+                  {
+                      "expr": "dqn_epsilon",
+                      "legendFormat": "Epsilon"
+                  }
+              ],
+              "gridPos": {
+                  "x": 16,
+                  "y": 16,
+                  "w": 8,
+                  "h": 6
+              },
+              "fieldConfig": {
+                  "defaults": {
+                      "min": 0,
+                      "max": 1
+                  }
+              }
+          },
+          {
+              "type": "timeseries",
+              "title": "RL Action History (Real-time)",
+              "targets": [
+                  {
+                      "expr": "sdn_rl_action",
+                      "legendFormat": "Action Taken"
+                  }
+              ],
+              "gridPos": {
+                  "x": 0,
+                  "y": 22,
+                  "w": 16,
+                  "h": 8
+              },
+              "fieldConfig": {
+                  "defaults": {
+                      "custom": {
+                          "drawStyle": "points",
+                          "pointSize": 6,
+                          "lineStyle": {
+                              "fill": "solid"
+                          }
+                      },
+                      "min": -0.5,
+                      "max": 4.5,
+                      "mappings": [
+                          {
+                              "type": "value",
+                              "options": {
+                                  "0": {
+                                      "text": "0: Normal",
+                                      "color": "green"
+                                  },
+                                  "1": {
+                                      "text": "1: Block (Drop)",
+                                      "color": "red"
+                                  },
+                                  "2": {
+                                      "text": "2: Limit Bandwidth",
+                                      "color": "orange"
+                                  },
+                                  "3": {
+                                      "text": "3: Redirect",
+                                      "color": "yellow"
+                                  },
+                                  "4": {
+                                      "text": "4: Isolate Device",
+                                      "color": "purple"
+                                  }
+                              }
+                          }
+                      ]
+                  }
+              }
+          },
+          {
+              "type": "gauge",
+              "title": "Current Threat Level",
+              "targets": [
+                  {
+                      "expr": "sdn_threat_level",
+                      "legendFormat": "Threat Status"
+                  }
+              ],
+              "gridPos": {
+                  "x": 16,
+                  "y": 22,
+                  "w": 8,
+                  "h": 8
+              },
+              "fieldConfig": {
+                  "defaults": {
+                      "min": 0,
+                      "max": 2,
+                      "mappings": [
+                          {
+                              "type": "value",
+                              "options": {
+                                  "0": {
+                                      "text": "SAFE",
+                                      "color": "green"
+                                  },
+                                  "1": {
+                                      "text": "WARNING",
+                                      "color": "orange"
+                                  },
+                                  "2": {
+                                      "text": "CRITICAL",
+                                      "color": "red"
+                                  }
+                              }
+                          }
+                      ],
+                      "thresholds": {
+                          "mode": "absolute",
+                          "steps": [
+                              {
+                                  "color": "green",
+                                  "value": null
+                              },
+                              {
+                                  "color": "orange",
+                                  "value": 1
+                              },
+                              {
+                                  "color": "red",
+                                  "value": 2
+                              }
+                          ]
+                      }
+                  }
+              }
           }
-        }
       ]
     }
 ---
-# 6. TẤT CẢ CÁC SERVICES
 apiVersion: v1
 kind: Service
 metadata: { name: s3, namespace: sdn-security }

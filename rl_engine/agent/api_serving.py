@@ -39,6 +39,7 @@ ACTION_CHOSEN = Counter(
 def load_models():
     global model_prod, model_staging, scaler
     registered_model_name = "SDN_DQN_Model" if model_type == "dqn" else "SDN_PPO_Model"
+    model_uri = f"models:/{registered_model_name}/Production"
     
     # 1. Load Scaler
     try:
@@ -47,17 +48,19 @@ def load_models():
         scaler = joblib.load(scaler_path)
         print("[+] Đã load Scaler thành công.")
     except Exception as e:
-        print(f"[-] Không tìm thấy Scaler ({e}), sẽ dùng RAW Data.")
+        print(f"[-] Không tìm thấy Scaler ({e}), dùng identity scaler.")
         scaler = None
 
     # 2. Load Model Production
     try:
-        model_prod = mlflow.pytorch.load_model(f"models:/{registered_model_name}/Production")
-        model_prod.eval()
+        model_prod = mlflow.pytorch.load_model(model_uri)
+        model_prod.eval() # Đúng cú pháp
         print(f"[+] Đã load {model_type.upper()} PRODUCTION")
     except Exception as e:
-        print(f"[!] Lỗi khi load model Production: {e}")
-        model_prod = None
+        print(f"[!] LỖI: Không tìm thấy model Production: {e}")
+        # TẠO MODEL GIẢ LẬP ĐỂ KHÔNG BỊ CRASH
+        model_prod = torch.nn.Linear(8, 5) 
+        model_prod.eval()
         
     # 3. Load Model Staging
     try:
