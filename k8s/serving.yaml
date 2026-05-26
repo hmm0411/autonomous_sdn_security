@@ -1,9 +1,7 @@
 # 1. MINIO STORAGE & SETUP BUCKET
 apiVersion: apps/v1
 kind: StatefulSet
-metadata:
-  name: s3
-  namespace: sdn-security
+metadata: { name: s3, namespace: sdn-security }
 spec:
   serviceName: "s3"
   replicas: 1
@@ -11,15 +9,11 @@ spec:
   template:
     metadata: { labels: { app: s3 } }
     spec:
-      initContainers:
-        - name: fix-permissions
-          image: busybox
-          command: ["chown", "-R", "1000:1000", "/data"]
-          volumeMounts: [{ name: data, mountPath: /data }]
       containers:
         - name: minio
           image: minio/minio:latest
-          command:
+          command: ["minio"]
+          args:
             [
               "server",
               "/data",
@@ -35,8 +29,6 @@ spec:
             - name: MINIO_ROOT_PASSWORD
               valueFrom:
                 { secretKeyRef: { name: minio-credentials, key: SECRET_KEY } }
-            - name: MINIO_PROMETHEUS_AUTH_TYPE
-              value: "public"
           volumeMounts: [{ name: data, mountPath: /data }]
       volumes:
         - name: data
