@@ -1,0 +1,171 @@
+# 1. MONITORING BỘ BA (Prometheus, Grafana, Alertmanager)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: sdn-security
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: prometheus } }
+  template:
+    metadata: { labels: { app: prometheus } }
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          ports: [{ containerPort: 9090 }]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+      volumes:
+        - name: config
+          configMap: { name: prometheus-config }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: sdn-security
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: alertmanager } }
+  template:
+    metadata: { labels: { app: alertmanager } }
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:latest
+          args: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+          ports: [{ containerPort: 9093 }]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+      volumes:
+        - name: config
+          configMap: { name: alertmanager-config }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: sdn-security
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: grafana } }
+  template:
+    metadata: { labels: { app: grafana } }
+    spec:
+      securityContext: { fsGroup: 472 }
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          ports: [{ containerPort: 3000 }]
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+          volumeMounts:
+            - name: grafana-config
+              mountPath: /etc/grafana/provisioning/datasources/datasource.yml
+              subPath: datasource.yml
+            - name: grafana-config
+              mountPath: /etc/grafana/provisioning/dashboards/dashboard.yml
+              subPath: dashboard.yml
+            - name: grafana-dashboards
+              mountPath: /var/lib/grafana/dashboards/sdn_rl_dashboard.json
+              subPath: sdn_rl_dashboard.json
+      volumes:
+        - name: grafana-config
+          configMap: { name: grafana-config }
+        - name: grafana-dashboards
+          configMap: { name: grafana-dashboards }
+---
+# 2. CRONJOB HUẤN LUYỆN DQN & PPO (Sạch sẽ, Tự hủy)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dqn-training-job
+  namespace: sdn-security
+spec:
+  schedule: "0 2 * * *" # 2:00 AM mỗi ngày
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600 # Xóa sạch Pod sau 1 tiếng
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: trainer
+              image: hmm0411/sdn-rl-agent:latest
+              command: ["python", "rl_engine/agent/train_dqn.py"]
+              env:
+                - name: PYTHONPATH
+                  value: "/app"
+                - name: MLFLOW_TRACKING_URI
+                  value: "http://mlflow.sdn-security.svc.cluster.local:5000"
+                - name: MLFLOW_S3_ENDPOINT_URL
+                  value: "http://s3:9005"
+                - name: MLFLOW_S3_IGNORE_TLS
+                  value: "true"
+                - name: AWS_DEFAULT_REGION
+                  value: "us-east-1"
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    {
+                      secretKeyRef:
+                        { name: minio-credentials, key: ACCESS_KEY },
+                    }
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    {
+                      secretKeyRef:
+                        { name: minio-credentials, key: SECRET_KEY },
+                    }
+              volumeMounts: [{ name: app-vol, mountPath: /app }]
+          volumes:
+            - name: app-vol
+              hostPath: { path: /home/g23520964/autonomous_sdn_security }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ppo-training-job
+  namespace: sdn-security
+spec:
+  schedule: "30 3 * * *" # 3:30 AM mỗi ngày
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: trainer
+              image: hmm0411/sdn-rl-agent:latest
+              command: ["python", "rl_engine/agent/train_ppo.py"]
+              env:
+                - name: PYTHONPATH
+                  value: "/app"
+                - name: MLFLOW_TRACKING_URI
+                  value: "http://mlflow.sdn-security.svc.cluster.local:5000"
+                - name: MLFLOW_S3_ENDPOINT_URL
+                  value: "http://s3:9005"
+                - name: MLFLOW_S3_IGNORE_TLS
+                  value: "true"
+                - name: AWS_DEFAULT_REGION
+                  value: "us-east-1"
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    {
+                      secretKeyRef:
+                        { name: minio-credentials, key: ACCESS_KEY },
+                    }
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    {
+                      secretKeyRef:
+                        { name: minio-credentials, key: SECRET_KEY },
+                    }
+              volumeMounts: [{ name: app-vol, mountPath: /app }]
+          volumes:
+            - name: app-vol
+              hostPath: { path: /home/g23520964/autonomous_sdn_security }
