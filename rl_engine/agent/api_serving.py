@@ -9,12 +9,9 @@ import joblib
 from prometheus_client import start_http_server, Counter, Histogram
 from mlflow.artifacts import download_artifacts
 
-from control_loop.serving import MODEL_TYPE
-
-from control_loop.serving import MODEL_TYPE
-
 app = Flask(__name__)
 
+# Thay thế việc import từ control_loop bằng os.getenv
 model_type = os.getenv("MODEL_TYPE", "dqn").strip().lower()
 model_prod = None
 model_staging = None

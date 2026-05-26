@@ -9,12 +9,17 @@ flask
 gunicorn
 python-dotenv
 requests
+joblib
 
-# MLOps & Monitoring
+# MLOps & Monitoring & S3
 mlflow
 boto3
+s3fs
 prometheus-client
+
+# RL & Visualization
 gymnasium
 tensorboard
 matplotlib
 seaborn
+streamlit
