@@ -35,3 +35,12 @@ def trigger_retrain(model_name):
         }
     }
     job_api.create_namespaced_job(namespace="sdn-security", body=job_manifest)
+
+def get_best_model(model_name):
+    """Lấy bản model tốt nhất từ Staging/None theo metric nào đó"""
+    client = MlflowClient()
+    # Logic lấy model của bạn ở đây (ví dụ tìm version mới nhất)
+    versions = client.search_model_versions(f"name='{model_name}'")
+    if not versions: return None, None
+    latest = sorted(versions, key=lambda x: int(x.version))[-1]
+    return latest, latest.run_id
