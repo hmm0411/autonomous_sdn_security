@@ -1,0 +1,399 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sdn-security
+---
+# 1. TÀI KHOẢN K8S CHO AUTO-TRIGGER (Để có quyền Retrain/Rollback)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: auto-trigger-sa
+  namespace: sdn-security
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: job-creator-role
+  namespace: sdn-security
+rules:
+  - apiGroups: ["batch", "apps"]
+    resources: ["jobs", "deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: job-creator-binding
+  namespace: sdn-security
+subjects:
+  - kind: ServiceAccount
+    name: auto-trigger-sa
+roleRef:
+  kind: Role
+  name: job-creator-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# 2. BẢO MẬT (SECRETS)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: sdn-security
+type: Opaque
+stringData:
+  ACCESS_KEY: "minioadmin"
+  SECRET_KEY: "minioadmin"
+---
+# 3. CẤU HÌNH ALERTMANAGER (Gọi Auto-Trigger khi có lỗi)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: sdn-security
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: [ "alertname", "cluster", "service" ]
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      receiver: "default"
+      routes:
+        - match: { severity: critical }
+          receiver: "critical"
+        - match: { severity: warning }
+          receiver: "warning"
+    receivers:
+      - name: "default"
+        webhook_configs:
+          - url: "http://auto-trigger:5001/alert-webhook"
+            send_resolved: true
+      - name: "critical"
+        webhook_configs:
+          - url: "http://auto-trigger:5001/alert-webhook"
+            send_resolved: true
+      - name: "warning"
+        webhook_configs:
+          - url: "http://auto-trigger:5001/alert-webhook"
+            send_resolved: true
+---
+# 4. CẤU HÌNH PROMETHEUS VÀ LUẬT CẢNH BÁO
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: sdn-security
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels: { monitor: "sdn-rl-monitor" }
+    rule_files:
+      - "alert.rules.yml"
+    alerting:
+      alertmanagers:
+        - static_configs: [{ targets: ["alertmanager:9093"] }]
+    scrape_configs:
+      - job_name: "prometheus"
+        static_configs: [{ targets: ["localhost:9090"] }]
+      - job_name: "onos"
+        static_configs: [{ targets: ["controller:8181"] }]
+        metrics_path: "/onos/v1/metrics"
+        basic_auth: { username: "onos", password: "rocks" }
+      - job_name: "rl-serving-dqn"
+        static_configs: [{ targets: ["rl-serving-dqn:9002"] }]
+      - job_name: "rl-serving-ppo"
+        static_configs: [{ targets: ["rl-serving-ppo:9003"] }]
+      - job_name: "control_loop"
+        static_configs: [{ targets: ["control-loop:9100"] }]
+        scrape_interval: 10s
+      - job_name: "sdn-defense-agent"
+        static_configs: [{ targets: ["sdn-defense-agent:8000"] }]
+        scrape_interval: 2s
+      - job_name: "minio_storage"
+        metrics_path: /minio/v2/metrics/cluster
+        static_configs: [{ targets: ["s3:9005"] }]
+  alert.rules.yml: |
+    groups:
+      - name: sdn_rl_alerts
+        rules:
+          - alert: Low_Reward_Detected
+            expr: episode_reward_mean{agent="dqn"} < -600
+            for: 5m
+            labels: { severity: critical }
+            annotations:
+              summary: "DQN Reward đang quá thấp!"
+              description: "Reward trung bình của DQN rớt thấp. Cần Rollback hoặc Retrain."
+          - alert: PPO_Reward_Drop
+            expr: episode_reward_mean{agent="ppo"} < -500
+            for: 5m
+            labels: { severity: critical }
+            annotations:
+              summary: "PPO Reward đang quá thấp!"
+          - alert: Control_Loop_Anomaly
+            expr: control_loop_latency_seconds > 0.1
+            for: 1m
+            labels: { severity: warning }
+            annotations:
+              summary: "Độ trễ của Control Loop đang cao!"
+          - alert: SDN_Defense_Anomaly
+            expr: attack_indicator == 1
+            for: 1m
+            labels: { severity: critical }
+            annotations:
+              summary: "SDN Defense Agent phát hiện tấn công!"
+          - alert: Staging_Outperforms_Production
+            expr: avg_over_time(rl_reward{stage="staging"}[3m]) > (avg_over_time(rl_reward{stage="production"}[3m]) + 0.5)
+            for: 2m
+            labels: { severity: critical, action: promote_model }
+            annotations:
+              summary: "Model Staging đang hoạt động tốt hơn Production!"
+---
+# 5. CẤU HÌNH GRAFANA (Nguồn dữ liệu & Dashboard)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: sdn-security
+data:
+  datasource.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: true
+      - name: Alertmanager
+        type: alertmanager
+        access: proxy
+        url: http://alertmanager:9093
+        isDefault: false
+        editable: true
+  dashboard.yml: |
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: 'SDN'
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: sdn-security
+data:
+  sdn_rl_dashboard.json: |
+    {
+      "title": "SDN RL Observability Dashboard (Full)",
+      "refresh": "5s",
+      "panels": [
+        {
+          "type": "timeseries", "title": "Reward Performance",
+          "targets": [
+            { "expr": "episode_reward{agent='dqn'}", "legendFormat": "DQN Reward" },
+            { "expr": "episode_reward{agent='ppo'}", "legendFormat": "PPO Reward" }
+          ],
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 }
+        },
+        {
+          "type": "timeseries", "title": "Network Throughput (Packet Rate)",
+          "targets": [{ "expr": "sdn_packet_rate", "legendFormat": "Packet Rate (pps)" }],
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 }
+        },
+        {
+          "type": "timeseries", "title": "System Latency & Flow Count",
+          "targets": [
+            { "expr": "sdn_latency_ms", "legendFormat": "Latency (ms)" },
+            { "expr": "sdn_flow_count", "legendFormat": "Active Flows" }
+          ],
+          "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 }
+        },
+        {
+          "type": "timeseries", "title": "Training Loss History",
+          "targets": [
+            { "expr": "training_loss{agent='dqn'}", "legendFormat": "DQN Loss" },
+            { "expr": "training_loss{agent='ppo'}", "legendFormat": "PPO Loss" }
+          ],
+          "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 }
+        },
+        {
+          "type": "gauge", "title": "Controller CPU Load",
+          "targets": [{ "expr": "sdn_controller_cpu", "legendFormat": "CPU %" }],
+          "gridPos": { "x": 0, "y": 16, "w": 8, "h": 6 }
+        },
+        {
+          "type": "stat", "title": "Model Status",
+          "targets": [
+            { "expr": "up{job='rl-agent-dqn'} == 1", "legendFormat": "DQN Agent Ready" },
+            { "expr": "up{job='rl-agent-ppo'} == 1", "legendFormat": "PPO Agent Ready" }
+          ],
+          "gridPos": { "x": 8, "y": 16, "w": 8, "h": 6 }
+        },
+        {
+          "type": "timeseries", "title": "DQN Epsilon Decay",
+          "targets": [{ "expr": "dqn_epsilon", "legendFormat": "Epsilon" }],
+          "gridPos": { "x": 16, "y": 16, "w": 8, "h": 6 },
+          "fieldConfig": { "defaults": { "min": 0, "max": 1 } }
+        },
+        {
+          "type": "timeseries", "title": "RL Action History (Real-time)",
+          "targets": [{ "expr": "sdn_rl_action", "legendFormat": "Action Taken" }],
+          "gridPos": { "x": 0, "y": 22, "w": 16, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "points", "pointSize": 6 },
+              "min": -0.5, "max": 4.5,
+              "mappings": [
+                { "type": "value", "options": {
+                    "0": { "text": "0: Normal", "color": "green" },
+                    "1": { "text": "1: Block", "color": "red" },
+                    "2": { "text": "2: Limit BW", "color": "orange" },
+                    "3": { "text": "3: Redirect", "color": "yellow" },
+                    "4": { "text": "4: Isolate", "color": "purple" }
+                }}
+              ]
+            }
+          }
+        },
+        {
+          "type": "gauge", "title": "Current Threat Level",
+          "targets": [{ "expr": "sdn_threat_level", "legendFormat": "Threat Status" }],
+          "gridPos": { "x": 16, "y": 22, "w": 8, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "min": 0, "max": 2,
+              "mappings": [
+                { "type": "value", "options": { "0": { "text": "SAFE", "color": "green" }, "1": { "text": "WARN", "color": "orange" }, "2": { "text": "CRIT", "color": "red" } } }
+              ],
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 2 } ] }
+            }
+          }
+        }
+      ]
+    }
+---
+# 6. TẤT CẢ CÁC SERVICES
+apiVersion: v1
+kind: Service
+metadata: { name: s3, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: s3 }
+  ports:
+    - name: api
+      port: 9005
+      targetPort: 9005
+      nodePort: 30005
+    - name: console
+      port: 9001
+      targetPort: 9001
+      nodePort: 30001
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mlflow, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: mlflow }
+  ports: [{ port: 5000, targetPort: 5000, nodePort: 30007 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: controller, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: controller }
+  ports: [{ port: 8181, targetPort: 8181, nodePort: 30081 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: rl-serving-dqn, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: rl-serving-dqn }
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+    - name: metrics
+      port: 9002
+      targetPort: 9002
+      nodePort: 30002
+---
+apiVersion: v1
+kind: Service
+metadata: { name: rl-serving-ppo, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: rl-serving-ppo }
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+    - name: metrics
+      port: 9003
+      targetPort: 9003
+      nodePort: 30003
+---
+apiVersion: v1
+kind: Service
+metadata: { name: prometheus, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: prometheus }
+  ports: [{ port: 9090, targetPort: 9090, nodePort: 30090 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: grafana, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: grafana }
+  ports: [{ port: 3000, targetPort: 3000, nodePort: 30000 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: alertmanager, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: alertmanager }
+  ports: [{ port: 9093, targetPort: 9093, nodePort: 30093 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: control-loop, namespace: sdn-security }
+spec:
+  selector: { app: control-loop }
+  ports: [{ port: 9100, targetPort: 9100 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: sdn-defense-agent, namespace: sdn-security }
+spec:
+  selector: { app: sdn-defense-agent }
+  ports: [{ port: 8000, targetPort: 8000 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: sdn-dashboard, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: sdn-dashboard }
+  ports: [{ port: 8501, targetPort: 8501, nodePort: 30501 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: auto-trigger, namespace: sdn-security }
+spec:
+  selector: { app: auto-trigger }
+  ports: [{ port: 5001, targetPort: 5001 }]

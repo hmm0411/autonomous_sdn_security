@@ -2,6 +2,7 @@ import os
 import random
 import logging
 import collections
+import shutil
 import traceback
 import numpy as np
 import pandas as pd
@@ -50,7 +51,8 @@ if not IS_CI:
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
     os.environ["MLFLOW_S3_IGNORE_TLS"] = "true"
     
-    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow.sdn-security.svc.cluster.local:5000")
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("SDN_Autonomous_Security")
 
@@ -317,6 +319,12 @@ def train_multi_seeds_dqn():
             mlflow.log_metric("final_mean_reward", float(mean_rewards[-1]))
             mlflow.log_metric("best_mean_reward", float(np.max(mean_rewards)))
 
+            print("[*] Đang vẽ biểu đồ trung bình lên MLflow Parent Run...")
+            for ep in range(len(mean_rewards)):
+                mlflow.log_metric("avg_reward_all_seeds", float(mean_rewards[ep]), step=ep)
+                mlflow.log_metric("avg_loss_all_seeds", float(mean_losses[ep]), step=ep)
+                mlflow.log_metric("avg_epsilon_all_seeds", float(mean_epsilons[ep]), step=ep)
+
             # 3. LƯU SCALER.PKL LÀM PREPROCESSOR ARTIFACT
             scaler_path = os.path.join(MODELS_DIR, "scaler.pkl")
             if os.path.exists(scaler_path): 
@@ -334,9 +342,17 @@ def train_multi_seeds_dqn():
     if not IS_CI:
         mlflow.end_run()
 
+def cleanup_local_runs():
+    """Xóa file log rác sau khi đã đẩy lên MLflow"""
+    if os.path.exists(RUNS_DIR):
+        shutil.rmtree(RUNS_DIR)
+        os.makedirs(RUNS_DIR)
+        logging.info("[!] Đã dọn dẹp runs/ để giải phóng disk.")
+
 if __name__ == "__main__":
     PORT = 9002
     start_http_server(PORT)
     logging.getLogger().setLevel(logging.INFO)
     logging.info(f"[DQN] Prometheus metrics server started on port {PORT}")
     train_multi_seeds_dqn()
+    cleanup_local_runs()

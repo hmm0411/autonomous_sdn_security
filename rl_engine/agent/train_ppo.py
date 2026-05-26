@@ -1,6 +1,7 @@
 import os
 import logging
 import collections
+import shutil
 import numpy as np
 import pandas as pd
 import torch
@@ -51,7 +52,8 @@ if not IS_CI:
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
     os.environ["MLFLOW_S3_IGNORE_TLS"] = "true"
     
-    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow.sdn-security.svc.cluster.local:5000")
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("SDN_Autonomous_Security")
 
@@ -379,9 +381,17 @@ def rollback_model(model_name):
     )
     print(f"Rollback → {model_name} v{previous.version}")  
 
+def cleanup_local_runs():
+    """Xóa file log rác sau khi đã đẩy lên MLflow"""
+    if os.path.exists(RUNS_DIR):
+        shutil.rmtree(RUNS_DIR)
+        os.makedirs(RUNS_DIR)
+        logging.info("[!] Đã dọn dẹp runs/ để giải phóng disk.")
+        
 if __name__ == "__main__":
     PORT = 9003
     start_http_server(PORT)
     logging.getLogger().setLevel(logging.INFO)
     logging.info(f"[PPO] Prometheus metrics server started on port {PORT}")
     train_multi_seeds_ppo()
+    cleanup_local_runs()
