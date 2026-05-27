@@ -3,7 +3,7 @@
     "uid": "sdn-rl-observability",
     "timezone": "browser",
     "schemaVersion": 39,
-    "version": 1,
+    "version": 2,
     "refresh": "5s",
     "tags": [
         "SDN",
@@ -182,7 +182,7 @@
             }
         },
         {
-            "id": 6,
+            "id": 5,
             "type": "timeseries",
             "title": "Packet Loss",
             "datasource": "Prometheus",
@@ -194,7 +194,7 @@
                 }
             ],
             "gridPos": {
-                "x": 12,
+                "x": 0,
                 "y": 16,
                 "w": 12,
                 "h": 8
@@ -218,7 +218,7 @@
             }
         },
         {
-            "id": 7,
+            "id": 6,
             "type": "timeseries",
             "title": "Controller CPU",
             "datasource": "Prometheus",
@@ -230,8 +230,8 @@
                 }
             ],
             "gridPos": {
-                "x": 0,
-                "y": 24,
+                "x": 12,
+                "y": 16,
                 "w": 12,
                 "h": 8
             },
@@ -255,7 +255,7 @@
             }
         },
         {
-            "id": 8,
+            "id": 7,
             "type": "timeseries",
             "title": "Serving Requests",
             "datasource": "Prometheus",
@@ -267,7 +267,7 @@
                 }
             ],
             "gridPos": {
-                "x": 12,
+                "x": 0,
                 "y": 24,
                 "w": 12,
                 "h": 8
@@ -290,7 +290,7 @@
             }
         },
         {
-            "id": 9,
+            "id": 8,
             "type": "timeseries",
             "title": "Serving Latency",
             "datasource": "Prometheus",
@@ -302,8 +302,8 @@
                 }
             ],
             "gridPos": {
-                "x": 0,
-                "y": 32,
+                "x": 12,
+                "y": 24,
                 "w": 12,
                 "h": 8
             },
@@ -325,7 +325,7 @@
             }
         },
         {
-            "id": 10,
+            "id": 9,
             "type": "stat",
             "title": "Service Status",
             "datasource": "Prometheus",
@@ -344,13 +344,23 @@
                     "expr": "up{job=\"control_loop\"}",
                     "legendFormat": "Control Loop",
                     "refId": "C"
+                },
+                {
+                    "expr": "up{job=\"sdn-defense-agent\"}",
+                    "legendFormat": "Defense Agent",
+                    "refId": "D"
+                },
+                {
+                    "expr": "up{job=\"auto-trigger\"}",
+                    "legendFormat": "Auto Trigger",
+                    "refId": "E"
                 }
             ],
             "gridPos": {
-                "x": 12,
+                "x": 0,
                 "y": 32,
-                "w": 12,
-                "h": 8
+                "w": 24,
+                "h": 6
             },
             "fieldConfig": {
                 "defaults": {
@@ -395,14 +405,107 @@
                 "orientation": "auto",
                 "textMode": "auto",
                 "colorMode": "value",
-                "graphMode": "area",
+                "graphMode": "none",
                 "justifyMode": "auto"
             }
         },
         {
-            "id": 13,
+            "id": 10,
+            "type": "stat",
+            "title": "System Security Status",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "threat_level",
+                    "legendFormat": "Security Status",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 0,
+                "y": 40,
+                "w": 8,
+                "h": 7
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "none",
+                    "min": 0,
+                    "max": 100,
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "orange",
+                                "value": 31
+                            },
+                            {
+                                "color": "red",
+                                "value": 71
+                            }
+                        ]
+                    },
+                    "mappings": [
+                        {
+                            "type": "range",
+                            "options": {
+                                "from": 0,
+                                "to": 30,
+                                "result": {
+                                    "text": "SAFE",
+                                    "color": "green"
+                                }
+                            }
+                        },
+                        {
+                            "type": "range",
+                            "options": {
+                                "from": 31,
+                                "to": 70,
+                                "result": {
+                                    "text": "WARNING",
+                                    "color": "orange"
+                                }
+                            }
+                        },
+                        {
+                            "type": "range",
+                            "options": {
+                                "from": 71,
+                                "to": 100,
+                                "result": {
+                                    "text": "CRITICAL",
+                                    "color": "red"
+                                }
+                            }
+                        }
+                    ]
+                },
+                "overrides": []
+            },
+            "options": {
+                "reduceOptions": {
+                    "values": false,
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": ""
+                },
+                "orientation": "auto",
+                "textMode": "value_and_name",
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center"
+            }
+        },
+        {
+            "id": 11,
             "type": "gauge",
-            "title": "Current Threat Level",
+            "title": "Threat Level",
             "datasource": "Prometheus",
             "targets": [
                 {
@@ -412,10 +515,10 @@
                 }
             ],
             "gridPos": {
-                "x": 0,
-                "y": 48,
+                "x": 8,
+                "y": 40,
                 "w": 8,
-                "h": 8
+                "h": 7
             },
             "fieldConfig": {
                 "defaults": {
@@ -431,11 +534,11 @@
                             },
                             {
                                 "color": "orange",
-                                "value": 50
+                                "value": 31
                             },
                             {
                                 "color": "red",
-                                "value": 80
+                                "value": 71
                             }
                         ]
                     }
@@ -451,36 +554,154 @@
                     "fields": ""
                 },
                 "orientation": "auto",
-                "showThresholdLabels": false,
+                "showThresholdLabels": true,
                 "showThresholdMarkers": true
+            }
+        },
+        {
+            "id": 12,
+            "type": "stat",
+            "title": "Defense Action Status",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "defense_rl_action",
+                    "legendFormat": "Defense Action",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 16,
+                "y": 40,
+                "w": 8,
+                "h": 7
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "none",
+                    "min": 0,
+                    "max": 4,
+                    "mappings": [
+                        {
+                            "type": "value",
+                            "options": {
+                                "0": {
+                                    "text": "NO ACTION",
+                                    "color": "green"
+                                },
+                                "1": {
+                                    "text": "BLOCK",
+                                    "color": "red"
+                                },
+                                "2": {
+                                    "text": "RATE LIMIT",
+                                    "color": "orange"
+                                },
+                                "3": {
+                                    "text": "REDIRECT",
+                                    "color": "blue"
+                                },
+                                "4": {
+                                    "text": "ISOLATE",
+                                    "color": "purple"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "orange",
+                                "value": 1
+                            },
+                            {
+                                "color": "red",
+                                "value": 4
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "reduceOptions": {
+                    "values": false,
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": ""
+                },
+                "orientation": "auto",
+                "textMode": "value_and_name",
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center"
+            }
+        },
+        {
+            "id": 13,
+            "type": "timeseries",
+            "title": "Defense Confidence",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "defense_confidence",
+                    "legendFormat": "Confidence",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 0,
+                "y": 47,
+                "w": 12,
+                "h": 8
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percent",
+                    "min": 0,
+                    "max": 100
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi",
+                    "sort": "none"
+                }
             }
         },
         {
             "id": 14,
             "type": "timeseries",
-            "title": "Training Reward Mean",
+            "title": "Defense Flow Count",
             "datasource": "Prometheus",
             "targets": [
                 {
-                    "expr": "episode_reward_mean{agent=\"dqn\"}",
-                    "legendFormat": "DQN Mean Reward",
+                    "expr": "defense_flow_count",
+                    "legendFormat": "Flow Count",
                     "refId": "A"
-                },
-                {
-                    "expr": "episode_reward_mean{agent=\"ppo\"}",
-                    "legendFormat": "PPO Mean Reward",
-                    "refId": "B"
                 }
             ],
             "gridPos": {
-                "x": 8,
-                "y": 48,
-                "w": 16,
+                "x": 12,
+                "y": 47,
+                "w": 12,
                 "h": 8
             },
             "fieldConfig": {
                 "defaults": {
-                    "unit": "short"
+                    "unit": "short",
+                    "min": 0
                 },
                 "overrides": []
             },
@@ -516,149 +737,7 @@
                 "iconColor": "rgba(0, 211, 255, 1)",
                 "name": "Annotations & Alerts",
                 "type": "dashboard"
-            },
-            {
-                "type": "stat",
-                "title": "System Security Status",
-                "targets": [
-                    {
-                        "expr": "threat_level",
-                        "legendFormat": "Security Status"
-                    }
-                ],
-                "gridPos": {
-                    "x": 0,
-                    "y": 48,
-                    "w": 8,
-                    "h": 6
-                },
-                "fieldConfig": {
-                    "defaults": {
-                        "unit": "none",
-                        "min": 0,
-                        "max": 100,
-                        "thresholds": {
-                            "mode": "absolute",
-                            "steps": [
-                                {
-                                    "color": "green",
-                                    "value": null
-                                },
-                                {
-                                    "color": "orange",
-                                    "value": 31
-                                },
-                                {
-                                    "color": "red",
-                                    "value": 71
-                                }
-                            ]
-                        },
-                        "mappings": [
-                            {
-                                "type": "range",
-                                "options": {
-                                    "from": 0,
-                                    "to": 30,
-                                    "result": {
-                                        "text": "SAFE",
-                                        "color": "green"
-                                    }
-                                }
-                            },
-                            {
-                                "type": "range",
-                                "options": {
-                                    "from": 31,
-                                    "to": 70,
-                                    "result": {
-                                        "text": "WARNING",
-                                        "color": "orange"
-                                    }
-                                }
-                            },
-                            {
-                                "type": "range",
-                                "options": {
-                                    "from": 71,
-                                    "to": 100,
-                                    "result": {
-                                        "text": "CRITICAL",
-                                        "color": "red"
-                                    }
-                                }
-                            }
-                        ]
-                    },
-                    "overrides": []
-                },
-                "options": {
-                    "reduceOptions": {
-                        "values": false,
-                        "calcs": [
-                            "lastNotNull"
-                        ],
-                        "fields": ""
-                    },
-                    "orientation": "auto",
-                    "textMode": "value_and_name",
-                    "colorMode": "background",
-                    "graphMode": "none",
-                    "justifyMode": "center"
-                },
-                {
-                    "type": "gauge",
-                    "title": "Threat Level",
-                    "targets": [
-                        {
-                            "expr": "threat_level",
-                            "legendFormat": "Threat Level"
-                        }
-                    ],
-                    "gridPos": {
-                        "x": 8,
-                        "y": 48,
-                        "w": 8,
-                        "h": 6
-                    },
-                    "fieldConfig": {
-                        "defaults": {
-                            "unit": "percent",
-                            "min": 0,
-                            "max": 100,
-                            "thresholds": {
-                                "mode": "absolute",
-                                "steps": [
-                                    {
-                                        "color": "green",
-                                        "value": null
-                                    },
-                                    {
-                                        "color": "orange",
-                                        "value": 31
-                                    },
-                                    {
-                                        "color": "red",
-                                        "value": 71
-                                    }
-                                ]
-                            }
-                        },
-                        "overrides": []
-                    },
-                    "options": {
-                        "reduceOptions": {
-                            "values": false,
-                            "calcs": [
-                                "lastNotNull"
-                            ],
-                            "fields": ""
-                        },
-                        "orientation": "auto",
-                        "showThresholdLabels": true,
-                        "showThresholdMarkers": true
-                    }
-                }
-            ]
-        }
+            }
+        ]
     }
+}
