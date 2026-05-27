@@ -1,26 +1,19 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-# Core
 torch
 numpy
 pandas
 scikit-learn
-flask
-gunicorn
-python-dotenv
-requests
-joblib
-
-# MLOps & Monitoring & S3
-mlflow
-boto3
-s3fs
-prometheus-client
-kubernetes
-
-# RL & Visualization
 gymnasium
 tensorboard
 matplotlib
 seaborn
-streamlit
+requests
+mlflow
+prometheus-client
+boto3
+flask
+python-dotenv
+joblib
+gunicorn
+kubernetes
