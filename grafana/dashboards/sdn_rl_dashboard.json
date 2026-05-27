@@ -516,7 +516,149 @@
                 "iconColor": "rgba(0, 211, 255, 1)",
                 "name": "Annotations & Alerts",
                 "type": "dashboard"
-            }
-        ]
+            },
+            {
+                "type": "stat",
+                "title": "System Security Status",
+                "targets": [
+                    {
+                        "expr": "threat_level",
+                        "legendFormat": "Security Status"
+                    }
+                ],
+                "gridPos": {
+                    "x": 0,
+                    "y": 48,
+                    "w": 8,
+                    "h": 6
+                },
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "none",
+                        "min": 0,
+                        "max": 100,
+                        "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                                {
+                                    "color": "green",
+                                    "value": null
+                                },
+                                {
+                                    "color": "orange",
+                                    "value": 31
+                                },
+                                {
+                                    "color": "red",
+                                    "value": 71
+                                }
+                            ]
+                        },
+                        "mappings": [
+                            {
+                                "type": "range",
+                                "options": {
+                                    "from": 0,
+                                    "to": 30,
+                                    "result": {
+                                        "text": "SAFE",
+                                        "color": "green"
+                                    }
+                                }
+                            },
+                            {
+                                "type": "range",
+                                "options": {
+                                    "from": 31,
+                                    "to": 70,
+                                    "result": {
+                                        "text": "WARNING",
+                                        "color": "orange"
+                                    }
+                                }
+                            },
+                            {
+                                "type": "range",
+                                "options": {
+                                    "from": 71,
+                                    "to": 100,
+                                    "result": {
+                                        "text": "CRITICAL",
+                                        "color": "red"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    "overrides": []
+                },
+                "options": {
+                    "reduceOptions": {
+                        "values": false,
+                        "calcs": [
+                            "lastNotNull"
+                        ],
+                        "fields": ""
+                    },
+                    "orientation": "auto",
+                    "textMode": "value_and_name",
+                    "colorMode": "background",
+                    "graphMode": "none",
+                    "justifyMode": "center"
+                },
+                {
+                    "type": "gauge",
+                    "title": "Threat Level",
+                    "targets": [
+                        {
+                            "expr": "threat_level",
+                            "legendFormat": "Threat Level"
+                        }
+                    ],
+                    "gridPos": {
+                        "x": 8,
+                        "y": 48,
+                        "w": 8,
+                        "h": 6
+                    },
+                    "fieldConfig": {
+                        "defaults": {
+                            "unit": "percent",
+                            "min": 0,
+                            "max": 100,
+                            "thresholds": {
+                                "mode": "absolute",
+                                "steps": [
+                                    {
+                                        "color": "green",
+                                        "value": null
+                                    },
+                                    {
+                                        "color": "orange",
+                                        "value": 31
+                                    },
+                                    {
+                                        "color": "red",
+                                        "value": 71
+                                    }
+                                ]
+                            }
+                        },
+                        "overrides": []
+                    },
+                    "options": {
+                        "reduceOptions": {
+                            "values": false,
+                            "calcs": [
+                                "lastNotNull"
+                            ],
+                            "fields": ""
+                        },
+                        "orientation": "auto",
+                        "showThresholdLabels": true,
+                        "showThresholdMarkers": true
+                    }
+                }
+            ]
+        }
     }
-}
