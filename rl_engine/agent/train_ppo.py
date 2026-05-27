@@ -387,11 +387,14 @@ def rollback_model(model_name):
     print(f"Rollback → {model_name} v{previous.version}")  
 
 def cleanup_local_runs():
-    """Xóa file log rác sau khi đã đẩy lên MLflow"""
-    if os.path.exists(RUNS_DIR):
-        shutil.rmtree(RUNS_DIR)
-        os.makedirs(RUNS_DIR)
-        logging.info("[!] Đã dọn dẹp runs/ để giải phóng disk.")
+    """Dọn dẹp runs/ sau khi log MLflow. Nếu thiếu quyền thì bỏ qua để Job không bị fail."""
+    try:
+        if os.path.exists(RUNS_DIR):
+            shutil.rmtree(RUNS_DIR, ignore_errors=True)
+            os.makedirs(RUNS_DIR, exist_ok=True)
+            logging.info("[!] Đã dọn dẹp runs/ để giải phóng disk.")
+    except Exception as e:
+        logging.warning(f"[!] Không thể dọn runs/, bỏ qua để không làm fail Job: {e}")
 
 def background_simulation():
     while True:
