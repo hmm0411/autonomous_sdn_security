@@ -22,13 +22,13 @@ scrape_configs:
       - targets: ["localhost:9090"]
 
   # ONOS Controller
-  - job_name: "onos"
-    static_configs:
-      - targets: ["controller:8181"]
-    metrics_path: "/onos/v1/network/configuration"
-    basic_auth:
-      username: "onos"
-      password: "rocks"
+  # - job_name: "onos"
+  #   static_configs:
+  #     - targets: ["controller:8181"]
+  #   metrics_path: "/onos/v1/network/configuration"
+  #   basic_auth:
+  #     username: "onos"
+  #     password: "rocks"
 
   # Cấu hình "cào" dữ liệu từ quá trình huấn luyện DQN (Container rl-agent-dqn)
   - job_name: "rl-agent-dqn"
@@ -64,9 +64,9 @@ scrape_configs:
     static_configs:
       - targets: ["sdn-defense-agent:8000"]
 
-  - job_name: "minio_storage"
-    metrics_path: /minio/v2/metrics/cluster
-    static_configs:
-      - targets: ["s3:9005"]
-    params:
-      auth: ["public"]
+  # - job_name: "minio_storage"
+  #   metrics_path: /minio/v2/metrics/cluster
+  #   static_configs:
+  #     - targets: ["s3:9005"]
+  #   params:
+  #     auth: ["public"]
