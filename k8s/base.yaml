@@ -99,10 +99,10 @@ data:
     scrape_configs:
       - job_name: "prometheus"
         static_configs: [{ targets: ["localhost:9090"] }]
-      - job_name: "onos"
-        static_configs: [{ targets: ["controller:8181"] }]
-        metrics_path: "/onos/v1/network/configuration"
-        basic_auth: { username: "onos", password: "rocks" }
+      # - job_name: "onos"
+      #   static_configs: [{ targets: ["controller:8181"] }]
+      #   metrics_path: "/onos/v1/network/configuration"
+      #   basic_auth: { username: "onos", password: "rocks" }
       - job_name: "rl-serving-dqn"
         static_configs: [{ targets: ["rl-serving-dqn:9002"] }]
       - job_name: "rl-serving-ppo"
@@ -113,9 +113,9 @@ data:
       - job_name: "sdn-defense-agent"
         static_configs: [{ targets: ["sdn-defense-agent:8000"] }]
         scrape_interval: 2s
-      - job_name: "minio_storage"
-        metrics_path: /minio/v2/metrics/cluster
-        static_configs: [{ targets: ["s3:9005"] }]
+      # - job_name: "minio_storage"
+      #   metrics_path: /minio/v2/metrics/cluster
+      #   static_configs: [{ targets: ["s3:9005"] }]
   alert.rules.yml: |
     groups:
       - name: sdn_rl_alerts

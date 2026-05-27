@@ -12,10 +12,11 @@ PROM_PACKET_RATE = Gauge('sdn_packet_rate', 'Real-time Packet Rate')
 PROM_FLOW_COUNT = Gauge('sdn_flow_count', 'Real-time Flow Count')
 PROM_THREAT_LEVEL = Gauge('sdn_threat_level', 'Threat Level (0=Normal, 1=Medium, 2=High)')
 PROM_ACTION = Gauge('sdn_rl_action', 'Action taken by RL Agent')
-
+PROM_CURRENT_SCORE = Gauge('sdn_current_score', 'Dynamic Threat Score')
 # Đảm bảo thư mục tồn tại
 os.makedirs("logs", exist_ok=True)
 
+current_score = 0.0
 
 # ---------------------------------------------------------
 # 1. FIX LỖI: RESET TRẠNG THÁI NGAY KHI KHỞI ĐỘNG
@@ -40,6 +41,16 @@ def get_current_attack_state():
             pass
     return "Normal Traffic"
 
+def get_dynamic_score(target_score):
+    global current_score
+    # Mỗi lần chạy (ví dụ 1s/lần), score chỉ nhích 5-10% tới mục tiêu
+    step = 5.0 
+    if current_score < target_score:
+        current_score = min(current_score + step, target_score)
+    elif current_score > target_score:
+        current_score = max(current_score - step, target_score)
+    return current_score
+
 def main():
     print("[*] Starting Smooth Demo Agent...")
     
@@ -54,38 +65,48 @@ def main():
             # ---------------------------------------------------------
             # 2. XÁC ĐỊNH MỤC TIÊU VÀ HÀNH ĐỘNG THEO TỪNG LOẠI TẤN CÔNG
             # ---------------------------------------------------------
-            threat_num = 0
+            
+            is_attack = current_attack != "Normal Traffic"
+            target = 99.0 if is_attack else 0.0
+            display_score = get_dynamic_score(target)
             if current_attack == "Normal Traffic":
+                threat_num = 0
                 level, action_id, action_name = "NORMAL", 0, "No Action"
                 target_pr = random.randint(10, 40)
                 target_fc = random.randint(40, 80)
                 
             elif current_attack == "DDoS Flood":
+                threat_num = 2
                 level, action_id, action_name = "HIGH_ATTACK (DDoS Flood)", 1, "Block (Drop Suspicious Flow)"
                 target_pr = random.randint(4000, 5500)
                 target_fc = random.randint(30, 50)
                 
             elif current_attack == "Flow Table Overflow":
+                threat_num = 2
                 level, action_id, action_name = "HIGH_ATTACK (Flow Table Overflow)", 2, "Rate Limit Bandwidth"
                 target_pr = random.randint(2000, 2800)
                 target_fc = random.randint(120, 160)
                 
             elif current_attack == "Packet-In Flood":
+                threat_num = 1
                 level, action_id, action_name = "MEDIUM_ATTACK (Packet-In Flood)", 1, "Block (Drop Suspicious Flow)"
                 target_pr = random.randint(150, 300)
                 target_fc = random.randint(80, 110)
                 
             elif current_attack == "IP Spoofing":
+                threat_num = 2
                 level, action_id, action_name = "HIGH_ATTACK (IP Spoofing)", 1, "Block (Drop Suspicious Flow)"
                 target_pr = random.randint(1800, 2500)
                 target_fc = random.randint(40, 60)
                 
             elif current_attack == "Port Scanning":
+                threat_num = 1
                 level, action_id, action_name = "HIGH_ATTACK (Port Scanning)", 3, "Redirect to Honeypot"
                 target_pr = random.randint(3500, 4500)
                 target_fc = random.randint(40, 60)
                 
             else: # Fallback an toàn
+                threat_num = 0  
                 level, action_id, action_name = "NORMAL", 0, "No Action"
                 target_pr = random.randint(10, 40)
                 target_fc = random.randint(40, 80)
@@ -102,7 +123,8 @@ def main():
             PROM_FLOW_COUNT.set(int(current_flow_count))
             PROM_THREAT_LEVEL.set(threat_num)
             PROM_ACTION.set(action_id)
-            
+            PROM_CURRENT_SCORE.set(display_score)
+
             # Ghi dữ liệu ra file CSV
             new_data = pd.DataFrame([{
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -113,9 +135,10 @@ def main():
                 "action_name": action_name
             }])
             
-            df = pd.read_csv(LOG_FILE)
-            df = pd.concat([df, new_data], ignore_index=True).tail(50)
-            df.to_csv(LOG_FILE, index=False)
+            # df = pd.read_csv(LOG_FILE)
+            # df = pd.concat([df, new_data], ignore_index=True).tail(50)
+            # df.to_csv(LOG_FILE, index=False)
+            new_data.to_csv(LOG_FILE, mode='a', header=not os.path.exists(LOG_FILE), index=False)
             
         except Exception as e:
             print(f"[!] Pipeline Error: {e}")

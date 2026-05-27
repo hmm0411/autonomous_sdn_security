@@ -2,6 +2,7 @@ import os
 import logging
 import collections
 import shutil
+import threading
 import numpy as np
 import pandas as pd
 import torch
@@ -126,6 +127,8 @@ def run_single_seed_ppo(seed_value, df_train, parent_run=False):
             EPISODE_REWARD_STD.labels(agent='ppo').set(std_reward)
             EPISODE_REWARD_BEST.labels(agent='ppo').set(float(best_reward_so_far))
             TRAINING_LOSS.labels(agent='ppo').set(float(total_loss))
+            is_training = 0.5
+            MODEL_STATUS.labels(stage='production', agent='ppo').set(1.0 if episode == total_episodes - 1 else 0)
 
             # MLflow Logging
             if not IS_CI and parent_run:
@@ -167,6 +170,8 @@ def run_single_seed_ppo(seed_value, df_train, parent_run=False):
     finally:
         if active_run:
             mlflow.end_run()
+
+        MODEL_STATUS.labels(stage='production', agent='ppo').set(1.0)  # Reset trạng thái model sau khi huấn luyện xong
             
     logger.close()
 
@@ -387,11 +392,17 @@ def cleanup_local_runs():
         shutil.rmtree(RUNS_DIR)
         os.makedirs(RUNS_DIR)
         logging.info("[!] Đã dọn dẹp runs/ để giải phóng disk.")
-        
+
+def background_simulation():
+    while True:
+        simulate_training_metrics_if_idle(agent_type="dqn")
+        time.sleep(2)
+
 if __name__ == "__main__":
     PORT = 9003
     start_http_server(PORT)
     logging.getLogger().setLevel(logging.INFO)
     logging.info(f"[PPO] Prometheus metrics server started on port {PORT}")
+    threading.Thread(target=background_simulation, daemon=True).start()
     train_multi_seeds_ppo()
     cleanup_local_runs()

@@ -3,11 +3,13 @@ import random
 import logging
 import collections
 import shutil
+from time import time
 import traceback
 import numpy as np
 import pandas as pd
 import torch
 import mlflow.pytorch
+import threading
 
 import mlflow
 from prometheus_client import start_http_server, Gauge
@@ -132,6 +134,8 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=False):
             EPISODE_REWARD_STD.labels(agent='dqn').set(std_reward)
             EPISODE_REWARD_BEST.labels(agent='dqn').set(float(best_reward_so_far))
             TRAINING_LOSS.labels(agent='dqn').set(avg_loss)
+            is_training = 0.5
+            MODEL_STATUS.labels(stage='production', agent='dqn').set(is_training)
             
             # MLflow Logging
             if not IS_CI and parent_run:
@@ -155,6 +159,7 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=False):
     finally:
         if active_run:
             mlflow.end_run()
+        MODEL_STATUS.labels(stage='production', agent='dqn').set(10.0)  # Reset trạng thái model sau khi huấn luyện xong
             
     agent.epsilon = epsilon
 
@@ -165,6 +170,7 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=False):
         "best_reward": best_reward_so_far,
         "final_epsilon": epsilon
     }, agent
+
 
 
 def train_multi_seeds_dqn():
@@ -349,10 +355,17 @@ def cleanup_local_runs():
         os.makedirs(RUNS_DIR)
         logging.info("[!] Đã dọn dẹp runs/ để giải phóng disk.")
 
+def background_simulation():
+    while True:
+        simulate_training_metrics_if_idle(agent_type="dqn")
+        time.sleep(2)
+
+
 if __name__ == "__main__":
     PORT = 9002
     start_http_server(PORT)
     logging.getLogger().setLevel(logging.INFO)
     logging.info(f"[DQN] Prometheus metrics server started on port {PORT}")
+    threading.Thread(target=background_simulation, daemon=True).start()
     train_multi_seeds_dqn()
     cleanup_local_runs()

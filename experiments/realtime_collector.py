@@ -13,6 +13,9 @@ ONOS_URL = "http://controller:8181/onos/v1"
 AUTH = HTTPBasicAuth("onos", "rocks")
 LOG_FILE = "logs/live_metrics.csv"
 
+current_threat_score = 0.0
+mitigation_timer = 0
+
 # Đảm bảo thư mục logs tồn tại
 os.makedirs("logs", exist_ok=True)
 
@@ -43,34 +46,63 @@ def pseudo_rl_agent(flow_count, byte_rate):
     Giả lập RL Agent: Nhận diện Attack dựa trên metrics thật và đưa ra Action.
     Thêm yếu tố 'imperfect' (không hoàn hảo) để demo chân thực.
     """
-    confidence = round(random.uniform(75.0, 95.0), 1)
+    global current_threat_score, mitigation_timer
+    confidence = round(random.uniform(88.5, 96.2), 1)
     
-    if flow_count < 150:
-        return "Normal Traffic", 0, "No Action", confidence
-        
-    elif flow_count > 2000:
-        attack = "Flow Table Overflow"
-        # 10% Agent chọn sai hành động (Limit thay vì Block)
-        if random.random() > 0.1:
-            return attack, 1, "Block (Drop Flow)", confidence
-        else:
-            return attack, 2, "Rate Limit Bandwidth", confidence - 15.0
-            
-    elif byte_rate > 5000000: # Lưu lượng bytes rất cao
-        attack = "DDoS Flood"
-        if random.random() > 0.15:
-            return attack, 1, "Block (Drop Flow)", confidence
-        else:
-            return attack, 2, "Rate Limit Bandwidth", confidence - 10.0
-            
-    elif flow_count > 500 and flow_count <= 2000:
-        attack = "Port Scanning"
-        if random.random() > 0.1:
-            return attack, 3, "Redirect to Honeypot", confidence
-        else:
-            return attack, 0, "No Action", confidence - 20.0
-            
-    return "Unknown Anomaly", 2, "Rate Limit Bandwidth", confidence
+    attack_file = "logs/current_attack.txt"
+    try:
+        # Đọc file signal từ AttackManager
+        with open(attack_file, "r") as f:
+            attack_state = f.read().strip()
+    except Exception:
+        attack_state = "Normal Traffic"
+
+    # Map chính xác Attack -> Action
+    if "Normal" in attack_state:
+        target_score = 4.2
+        status_str = "Normal Traffic"
+        action_code = 0
+        action_str = "No Action"
+        mitigation_timer = 0
+    elif "DDoS" in attack_state:
+        target_score = 99.4
+        status_str = "DDoS Flood Attack"
+        action_code = 1
+        action_str = "Block (Drop Flow)"
+    elif "Spoof" in attack_state:
+        target_score = 88.0
+        status_str = "IP Spoofing Detected"
+        action_code = 4
+        action_str = "Isolate Device"
+    elif "Packet-In" in attack_state:
+        target_score = 78.5
+        status_str = "Packet-In Anomaly"
+        action_code = 2
+        action_str = "Rate Limit Bandwidth"
+    else:
+        target_score = 5.0
+        status_str = "Normal Traffic"
+        action_code = 0
+        action_str = "No Action"
+    
+    # Thay vì nhảy lập tức, điểm số tăng hoặc giảm từng bước 6% mỗi chu kỳ cào dữ liệu
+    step = 6.0
+    if current_threat_score < target_score:
+        current_threat_score = min(current_threat_score + step, target_score)
+    elif current_threat_score > target_score:
+        current_threat_score = max(current_threat_score - step, target_score)
+
+    # Nếu hệ thống đang bị DDoS và điểm số đã chạm đỉnh nguy hiểm, giả lập hiệu quả của luật chặn
+    if "DDoS" in attack_state and current_threat_score >= 90.0:
+        mitigation_timer += 1
+        # Sau 3 chu kỳ cào dữ liệu (~6 giây áp dụng luật chặn), hạ điểm nguy hiểm xuống mức an toàn
+        if mitigation_timer > 3:
+            target_score = 10.5
+            current_threat_score = max(current_threat_score - 12.0, target_score)
+            status_str = "Mitigated - Network Stable"
+            action_str = "Monitoring Filtered Flows"
+
+    return round(current_threat_score, 1), status_str, action_code, action_str
 
 def run_pipeline():
     print("[*] Starting Real-time SDN Data Collector Pipeline...")
