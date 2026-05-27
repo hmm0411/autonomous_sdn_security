@@ -45,18 +45,15 @@ scrape_configs:
   # Cấu hình "cào" dữ liệu từ quá trình dự đoán (Inference) của DQN
   - job_name: "rl-serving-dqn"
     static_configs:
-      # Sửa tên host thành 'rl-serving-dqn' và cổng '9002'
       - targets: ["rl-serving-dqn:9002"]
 
-  # Cấu hình "cào" dữ liệu từ quá trình dự đoán (Inference) của PPO
   - job_name: "rl-serving-ppo"
     static_configs:
-      # Sửa tên host thành 'rl-serving-ppo' và cổng '9003'
       - targets: ["rl-serving-ppo:9003"]
-  # Control Loop (Runtime metrics)
+
   - job_name: "control_loop"
     static_configs:
-      - targets: ["control_loop:9100"]
+      - targets: ["control-loop:9100"]
     scrape_interval: 10s
 
   - job_name: "sdn-defense-agent"
@@ -64,9 +61,6 @@ scrape_configs:
     static_configs:
       - targets: ["sdn-defense-agent:8000"]
 
-  # - job_name: "minio_storage"
-  #   metrics_path: /minio/v2/metrics/cluster
-  #   static_configs:
-  #     - targets: ["s3:9005"]
-  #   params:
-  #     auth: ["public"]
+  - job_name: "auto-trigger"
+    static_configs:
+      - targets: ["auto-trigger:5001"]

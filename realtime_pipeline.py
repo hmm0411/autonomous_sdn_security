@@ -147,5 +147,5 @@ def main():
 
 if __name__ == "__main__":
     # Start the Prometheus HTTP server
-    start_http_server(8888)
+    start_http_server(8000)
     main()

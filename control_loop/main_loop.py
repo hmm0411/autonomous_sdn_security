@@ -20,32 +20,31 @@ print("AUTO MODEL CONTROL LOOP STARTED")
 def baseline_policy(state):
     return 0
 
-def validate_state(state):
-    return state is not None and len(state) == STATE_DIM
+def wait_http_service(name, url, auth=None):
+    print(f"Đang chờ {name} khởi động...")
+    while True:
+        try:
+            res = requests.get(url, auth=auth, timeout=2)
+            if res.status_code in [200, 401]:
+                print(f"{name} đã sẵn sàng!")
+                return
+        except Exception:
+            pass
 
-print("Đang chờ ONOS khởi động (khoảng 30 giây)...")
-while True:
-    try:
-        res = requests.get("http://controller:8181/onos/v1/flows", auth=("onos", "rocks"), timeout=2)
-        if res.status_code in [200, 401]:
-            print("ONOS đã sẵn sàng!")
-            break
-    except Exception:
-        print("ONOS chưa lên, đợi thêm 5 giây...")
+        print(f"{name} chưa sẵn sàng, đợi 5 giây...")
         time.sleep(5)
 
-# --- THÊM ĐOẠN NÀY ĐỂ ĐỢI API SERVING SẴN SÀNG ---
-print("Đang chờ RL API Serving (DQN) khởi động...")
-while True:
-    try:
-        # Gọi thử vào endpoint /health
-        res = requests.get("http://rl-serving-dqn:8000/health", timeout=2)
-        if res.status_code == 200:
-            print("RL API Serving (DQN) đã sẵn sàng!")
-            break
-    except Exception:
-        print("RL API chưa sẵn sàng, đợi 5 giây...")
-        time.sleep(5)
+
+wait_http_service(
+    "ONOS Controller",
+    "http://controller:8181/onos/v1/flows",
+    auth=("onos", "rocks")
+)
+
+wait_http_service(
+    "RL Serving DQN",
+    "http://rl-serving-dqn:8000/health"
+)
 # --------------------------------------------------
 
 while True:
@@ -54,10 +53,8 @@ while True:
 
     model_to_use = "dqn"
 
-    # Lấy action từ API
     action_prod, action_staging, model_name = get_action(state, model_type=model_to_use)
 
-    # Tính toán phần thưởng
     reward_prod = reward_calc.calculate(raw, action_prod)
     reward_staging = reward_calc.calculate(raw, action_staging)
 

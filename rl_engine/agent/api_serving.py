@@ -17,6 +17,35 @@ model_prod = None
 model_staging = None
 scaler = None
 
+def load_scaler():
+    local_paths = [
+        "/app/models/scaler.pkl",
+        "/app/models/scaler_dqn.pkl" if model_type == "dqn" else "/app/models/scaler_ppo.pkl",
+        "models/scaler.pkl",
+        "models/scaler_dqn.pkl" if model_type == "dqn" else "models/scaler_ppo.pkl",
+    ]
+
+    for path in local_paths:
+        if os.path.exists(path):
+            try:
+                print(f"[+] Load scaler local: {path}")
+                return joblib.load(path)
+            except Exception as e:
+                print(f"[-] Cannot load scaler {path}: {e}")
+
+    print("[!] Không tìm thấy scaler local. Dùng identity scaler.")
+    return None
+
+def choose_action(model, state_tensor):
+    out = model(state_tensor)
+
+    if isinstance(out, tuple):
+        logits_or_policy = out[0]
+    else:
+        logits_or_policy = out
+
+    return int(torch.argmax(logits_or_policy, dim=-1).item())
+
 # ==========================================
 # PROMETHEUS SERVING METRICS 
 # ==========================================
@@ -38,45 +67,38 @@ ACTION_CHOSEN = Counter(
 
 def load_models():
     global model_prod, model_staging, scaler
+
     registered_model_name = "SDN_DQN_Model" if model_type == "dqn" else "SDN_PPO_Model"
     model_uri = f"models:/{registered_model_name}/Production"
-    
-    # 1. Load Scaler
-    try:
-        scaler_uri = f"models:/{registered_model_name}/Production/preprocessor/scaler.pkl"
-        scaler_path = download_artifacts(artifact_uri=scaler_uri)
-        scaler = joblib.load(scaler_path)
-        print("[+] Đã load Scaler thành công.")
-    except Exception as e:
-        print(f"[-] Không tìm thấy Scaler ({e}), dùng identity scaler.")
-        scaler = None
 
-    # 2. Load Model Production
+    scaler = load_scaler()
+
     try:
         model_prod = mlflow.pytorch.load_model(model_uri)
-        model_prod.eval() # Đúng cú pháp
-        print(f"[+] Đã load {model_type.upper()} PRODUCTION")
-    except Exception as e:
-        print(f"[!] LỖI: Không tìm thấy model Production: {e}")
-        # TẠO MODEL GIẢ LẬP ĐỂ KHÔNG BỊ CRASH
-        model_prod = torch.nn.Linear(8, 5) 
         model_prod.eval()
-        
-    # 3. Load Model Staging
+        print(f"[+] Đã load {model_type.upper()} PRODUCTION từ MLflow")
+    except Exception as e:
+        print(f"[!] Không load được model Production từ MLflow: {e}")
+        print("[!] Dùng fallback torch.nn.Linear(8, 5) để API không crash.")
+        model_prod = torch.nn.Linear(8, 5)
+        model_prod.eval()
+
     try:
         model_staging = mlflow.pytorch.load_model(f"models:/{registered_model_name}/Staging")
         model_staging.eval()
-        print(f"[+] Đã load {model_type.upper()} STAGING")
-    except Exception:
-        print("[-] Không có model Staging. Chạy chế độ Single Production.")
+        print(f"[+] Đã load {model_type.upper()} STAGING từ MLflow")
+    except Exception as e:
+        print(f"[-] Không có model Staging hoặc load lỗi: {e}")
         model_staging = None
-
-# Gọi hàm load ngay khi khởi động
-load_models()
     
 @app.route("/health", methods=["GET"])
 def health():
-    return {"status": "ok", "model_type": MODEL_TYPE}
+    return jsonify({
+        "status": "ok",
+        "model_type": model_type,
+        "has_production_model": model_prod is not None,
+        "has_staging_model": model_staging is not None
+    })
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -101,7 +123,7 @@ def predict():
     action_staging = 0
 
     with torch.no_grad():
-        # Dự đoán từ Production
+    # Dự đoán từ Production
         if model_prod:
             out_prod = model_prod(state_tensor)
             action_prod = int(out_prod[0].argmax().item() if isinstance(out_prod, tuple) else out_prod.argmax().item())
@@ -112,7 +134,7 @@ def predict():
         if model_staging:
             out_staging = model_staging(state_tensor)
             action_staging = int(out_staging[0].argmax().item() if isinstance(out_staging, tuple) else out_staging.argmax().item())
-            ACTION_CHOSEN.labels(model=model_type, stage='staging', action=str(action_staging)).inc()
+            ACTION_CHOSEN.labels(model=model_type, stage='staging', action=str(action_staging)).inc()   
             
     # Ghi nhận độ trễ (Latency)
     latency = time.time() - start_time

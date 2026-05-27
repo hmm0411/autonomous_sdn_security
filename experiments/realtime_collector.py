@@ -13,6 +13,13 @@ ONOS_URL = "http://controller:8181/onos/v1"
 AUTH = HTTPBasicAuth("onos", "rocks")
 LOG_FILE = "logs/live_metrics.csv"
 
+THREAT_LEVEL = Gauge("threat_level", "Threat level from defense agent")
+DEFENSE_FLOW_COUNT = Gauge("defense_flow_count", "Flow count from defense agent")
+DEFENSE_LATENCY = Gauge("defense_latency", "Estimated latency from defense agent")
+DEFENSE_CONTROLLER_CPU = Gauge("defense_controller_cpu", "Estimated controller CPU from defense agent")
+DEFENSE_RL_ACTION = Gauge("defense_rl_action", "RL action selected by defense agent")
+DEFENSE_CONFIDENCE = Gauge("defense_confidence", "Confidence of pseudo RL agent")
+
 current_threat_score = 0.0
 mitigation_timer = 0
 
@@ -102,33 +109,49 @@ def pseudo_rl_agent(flow_count, byte_rate):
             status_str = "Mitigated - Network Stable"
             action_str = "Monitoring Filtered Flows"
 
-    return round(current_threat_score, 1), status_str, action_code, action_str
+    return status_str, action_code, action_str, confidence, round(current_threat_score, 1)
 
 def run_pipeline():
     print("[*] Starting Real-time SDN Data Collector Pipeline...")
     prev_bytes = 0
-    
+
     while True:
         try:
             flows = get_onos_flows()
             flow_count = len(flows)
-            
+
             # Tính tổng bytes
             current_bytes = sum(f.get("bytes", 0) for f in flows)
             byte_rate = max(0, current_bytes - prev_bytes)
             prev_bytes = current_bytes
-            
+
             # Tính toán các Metrics cơ bản
             base_latency = estimate_latency()
             latency = base_latency + (flow_count / 100.0) if flow_count > 200 else base_latency
             cpu = min(100.0, 5.0 + (flow_count / 50.0) + random.uniform(0, 3))
-            
+
             # RL Agent dự đoán
-            attack_type, action_id, action_name, conf = pseudo_rl_agent(flow_count, byte_rate)
-            
-            threat = 0 if attack_type == "Normal Traffic" else min(99, int(flow_count / 30))
+            attack_type, action_id, action_name, conf, threat_score = pseudo_rl_agent(
+                flow_count,
+                byte_rate
+            )
+
+            # Threat level dùng cho Grafana
+            if attack_type == "Normal Traffic":
+                threat = 0
+            else:
+                threat = min(99, int(threat_score))
+
             status = "Healthy" if threat < 20 else ("Critical" if threat > 70 else "Warning")
-            
+
+            # ===== UPDATE PROMETHEUS METRICS =====
+            THREAT_LEVEL.set(float(threat))
+            DEFENSE_FLOW_COUNT.set(float(flow_count))
+            DEFENSE_LATENCY.set(float(latency))
+            DEFENSE_CONTROLLER_CPU.set(float(cpu))
+            DEFENSE_RL_ACTION.set(float(action_id))
+            DEFENSE_CONFIDENCE.set(float(conf))
+
             # Ghi log
             new_data = pd.DataFrame([{
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -142,18 +165,25 @@ def run_pipeline():
                 "rl_action_name": action_name,
                 "confidence": conf
             }])
-            
-            # Lưu dồn vào CSV (Giữ lại 100 dòng gần nhất để vẽ biểu đồ)
+
+            # Lưu dồn vào CSV, giữ lại 100 dòng gần nhất
             df = pd.read_csv(LOG_FILE)
             df = pd.concat([df, new_data], ignore_index=True).tail(100)
             df.to_csv(LOG_FILE, index=False)
-            
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Flows: {flow_count} | Attack: {attack_type} | Action: {action_name} | Conf: {conf}%")
-            
+
+            print(
+                f"[{datetime.now().strftime('%H:%M:%S')}] "
+                f"Flows: {flow_count} | "
+                f"Threat: {threat} | "
+                f"Attack: {attack_type} | "
+                f"Action: {action_name} | "
+                f"Conf: {conf}%"
+            )
+
         except Exception as e:
             print(f"[!] Pipeline Error: {e}")
-            
-        time.sleep(2) # Polling mỗi 2 giây
+
+        time.sleep(2)
 
 if __name__ == "__main__":
     start_http_server(8000) 
