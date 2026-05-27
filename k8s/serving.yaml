@@ -313,7 +313,7 @@ spec:
               "-c",
               "pip install pandas numpy requests prometheus_client && python realtime_pipeline.py",
             ]
-          ports: [{ containerPort: 8000 }]
+          ports: [{ containerPort: 8888 }]
           volumeMounts: [{ name: app-vol, mountPath: /app }]
       volumes:
         - name: app-vol

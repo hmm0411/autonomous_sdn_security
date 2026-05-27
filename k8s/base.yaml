@@ -111,7 +111,7 @@ data:
         static_configs: [{ targets: ["control-loop:9100"] }]
         scrape_interval: 10s
       - job_name: "sdn-defense-agent"
-        static_configs: [{ targets: ["sdn-defense-agent:8000"] }]
+        static_configs: [{ targets: ["sdn-defense-agent:8888"] }]
         scrape_interval: 2s
       # - job_name: "minio_storage"
       #   metrics_path: /minio/v2/metrics/cluster
