@@ -108,6 +108,10 @@ def handle_alert():
 def health():
     return jsonify({'status': 'healthy'})
 
+@app.route("/metrics", methods=["GET"])
+def metrics():
+    return generate_latest(), 200, {"Content-Type": "text/plain; version=0.0.4"}
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5001))
     app.run(host='0.0.0.0', port=port)
