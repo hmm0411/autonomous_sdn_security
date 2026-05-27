@@ -182,41 +182,6 @@
             }
         },
         {
-            "id": 5,
-            "type": "timeseries",
-            "title": "Packet Rate",
-            "datasource": "Prometheus",
-            "targets": [
-                {
-                    "expr": "rl_packet_rate",
-                    "legendFormat": "{{model_type}} packet rate",
-                    "refId": "A"
-                }
-            ],
-            "gridPos": {
-                "x": 0,
-                "y": 16,
-                "w": 12,
-                "h": 8
-            },
-            "fieldConfig": {
-                "defaults": {
-                    "unit": "pps"
-                },
-                "overrides": []
-            },
-            "options": {
-                "legend": {
-                    "displayMode": "list",
-                    "placement": "bottom"
-                },
-                "tooltip": {
-                    "mode": "multi",
-                    "sort": "none"
-                }
-            }
-        },
-        {
             "id": 6,
             "type": "timeseries",
             "title": "Packet Loss",
@@ -432,83 +397,6 @@
                 "colorMode": "value",
                 "graphMode": "area",
                 "justifyMode": "auto"
-            }
-        },
-        {
-            "id": 11,
-            "type": "timeseries",
-            "title": "Training Loss History",
-            "datasource": "Prometheus",
-            "targets": [
-                {
-                    "expr": "training_loss{agent=\"dqn\"}",
-                    "legendFormat": "DQN Loss",
-                    "refId": "A"
-                },
-                {
-                    "expr": "training_loss{agent=\"ppo\"}",
-                    "legendFormat": "PPO Loss",
-                    "refId": "B"
-                }
-            ],
-            "gridPos": {
-                "x": 0,
-                "y": 40,
-                "w": 12,
-                "h": 8
-            },
-            "fieldConfig": {
-                "defaults": {
-                    "unit": "short"
-                },
-                "overrides": []
-            },
-            "options": {
-                "legend": {
-                    "displayMode": "list",
-                    "placement": "bottom"
-                },
-                "tooltip": {
-                    "mode": "multi",
-                    "sort": "none"
-                }
-            }
-        },
-        {
-            "id": 12,
-            "type": "timeseries",
-            "title": "DQN Epsilon",
-            "datasource": "Prometheus",
-            "targets": [
-                {
-                    "expr": "rl_epsilon",
-                    "legendFormat": "DQN Epsilon",
-                    "refId": "A"
-                }
-            ],
-            "gridPos": {
-                "x": 12,
-                "y": 40,
-                "w": 12,
-                "h": 8
-            },
-            "fieldConfig": {
-                "defaults": {
-                    "unit": "short",
-                    "min": 0,
-                    "max": 1
-                },
-                "overrides": []
-            },
-            "options": {
-                "legend": {
-                    "displayMode": "list",
-                    "placement": "bottom"
-                },
-                "tooltip": {
-                    "mode": "multi",
-                    "sort": "none"
-                }
             }
         },
         {
