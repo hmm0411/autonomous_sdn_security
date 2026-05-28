@@ -90,71 +90,131 @@ data:
     global:
       scrape_interval: 15s
       evaluation_interval: 15s
-      external_labels: { monitor: "sdn-rl-monitor" }
+      external_labels:
+        monitor: "sdn-rl-monitor"
+
     rule_files:
       - "alert.rules.yml"
+
     alerting:
       alertmanagers:
-        - static_configs: [{ targets: ["alertmanager:9093"] }]
+        - static_configs:
+            - targets:
+                - "alertmanager:9093"
+
     scrape_configs:
       - job_name: "prometheus"
-        static_configs: [{ targets: ["localhost:9090"] }]
+        static_configs:
+          - targets:
+              - "localhost:9090"
+
       - job_name: "rl-serving-dqn"
-      static_configs:
-        - targets: ["rl-serving-dqn:9002"]
-        
+        static_configs:
+          - targets:
+              - "rl-serving-dqn:9002"
+
       - job_name: "rl-serving-ppo"
         static_configs:
-          - targets: ["rl-serving-ppo:9003"]
+          - targets:
+              - "rl-serving-ppo:9003"
 
       - job_name: "control_loop"
-        static_configs:
-          - targets: ["control-loop:9100"]
         scrape_interval: 10s
+        static_configs:
+          - targets:
+              - "control-loop:9100"
 
       - job_name: "sdn-defense-agent"
-        static_configs:
-          - targets: ["sdn-defense-agent:8000"]
         scrape_interval: 2s
+        static_configs:
+          - targets:
+              - "sdn-defense-agent:8000"
 
       - job_name: "auto-trigger"
         static_configs:
-          - targets: ["auto-trigger:5001"]
+          - targets:
+              - "auto-trigger:5001"
   alert.rules.yml: |
     groups:
-      - name: sdn_rl_alerts
+      - name: sdn_runtime_alerts
         rules:
-          - alert: Low_Reward_Detected
-            expr: episode_reward_mean{agent="dqn"} < -600
-            for: 5m
-            labels: { severity: critical }
+          - alert: SDN_Critical_Attack_Detected
+            expr: sdn_current_score > 70
+            for: 15s
+            labels:
+              severity: critical
             annotations:
-              summary: "DQN Reward đang quá thấp!"
-              description: "Reward trung bình của DQN rớt thấp. Cần Rollback hoặc Retrain."
-          - alert: PPO_Reward_Drop
-            expr: episode_reward_mean{agent="ppo"} < -500
-            for: 5m
-            labels: { severity: critical }
+              summary: "SDN Defense Agent phát hiện tấn công nguy hiểm"
+              description: "Threat score hiện tại là {{ $value }}. Hệ thống đang ở mức CRITICAL."
+
+          - alert: SDN_Warning_Attack_Detected
+            expr: sdn_current_score > 30 and sdn_current_score <= 70
+            for: 15s
+            labels:
+              severity: warning
             annotations:
-              summary: "PPO Reward đang quá thấp!"
-          - alert: Control_Loop_Anomaly
-            expr: control_loop_latency_seconds > 0.1
-            for: 1m
-            labels: { severity: warning }
+              summary: "SDN Defense Agent phát hiện dấu hiệu bất thường"
+              description: "Threat score hiện tại là {{ $value }}. Hệ thống đang ở mức WARNING."
+
+          - alert: SDN_Block_Action_Triggered
+            expr: sdn_rl_action == 1
+            for: 10s
+            labels:
+              severity: critical
             annotations:
-              summary: "Độ trễ của Control Loop đang cao!"
-          - alert: SDN_Defense_Anomaly
-            expr: attack_indicator == 1
-            for: 1m
-            labels: { severity: critical }
+              summary: "Defense action BLOCK đã được kích hoạt"
+              description: "RL action hiện tại là BLOCK."
+
+          - alert: SDN_Isolate_Action_Triggered
+            expr: sdn_rl_action == 4
+            for: 10s
+            labels:
+              severity: critical
             annotations:
-              summary: "SDN Defense Agent phát hiện tấn công!"
+              summary: "Defense action ISOLATE đã được kích hoạt"
+              description: "RL action hiện tại là ISOLATE."
+
+          - alert: Control_Loop_Down
+            expr: up{job="control_loop"} == 0
+            for: 30s
+            labels:
+              severity: critical
+            annotations:
+              summary: "Control Loop đang DOWN"
+
+          - alert: RL_Serving_DQN_Down
+            expr: up{job="rl-serving-dqn"} == 0
+            for: 30s
+            labels:
+              severity: critical
+            annotations:
+              summary: "RL Serving DQN đang DOWN"
+
+          - alert: RL_Serving_PPO_Down
+            expr: up{job="rl-serving-ppo"} == 0
+            for: 30s
+            labels:
+              severity: critical
+            annotations:
+              summary: "RL Serving PPO đang DOWN"
+
+          - alert: Auto_Trigger_Down
+            expr: up{job="auto-trigger"} == 0
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: "Auto-trigger đang DOWN"
+
           - alert: Staging_Outperforms_Production
             expr: avg_over_time(rl_reward{stage="staging"}[3m]) > (avg_over_time(rl_reward{stage="production"}[3m]) + 0.5)
             for: 2m
-            labels: { severity: critical, action: promote_model }
+            labels:
+              severity: critical
+              action: promote_model
             annotations:
-              summary: "Model Staging đang hoạt động tốt hơn Production!"
+              summary: "Model Staging đang hoạt động tốt hơn Production"
+              description: "Reward của Staging cao hơn Production. Có thể promote model."
 ---
 # 5. CẤU HÌNH GRAFANA (Nguồn dữ liệu & Dashboard)
 apiVersion: v1

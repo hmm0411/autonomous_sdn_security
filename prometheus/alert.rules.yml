@@ -29,8 +29,8 @@ groups:
           summary: "Độ trễ của Control Loop đang cao!"
           description: "Latency của control loop là {{ $value }} giây. Cần kiểm tra hiệu suất hệ thống."
       - alert: SDN_Defense_Anomaly
-        # Cảnh báo nếu attack_indicator của SDN Defense Agent là 1
-        expr: attack_indicator == 1
+        # Cảnh báo nếu sdn_current_score của SDN Defense Agent là 1
+        expr: sdn_current_score > 70
         for: 1m
         labels:
           severity: critical

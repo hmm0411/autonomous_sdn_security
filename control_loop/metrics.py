@@ -14,6 +14,7 @@ cpu_g = Gauge("rl_controller_cpu", "Controller CPU", ["model_type"])
 queue_g = Gauge("rl_queue_length", "Queue length", ["model_type"])
 model_selected_g = Gauge("rl_model_selected", "Selected model", ["model_type"])
 
+
 start_http_server(9100)
 
 def update_metrics(state, reward_prod, reward_staging, model_type_str, action):

@@ -3,7 +3,7 @@
     "uid": "sdn-rl-observability",
     "timezone": "browser",
     "schemaVersion": 39,
-    "version": 2,
+    "version": 3,
     "refresh": "5s",
     "tags": [
         "SDN",
@@ -416,8 +416,8 @@
             "datasource": "Prometheus",
             "targets": [
                 {
-                    "expr": "threat_level",
-                    "legendFormat": "Security Status",
+                    "expr": "sdn_current_score",
+                    "legendFormat": "Security Score",
                     "refId": "A"
                 }
             ],
@@ -505,12 +505,12 @@
         {
             "id": 11,
             "type": "gauge",
-            "title": "Threat Level",
+            "title": "Threat Score Gauge",
             "datasource": "Prometheus",
             "targets": [
                 {
-                    "expr": "threat_level",
-                    "legendFormat": "Threat Level",
+                    "expr": "sdn_current_score",
+                    "legendFormat": "Threat Score",
                     "refId": "A"
                 }
             ],
@@ -565,7 +565,7 @@
             "datasource": "Prometheus",
             "targets": [
                 {
-                    "expr": "defense_rl_action",
+                    "expr": "sdn_rl_action",
                     "legendFormat": "Defense Action",
                     "refId": "A"
                 }
@@ -646,12 +646,12 @@
         {
             "id": 13,
             "type": "timeseries",
-            "title": "Defense Confidence",
+            "title": "SDN Packet Rate",
             "datasource": "Prometheus",
             "targets": [
                 {
-                    "expr": "defense_confidence",
-                    "legendFormat": "Confidence",
+                    "expr": "sdn_packet_rate",
+                    "legendFormat": "Packet Rate",
                     "refId": "A"
                 }
             ],
@@ -663,9 +663,8 @@
             },
             "fieldConfig": {
                 "defaults": {
-                    "unit": "percent",
-                    "min": 0,
-                    "max": 100
+                    "unit": "pps",
+                    "min": 0
                 },
                 "overrides": []
             },
@@ -683,11 +682,11 @@
         {
             "id": 14,
             "type": "timeseries",
-            "title": "Defense Flow Count",
+            "title": "SDN Flow Count",
             "datasource": "Prometheus",
             "targets": [
                 {
-                    "expr": "defense_flow_count",
+                    "expr": "sdn_flow_count",
                     "legendFormat": "Flow Count",
                     "refId": "A"
                 }

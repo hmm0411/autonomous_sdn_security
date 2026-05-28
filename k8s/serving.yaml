@@ -149,53 +149,54 @@ metadata:
   name: rl-serving-dqn
   namespace: sdn-security
 spec:
-  replicas: 1
-  selector: { matchLabels: { app: rl-serving-dqn } }
-  template:
-    metadata: { labels: { app: rl-serving-dqn } }
-    spec:
-      securityContext: { runAsUser: 0 }
-      containers:
-        - name: serving
-          image: hmm0411/sdn-rl-serving:latest
-          command:
-            [
-              "python",
-              "-u",
-              "-m",
-              "rl_engine.agent.api_serving",
-              "--port",
-              "8000",
-            ]
-          ports: [{ containerPort: 8000 }, { containerPort: 9002 }]
-          resources:
-            requests: { cpu: "200m", memory: "256Mi" }
-            limits: { cpu: "500m", memory: "512Mi" }
-          env:
-            - name: PYTHONUNBUFFERED
-              value: "1"
-            - name: PYTHONPATH
-              value: "/app"
-            - name: MODEL_TYPE
-              value: "dqn"
-            - name: MLFLOW_TRACKING_URI
-              value: "http://mlflow.sdn-security.svc.cluster.local:5000"
-            - name: MLFLOW_S3_ENDPOINT_URL
-              value: "http://s3:9005"
-            - name: MLFLOW_S3_IGNORE_TLS
-              value: "true"
-            - name: AWS_DEFAULT_REGION
-              value: "us-east-1"
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                { secretKeyRef: { name: minio-credentials, key: ACCESS_KEY } }
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                { secretKeyRef: { name: minio-credentials, key: SECRET_KEY } }
-          volumeMounts: [{ name: app-vol, mountPath: /app }]
-      volumes:
+  securityContext:
+    runAsUser: 0
+  containers:
+    - name: serving
+      image: hmm0411/sdn-rl-serving:latest
+      command:
+        - "python"
+        - "-u"
+        - "-m"
+        - "rl_engine.agent.api_serving"
+        - "--port"
+        - "8000"
+      ports:
+        - containerPort: 8000
+        - containerPort: 9002
+      env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: "/app"
+        - name: MODEL_TYPE
+          value: "dqn"
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow.sdn-security.svc.cluster.local:5000"
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: "http://s3:9005"
+        - name: MLFLOW_S3_IGNORE_TLS
+          value: "true"
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: minio-credentials
+              key: ACCESS_KEY
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-credentials
+              key: SECRET_KEY
+      volumeMounts:
         - name: app-vol
-          hostPath: { path: /home/g23520964/autonomous_sdn_security }
+          mountPath: /app
+  volumes:
+    - name: app-vol
+      hostPath:
+        path: /home/g23520964/autonomous_sdn_security
+        type: Directory
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -220,52 +221,54 @@ metadata:
   name: rl-serving-ppo
   namespace: sdn-security
 spec:
-  replicas: 1
-  selector: { matchLabels: { app: rl-serving-ppo } }
-  template:
-    metadata: { labels: { app: rl-serving-ppo } }
-    spec:
-      securityContext: { runAsUser: 0 }
-      containers:
-        - name: serving
-          image: hmm0411/sdn-rl-serving:latest
-          command:
-            [
-              "python",
-              "-u",
-              "-m",
-              "rl_engine.agent.api_serving",
-              "--port",
-              "8001",
-            ]
-          ports: [{ containerPort: 8001 }, { containerPort: 9003 }]
-          resources:
-            requests: { cpu: "200m", memory: "256Mi" }
-          env:
-            - name: PYTHONUNBUFFERED
-              value: "1"
-            - name: PYTHONPATH
-              value: "/app"
-            - name: MODEL_TYPE
-              value: "ppo"
-            - name: MLFLOW_TRACKING_URI
-              value: "http://mlflow.sdn-security.svc.cluster.local:5000"
-            - name: MLFLOW_S3_ENDPOINT_URL
-              value: "http://s3:9005"
-            - name: MLFLOW_S3_IGNORE_TLS
-              value: "true"
-            - name: AWS_DEFAULT_REGION
-              value: "us-east-1"
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                { secretKeyRef: { name: minio-credentials, key: ACCESS_KEY } }
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                { secretKeyRef: { name: minio-credentials, key: SECRET_KEY } }
-          volumeMounts: [{ name: app-vol, mountPath: /app }]
-      volumes:
+  securityContext:
+    runAsUser: 0
+  containers:
+    - name: serving
+      image: hmm0411/sdn-rl-serving:latest
+      command:
+        - "python"
+        - "-u"
+        - "-m"
+        - "rl_engine.agent.api_serving"
+        - "--port"
+        - "8001"
+      ports:
+        - containerPort: 8001
+        - containerPort: 9003
+      env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: "/app"
+        - name: MODEL_TYPE
+          value: "ppo"
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow.sdn-security.svc.cluster.local:5000"
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: "http://s3:9005"
+        - name: MLFLOW_S3_IGNORE_TLS
+          value: "true"
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: minio-credentials
+              key: ACCESS_KEY
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-credentials
+              key: SECRET_KEY
+      volumeMounts:
         - name: app-vol
-          hostPath: { path: /home/g23520964/autonomous_sdn_security }
+          mountPath: /app
+  volumes:
+    - name: app-vol
+      hostPath:
+        path: /home/g23520964/autonomous_sdn_security
+        type: Directory
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -318,25 +321,37 @@ metadata:
   namespace: sdn-security
 spec:
   replicas: 1
-  selector: { matchLabels: { app: sdn-defense-agent } }
+  selector:
+    matchLabels:
+      app: sdn-defense-agent
   template:
-    metadata: { labels: { app: sdn-defense-agent } }
+    metadata:
+      labels:
+        app: sdn-defense-agent
     spec:
       containers:
         - name: agent
           image: python:3.10-slim
           workingDir: /app
           command:
-            [
-              "sh",
-              "-c",
-              "pip install pandas numpy requests prometheus_client && python realtime_pipeline.py",
-            ]
-          ports: [{ containerPort: 8000 }]
-          volumeMounts: [{ name: app-vol, mountPath: /app }]
+            - "sh"
+            - "-c"
+            - "pip install pandas numpy requests prometheus_client && python realtime_pipeline.py"
+          ports:
+            - containerPort: 8000
+          env:
+            - name: PYTHONPATH
+              value: "/app"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          volumeMounts:
+            - name: app-vol
+              mountPath: /app
       volumes:
         - name: app-vol
-          hostPath: { path: /home/g23520964/autonomous_sdn_security }
+          hostPath:
+            path: /home/g23520964/autonomous_sdn_security
+            type: Directory
 ---
 apiVersion: apps/v1
 kind: Deployment

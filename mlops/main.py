@@ -4,11 +4,13 @@ import time
 import threading
 import subprocess
 import requests
+import mlflow
 from flask import Flask, request, jsonify
 from prometheus_client import Counter, Histogram, generate_latest
 from kubernetes import client, config
 from mlflow.tracking import MlflowClient
 
+mlflow.set_tracking_uri("http://mlflow.sdn-security.svc.cluster.local:5000")
 # 1. Cấu hình Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,8 +49,29 @@ def create_training_job(model_name):
                         "image": "hmm0411/sdn-rl-agent:latest",
                         "command": ["python", "-m", f"rl_engine.agent.train_{model_name.lower()}"],
                         "env": [
+                            {"name": "PYTHONPATH", "value": "/app"},
                             {"name": "MLFLOW_TRACKING_URI", "value": "http://mlflow.sdn-security.svc.cluster.local:5000"},
-                            {"name": "PYTHONPATH", "value": "/app"}
+                            {"name": "MLFLOW_S3_ENDPOINT_URL", "value": "http://s3:9005"},
+                            {"name": "MLFLOW_S3_IGNORE_TLS", "value": "true"},
+                            {"name": "AWS_DEFAULT_REGION", "value": "us-east-1"},
+                            {
+                                "name": "AWS_ACCESS_KEY_ID",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "name": "minio-credentials",
+                                        "key": "ACCESS_KEY"
+                                    }
+                                }
+                            },
+                            {
+                                "name": "AWS_SECRET_ACCESS_KEY",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "name": "minio-credentials",
+                                        "key": "SECRET_KEY"
+                                    }
+                                }
+                            }
                         ],
                         "volumeMounts": [{"name": "app-vol", "mountPath": "/app"}]
                     }],
@@ -77,32 +100,86 @@ def run_promote_pipeline():
     except Exception as e:
         logger.error(f"[-] Pipeline Promote thất bại: {e}")
 
+
 @app.route('/alert-webhook', methods=['POST'])
 @webhook_processing_time.time()
 def handle_alert():
     try:
-        data = request.json
-        if not data or 'alerts' not in data:
-            return jsonify({'status': 'ok'}), 200
-            
-        for alert in data['alerts']:
-            alert_name = alert.get('labels', {}).get('alertname', '')
-            status = alert.get('status')
-            
-            if status == "firing":
-                if alert_name in ["Low_Reward_Detected", "PPO_Reward_Drop"]:
-                    model = "DQN" if "DQN" in alert_name else "PPO"
-                    logger.warning(f"Phát hiện {alert_name}. Trigger Auto-Retrain!")
-                    threading.Thread(target=create_training_job, args=(model,)).start()
-                
-                elif alert_name == "Staging_Outperforms_Production":
-                    logger.warning("Shadow Model thắng! Trigger Auto-Promote!")
-                    threading.Thread(target=run_promote_pipeline).start()
-                    
-        return jsonify({'status': 'triggered'}), 202
+        data = request.get_json(silent=True)
+
+        if not data or "alerts" not in data:
+            return jsonify({"status": "ok", "message": "no alerts"}), 200
+
+        triggered_actions = []
+
+        for alert in data["alerts"]:
+            labels = alert.get("labels", {})
+            alert_name = labels.get("alertname", "")
+            severity = labels.get("severity", "unknown")
+            status = alert.get("status", "unknown")
+
+            alerts_received.labels(severity=severity).inc()
+
+            logger.info(
+                f"[Alertmanager] alert={alert_name}, severity={severity}, status={status}"
+            )
+
+            if status != "firing":
+                continue
+
+            # 1. Runtime security alerts: chỉ ghi nhận để demo, không retrain liên tục
+            if alert_name in [
+                "SDN_Critical_Attack_Detected",
+                "SDN_Warning_Attack_Detected",
+                "SDN_Block_Action_Triggered",
+                "SDN_Isolate_Action_Triggered",
+            ]:
+                logger.warning(
+                    f"Nhận cảnh báo runtime security: {alert_name}. "
+                    "Dashboard/Alertmanager đã ghi nhận sự kiện."
+                )
+                triggered_actions.append(f"logged:{alert_name}")
+
+            # 2. Model quality alerts: trigger retrain
+            elif alert_name in ["Low_Reward_Detected", "DQN_Reward_Drop"]:
+                logger.warning(f"Phát hiện {alert_name}. Trigger Auto-Retrain DQN!")
+                threading.Thread(
+                    target=create_training_job,
+                    args=("DQN",),
+                    daemon=True
+                ).start()
+                triggered_actions.append("retrain:DQN")
+
+            elif alert_name == "PPO_Reward_Drop":
+                logger.warning("Phát hiện PPO_Reward_Drop. Trigger Auto-Retrain PPO!")
+                threading.Thread(
+                    target=create_training_job,
+                    args=("PPO",),
+                    daemon=True
+                ).start()
+                triggered_actions.append("retrain:PPO")
+
+            # 3. Promote model
+            elif alert_name == "Staging_Outperforms_Production":
+                logger.warning("Shadow Model thắng! Trigger Auto-Promote!")
+                threading.Thread(
+                    target=run_promote_pipeline,
+                    daemon=True
+                ).start()
+                triggered_actions.append("promote")
+
+            else:
+                logger.info(f"Alert chưa có action mapping: {alert_name}")
+                triggered_actions.append(f"ignored:{alert_name}")
+
+        return jsonify({
+            "status": "triggered",
+            "actions": triggered_actions
+        }), 202
+
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception(f"Webhook error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health():
