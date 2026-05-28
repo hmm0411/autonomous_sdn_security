@@ -15,6 +15,10 @@ mlflow.set_tracking_uri("http://mlflow.sdn-security.svc.cluster.local:5000")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+K8S_API_SERVER = "https://kubernetes.default.svc"
+SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
 app = Flask(__name__)
 
 # 2. Khởi tạo K8s & MLflow Client
@@ -42,9 +46,10 @@ alerts_received = Counter('alerts_received_total', 'Total alerts received', ['se
 webhook_processing_time = Histogram('webhook_processing_seconds', 'Time to process webhook')
 
 def create_training_job(model_name):
-    """Tạo một Kubernetes Job để retrain model"""
-    job_name = f"retrain-{model_name.lower()}-{int(time.time())}"
-    
+    """Tạo Kubernetes Job retrain bằng ServiceAccount token trực tiếp."""
+    model_name = str(model_name).lower()
+    job_name = f"retrain-{model_name}-{int(time.time())}"
+
     job_manifest = {
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -53,56 +58,115 @@ def create_training_job(model_name):
             "namespace": NAMESPACE,
             "labels": {
                 "app": "retrain-job",
-                "model": model_name.lower()
+                "model": model_name
             }
         },
         "spec": {
-            "ttlSecondsAfterFinished": 3600, # Tự động xóa Job sau 1 giờ
+            "ttlSecondsAfterFinished": 3600,
+            "backoffLimit": 1,
             "template": {
+                "metadata": {
+                    "labels": {
+                        "app": "retrain-job",
+                        "model": model_name
+                    }
+                },
                 "spec": {
                     "restartPolicy": "OnFailure",
-                    "containers": [{
-                        "name": "trainer",
-                        "image": "hmm0411/sdn-rl-agent:latest",
-                        "command": ["python", "-m", f"rl_engine.agent.train_{model_name.lower()}"],
-                        "env": [
-                            {"name": "PYTHONPATH", "value": "/app"},
-                            {"name": "MLFLOW_TRACKING_URI", "value": "http://mlflow.sdn-security.svc.cluster.local:5000"},
-                            {"name": "MLFLOW_S3_ENDPOINT_URL", "value": "http://s3:9005"},
-                            {"name": "MLFLOW_S3_IGNORE_TLS", "value": "true"},
-                            {"name": "AWS_DEFAULT_REGION", "value": "us-east-1"},
-                            {
-                                "name": "AWS_ACCESS_KEY_ID",
-                                "valueFrom": {
-                                    "secretKeyRef": {
-                                        "name": "minio-credentials",
-                                        "key": "ACCESS_KEY"
+                    "containers": [
+                        {
+                            "name": "trainer",
+                            "image": "hmm0411/sdn-rl-agent:latest",
+                            "command": [
+                                "python",
+                                "-m",
+                                f"rl_engine.agent.train_{model_name}"
+                            ],
+                            "env": [
+                                {"name": "PYTHONPATH", "value": "/app"},
+                                {
+                                    "name": "MLFLOW_TRACKING_URI",
+                                    "value": "http://mlflow.sdn-security.svc.cluster.local:5000"
+                                },
+                                {
+                                    "name": "MLFLOW_S3_ENDPOINT_URL",
+                                    "value": "http://s3:9005"
+                                },
+                                {"name": "MLFLOW_S3_IGNORE_TLS", "value": "true"},
+                                {"name": "AWS_DEFAULT_REGION", "value": "us-east-1"},
+                                {
+                                    "name": "AWS_ACCESS_KEY_ID",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": "minio-credentials",
+                                            "key": "ACCESS_KEY"
+                                        }
+                                    }
+                                },
+                                {
+                                    "name": "AWS_SECRET_ACCESS_KEY",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": "minio-credentials",
+                                            "key": "SECRET_KEY"
+                                        }
                                     }
                                 }
-                            },
-                            {
-                                "name": "AWS_SECRET_ACCESS_KEY",
-                                "valueFrom": {
-                                    "secretKeyRef": {
-                                        "name": "minio-credentials",
-                                        "key": "SECRET_KEY"
-                                    }
+                            ],
+                            "volumeMounts": [
+                                {
+                                    "name": "app-vol",
+                                    "mountPath": "/app"
                                 }
+                            ]
+                        }
+                    ],
+                    "volumes": [
+                        {
+                            "name": "app-vol",
+                            "hostPath": {
+                                "path": "/home/g23520964/autonomous_sdn_security",
+                                "type": "Directory"
                             }
-                        ],
-                        "volumeMounts": [{"name": "app-vol", "mountPath": "/app"}]
-                    }],
-                    "volumes": [{"name": "app-vol", "hostPath": {"path": "/home/g23520964/autonomous_sdn_security"}}]
+                        }
+                    ]
                 }
             }
         }
     }
+
     try:
-        job_api = get_job_api()
-        job_api.create_namespaced_job(namespace=NAMESPACE, body=job_manifest)
-        logger.info(f"[*] Đã tạo Job training thành công: {job_name}")
+        with open(SA_TOKEN_PATH, "r") as f:
+            token = f.read().strip()
+
+        url = f"{K8S_API_SERVER}/apis/batch/v1/namespaces/{NAMESPACE}/jobs"
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.post(
+            url,
+            headers=headers,
+            json=job_manifest,
+            verify=SA_CA_PATH,
+            timeout=15
+        )
+
+        if response.status_code in [200, 201]:
+            logger.info(f"[+] Đã tạo Job training thành công: {job_name}")
+            return job_name
+
+        logger.error(
+            f"[-] Lỗi tạo Job {job_name}: "
+            f"status={response.status_code}, body={response.text}"
+        )
+        return None
+
     except Exception as e:
-        logger.error(f"[-] Lỗi tạo Job: {e}")
+        logger.exception(f"[-] Exception khi tạo Job retrain {model_name}: {e}")
+        return None
 
 def run_promote_pipeline():
     """Logic thăng cấp model"""
