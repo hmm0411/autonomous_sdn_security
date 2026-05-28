@@ -18,13 +18,22 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # 2. Khởi tạo K8s & MLflow Client
-try:
+def get_job_api():
+    """
+    Load lại Kubernetes in-cluster config mỗi lần cần gọi API.
+    Tránh lỗi client/token cũ sau khi rollout pod hoặc đổi ServiceAccount.
+    """
     config.load_incluster_config()
-    job_api = client.BatchV1Api()
+    return client.BatchV1Api()
+
+
+try:
+    job_api = get_job_api()
     mlflow_client = MlflowClient()
     logger.info("[+] Đã load cấu hình Kubernetes thành công.")
 except Exception as e:
-    logger.error(f"[-] Lỗi load cấu hình K8s: {e}")
+    job_api = None
+    logger.exception(f"[-] Lỗi load cấu hình K8s: {e}")
 
 NAMESPACE = "sdn-security"
 
@@ -39,8 +48,16 @@ def create_training_job(model_name):
     job_manifest = {
         "apiVersion": "batch/v1",
         "kind": "Job",
-        "metadata": {"name": job_name},
+        "metadata": {
+            "name": job_name,
+            "namespace": NAMESPACE,
+            "labels": {
+                "app": "retrain-job",
+                "model": model_name.lower()
+            }
+        },
         "spec": {
+            "ttlSecondsAfterFinished": 3600, # Tự động xóa Job sau 1 giờ
             "template": {
                 "spec": {
                     "restartPolicy": "OnFailure",
@@ -81,6 +98,7 @@ def create_training_job(model_name):
         }
     }
     try:
+        job_api = get_job_api()
         job_api.create_namespaced_job(namespace=NAMESPACE, body=job_manifest)
         logger.info(f"[*] Đã tạo Job training thành công: {job_name}")
     except Exception as e:
@@ -143,21 +161,21 @@ def handle_alert():
             # 2. Model quality alerts: trigger retrain
             elif alert_name in ["Low_Reward_Detected", "DQN_Reward_Drop"]:
                 logger.warning(f"Phát hiện {alert_name}. Trigger Auto-Retrain DQN!")
-                threading.Thread(
-                    target=create_training_job,
-                    args=("DQN",),
-                    daemon=True
-                ).start()
-                triggered_actions.append("retrain:DQN")
+                job_name = create_training_job("DQN")
+
+                if job_name:
+                    triggered_actions.append(f"retrain:DQN:{job_name}")
+                else:
+                    triggered_actions.append("retrain:DQN:failed")
 
             elif alert_name == "PPO_Reward_Drop":
                 logger.warning("Phát hiện PPO_Reward_Drop. Trigger Auto-Retrain PPO!")
-                threading.Thread(
-                    target=create_training_job,
-                    args=("PPO",),
-                    daemon=True
-                ).start()
-                triggered_actions.append("retrain:PPO")
+                job_name = create_training_job("PPO")
+
+                if job_name:
+                    triggered_actions.append(f"retrain:PPO:{job_name}")
+                else:
+                    triggered_actions.append("retrain:PPO:failed")
 
             # 3. Promote model
             elif alert_name == "Staging_Outperforms_Production":
