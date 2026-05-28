@@ -387,22 +387,32 @@ metadata:
   namespace: sdn-security
 spec:
   replicas: 1
-  selector: { matchLabels: { app: auto-trigger } }
+  selector:
+    matchLabels:
+      app: auto-trigger
   template:
-    metadata: { labels: { app: auto-trigger } }
+    metadata:
+      labels:
+        app: auto-trigger
     spec:
-      serviceAccountName: auto-trigger-sa # Quan trọng: Quyền tạo Job
+      serviceAccountName: auto-trigger-sa
+      automountServiceAccountToken: true
       containers:
         - name: trigger
           image: hmm0411/sdn-auto-trigger:latest
           command: ["python", "-m", "mlops.main"]
-          ports: [{ containerPort: 5001 }]
+          ports:
+            - containerPort: 5001
           env:
             - name: PYTHONPATH
               value: "/app"
             - name: PYTHONUNBUFFERED
               value: "1"
-          volumeMounts: [{ name: app-vol, mountPath: /app }]
+          volumeMounts:
+            - name: app-vol
+              mountPath: /app
       volumes:
         - name: app-vol
-          hostPath: { path: /home/g23520964/autonomous_sdn_security }
+          hostPath:
+            path: /home/g23520964/autonomous_sdn_security
+            type: Directory
