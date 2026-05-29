@@ -1,36 +1,39 @@
-from curses import raw
-
+from collections import deque
 import numpy as np
 
 class StateBuilder:
-
     def __init__(self):
-        self.prev_action = 0
+        self.packet_buf = deque(maxlen=3)
+        self.byte_buf = deque(maxlen=3)
+        self.cpu_buf = deque(maxlen=3)
+        self.flow_growth_buf = deque(maxlen=5)
+
+    def _preprocess_raw(self, raw):
+        packet_rate = np.log1p(max(0.0, float(raw.get("packet_rate", 0.0))))
+        byte_rate = np.log1p(max(0.0, float(raw.get("byte_rate", 0.0))))
+
+        flow_count = np.clip(float(raw.get("flow_count", 0.0)), 0, 500)
+        flow_growth_rate = np.clip(float(raw.get("flow_growth_rate", 0.0)), 0, 50)
+        src_ip_entropy = np.clip(float(raw.get("src_ip_entropy", 0.0)), 0, 8)
+        latency = np.clip(float(raw.get("latency", 0.0)), 0, 100)
+        packet_loss = np.clip(float(raw.get("packet_loss", 0.0)), 0, 0.5)
+        controller_cpu = np.clip(float(raw.get("controller_cpu", 0.0)), 0, 100)
+
+        self.packet_buf.append(packet_rate)
+        self.byte_buf.append(byte_rate)
+        self.cpu_buf.append(controller_cpu)
+        self.flow_growth_buf.append(flow_growth_rate)
+
+        packet_rate = float(np.mean(self.packet_buf))
+        byte_rate = float(np.mean(self.byte_buf))
+        controller_cpu = float(np.mean(self.cpu_buf))
+        flow_growth_rate = float(np.max(self.flow_growth_buf))
+
+        # Trả về đúng 8 feature RAW
+        return np.array([
+            packet_rate, byte_rate, flow_count, flow_growth_rate,
+            src_ip_entropy, latency, packet_loss, controller_cpu
+        ], dtype=np.float32)
 
     def build(self, raw):
-
-        packet_rate = raw.get("packet_rate", 0)
-        byte_rate = raw.get("byte_rate", 0)
-        flow_count = raw.get("flow_count", 0)
-        latency = raw.get("latency", 0)
-        packet_loss = raw.get("packet_loss", 0)
-
-        # Nếu chưa có entropy thật → 0
-        entropy = raw.get("src_ip_entropy", 0)
-
-        # Heuristic giả lập congestion
-        queue_length = min(1.0, packet_rate / 100000)
-        controller_cpu = min(1.0, flow_count / 100)
-
-        state = np.array([
-            raw.get("packet_rate", 0),
-            raw.get("byte_rate", 0),
-            raw.get("flow_count", 0),
-            raw.get("src_ip_entropy", 0),
-            raw.get("latency", 0),
-            raw.get("packet_loss", 0),
-            raw.get("queue_length", 0),
-            raw.get("controller_cpu", 0),
-            self.prev_action
-        ], dtype=np.float32)
-        return state
+        return self._preprocess_raw(raw)

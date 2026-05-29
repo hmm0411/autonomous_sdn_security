@@ -1,23 +1,33 @@
 import requests
+import numpy as np
 
-DQN_URL = "http://rl-agent-dqn:9000/predict"
-PPO_URL = "http://rl-agent-ppo:9001/predict"
+RL_ENDPOINTS = {
+    "dqn": "http://rl-serving-dqn:8000/predict",
+    "ppo": "http://rl-serving-ppo:8001/predict",
+}
 
-def call_model(url, state):
+def get_action(state, model_type="dqn"):
+    model_type = str(model_type).lower()
+    url = RL_ENDPOINTS.get(model_type, RL_ENDPOINTS["dqn"])
+
     try:
-        res = requests.post(url, json={"state": state.tolist()}, timeout=1.5)
-        return int(res.json()["action"])
-    except:
-        return 0
+        payload = {
+            "state": state.tolist() if isinstance(state, np.ndarray) else state
+        }
 
-def get_best_action(state, reward_fn):
-    action_dqn = call_model(DQN_URL, state)
-    action_ppo = call_model(PPO_URL, state)
+        res = requests.post(url, json=payload, timeout=2.0)
 
-    reward_dqn = reward_fn(state, action_dqn)
-    reward_ppo = reward_fn(state, action_ppo)
+        if res.status_code == 200:
+            data = res.json()
+            return (
+                int(data.get("action", 0)),
+                int(data.get("action_staging", 0)),
+                str(data.get("model", model_type)).lower()
+            )
 
-    if reward_dqn >= reward_ppo:
-        return action_dqn, "DQN", reward_dqn
-    else:
-        return action_ppo, "PPO", reward_ppo
+        print(f"RL API returned status={res.status_code}, body={res.text}")
+
+    except Exception as e:
+        print(f"RL API connection error for {model_type}: {e}")
+
+    return 0, 0, model_type

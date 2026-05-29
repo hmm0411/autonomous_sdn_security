@@ -1,15 +1,15 @@
 import time
 import numpy as np
-
+import requests
 from rl_engine.state_builder import StateBuilder
 from control_loop.controller_client import execute_action
 from rl_engine.reward import Reward
 
-from control_loop.rl_client import get_best_action
+from control_loop.rl_client import get_action
 from control_loop.metrics import update_metrics
 from control_loop.state_collector import get_state
 
-STATE_DIM = 9
+STATE_DIM = 8
 SLEEP_TIME = 2
 
 state_builder = StateBuilder()
@@ -19,45 +19,47 @@ print("AUTO MODEL CONTROL LOOP STARTED")
 
 def baseline_policy(state):
     return 0
-    
-def validate_state(state):
-    return state is not None and len(state) == STATE_DIM
+
+def wait_http_service(name, url, auth=None):
+    print(f"Đang chờ {name} khởi động...")
+    while True:
+        try:
+            res = requests.get(url, auth=auth, timeout=2)
+            if res.status_code in [200, 401]:
+                print(f"{name} đã sẵn sàng!")
+                return
+        except Exception:
+            pass
+
+        print(f"{name} chưa sẵn sàng, đợi 5 giây...")
+        time.sleep(5)
+
+
+wait_http_service(
+    "ONOS Controller",
+    "http://controller:8181/onos/v1/flows",
+    auth=("onos", "rocks")
+)
+
+wait_http_service(
+    "RL Serving DQN",
+    "http://rl-serving-dqn:8000/health"
+)
+# --------------------------------------------------
 
 while True:
-    try:
-        # ===== LẤY RAW DATA =====
-        raw = get_state()
+    raw = get_state()
+    state = np.array(state_builder.build(raw), dtype=np.float32)
 
-        # ===== BUILD STATE =====
-        state = np.array(state_builder.build(raw), dtype=np.float32)
+    model_to_use = "dqn"
 
-        if not validate_state(state):
-            print("Invalid state:", state)
-            time.sleep(SLEEP_TIME)
-            continue
+    action_prod, action_staging, model_name = get_action(state, model_type=model_to_use)
 
-        # ===== AUTO CHỌN MODEL =====
-        action, model, reward = get_best_action(
-            state,
-            lambda s, a: reward_calc.calculate(raw, a)
-        )
+    reward_prod = reward_calc.calculate(raw, action_prod)
+    reward_staging = reward_calc.calculate(raw, action_staging)
 
-        # ===== BASELINE =====
-        action_base = baseline_policy(state)
-        reward_base = reward_calc.calculate(raw, action_base)
+    execute_action(action_prod)
+    update_metrics(state, reward_prod, reward_staging, model_name, action_prod)
 
-        # ===== APPLY =====
-        execute_action(action)
-
-        # ===== UPDATE METRICS =====
-        update_metrics(state, reward, model, action)
-        update_metrics(state, reward_base, "baseline", action_base)
-
-        print(f"[AUTO] {model} | action={action} | reward={reward}")
-        print(f"[BASELINE] action={action_base} | reward={reward_base}")
-
-        time.sleep(SLEEP_TIME)
-
-    except Exception as e:
-        print("Loop error:", e)
-        time.sleep(3)
+    print(f"[{model_name}] Prod Action={action_prod} (R={reward_prod}) | Staging Action={action_staging} (R={reward_staging})")
+    time.sleep(SLEEP_TIME)

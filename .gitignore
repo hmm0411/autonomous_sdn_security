@@ -1,6 +1,6 @@
 # ignore data
-data/
-*.csv
+# data/
+# *.csv
 .env
 # ignore pycache
 __pycache__/
@@ -10,7 +10,6 @@ venv/
 *.log
 results/
 *.csv
-*.json
 *.log
 tmp/
 *.tmp

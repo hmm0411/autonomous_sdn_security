@@ -1,57 +1,87 @@
+#!/usr/bin/env python3
+
+from functools import partial
+
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSSwitch
 from mininet.cli import CLI
-from topo import SDNResearchTopo
-from attack_manager import AttackManager
-import time
+from mininet.log import setLogLevel, info
+from mininet.link import TCLink
 
-def run_experiment():
-    topo = SDNResearchTopo()
+from traffic_generator.topo import SDNSecurityTopo
+from traffic_generator.attack_manager import AttackManager
+
+
+def run():
+    topo = SDNSecurityTopo()
+
+    switch_cls = partial(OVSSwitch, protocols="OpenFlow13")
 
     net = Mininet(
         topo=topo,
-        controller=lambda name: RemoteController(name, ip='127.0.0.1', port=6653),
-        switch=lambda name, **opts: OVSSwitch(name, protocols='OpenFlow13', **opts)
+        controller=None,
+        switch=switch_cls,
+        link=TCLink,
+        autoSetMacs=False,
+        autoStaticArp=True,
+        build=False
     )
 
-    print("[*] Starting Mininet...")
-    net.start()
-    print("[*] Enabling STP on OVS bridges to prevent Broadcast Storm...")
+    c0 = RemoteController(
+        "c0",
+        ip="127.0.0.1",
+        port=6653
+    )
+
+    net.addController(c0)
+
+    info("[*] Building network...\n")
+    net.build()
+
+    info("[*] Starting controller...\n")
+    c0.start()
+
+    info("[*] Starting switches with OpenFlow13...\n")
     for sw in net.switches:
-        # Ra lệnh cho switch bật STP
-        sw.cmd('ovs-vsctl set bridge', sw.name, 'stp_enable=true')
+        sw.start([c0])
+        sw.cmd(f"ovs-vsctl set bridge {sw.name} protocols=OpenFlow13")
+        sw.cmd(f"ovs-vsctl set-fail-mode {sw.name} secure")
+        sw.cmd(f"ovs-vsctl set-controller {sw.name} tcp:127.0.0.1:6653")
 
-    # ------------------------
-    print("[*] Waiting for STP Convergence (20s)...")
-    time.sleep(20)
-    print("[*] Connecting Root Namespace to Mininet (Fixing 500.0 Latency)...")
-
-    import os
-    os.system('sudo ip addr add 10.0.0.100/24 dev s1')
-    os.system('sudo ip link set dev s1 up')
-
-    print("[*] Initializing Attack Manager...")
     manager = AttackManager(net)
+    manager.start_servers()
     net.manager = manager
-    print("[*] Waiting controller connection (5s)...")
-    time.sleep(5)
 
-    print("="*40)
-    print("SYSTEM READY")
-    print("="*40)
-    print("pingall → test network")
-    print("py net.manager.ddos_flood()")
-    print("py net.manager.packet_in_flood()")
-    print("py net.manager.flow_overflow()")
-    print("py net.manager.ip_spoofing()")
-    print("py net.manager.port_scanning()")
-    print("py net.manager.stop_all()")
-    print("="*40)
+    info("\n========== SDN SECURITY TOPO READY ==========\n")
+    info("Normal users : h1 h2 h3 h4\n")
+    info("Attackers    : h5 h6 h7\n")
+    info("Victim       : h8 10.0.0.8\n")
+    info("Honeypot     : h9 10.0.0.9\n")
+    info("Redirect port on s1 to honeypot: 9\n")
+    info("=============================================\n")
+    info("Commands:\n")
+    info("  pingall\n")
+    info("  sh ovs-vsctl show\n")
+    info("  sh ovs-ofctl -O OpenFlow13 dump-flows s1\n")
+    info("  py net.manager.normal_low()\n")
+    info("  py net.manager.normal_medium()\n")
+    info("  py net.manager.normal_high()\n")
+    info("  py net.manager.ddos_flood(num_attackers=1, intensity='low')\n")
+    info("  py net.manager.ip_spoofing(num_attackers=1, intensity='medium')\n")
+    info("  py net.manager.packet_in_flood(num_attackers=1, intensity='medium')\n")
+    info("  py net.manager.flow_overflow(num_attackers=1, flows_per_attacker=500)\n")
+    info("  py net.manager.port_scanning(attacker_index=0, start_port=1, end_port=1000)\n")
+    info("  py net.manager.stop_all()\n")
+    info("  py net.manager.start_servers()\n")
+    info("=============================================\n\n")
 
     CLI(net)
-    os.system('sudo ip addr del 10.0.0.100/24 dev s1 2>/dev/null')
-    print("[*] Stopping network...")
+
+    info("[*] Stopping network...\n")
+    manager.stop_all()
     net.stop()
 
+
 if __name__ == "__main__":
-    run_experiment()
+    setLogLevel("info")
+    run()

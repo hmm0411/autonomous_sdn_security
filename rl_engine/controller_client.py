@@ -2,6 +2,7 @@ import requests
 import numpy as np
 import logging
 from typing import Dict, Any, Optional
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 class ControllerClient:
     def __init__(
         self, 
-        onos_ip: str = "34.126.64.185", 
+        onos_ip: str = "controller", 
         port: str = "8181", 
         user: str = "onos", 
         pwd: str = "rocks", 
@@ -30,6 +31,7 @@ class ControllerClient:
         if self.use_mock:
             return self._get_mock_state()
         
+        time.sleep(30)
         try:
             response = requests.get(
                 f"{self.controller_url}/state",
@@ -43,18 +45,16 @@ class ControllerClient:
             return self._get_mock_state()
 
     def _get_mock_state(self) -> Dict[str, float]:
-        """Generate mock state data for testing"""
         return {
-            "packet_rate": float(np.random.uniform(100, 1000)),
-            "byte_rate": float(np.random.uniform(1000, 10000)),
-            "flow_count": float(np.random.uniform(10, 100)),
+            "packet_rate": float(np.random.uniform(0.0, 1.0)),
+            "byte_rate": float(np.random.uniform(0.0, 1.0)),
+            "flow_count": float(np.random.uniform(0.0, 1.0)),
+            "flow_growth_rate": float(np.random.uniform(0.0, 1.0)),
             "src_ip_entropy": float(np.random.uniform(0.0, 1.0)),
             "latency": float(np.random.uniform(0.0, 1.0)),
             "packet_loss": float(np.random.uniform(0.0, 1.0)),
-            "queue_length": float(np.random.uniform(0.0, 1.0)),
             "controller_cpu": float(np.random.uniform(0.0, 1.0)),
-            "attack_indicator": float(np.random.uniform(0.0, 1.0)),
-            "previous_action": float(self.last_action)
+            "previous_action": float(self.last_action) / 4.0
         }
 
     def apply_action(self, action: int) -> Dict[str, Any]:

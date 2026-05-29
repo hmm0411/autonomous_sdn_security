@@ -66,7 +66,6 @@ class BaselineRuleBasedAgent:
         packet_loss,
         queue_length,
         controller_cpu,
-        previous_action
     ]
     """
 
@@ -90,7 +89,7 @@ class BaselineRuleBasedAgent:
         packet_loss = parsed["packet_loss"]
         queue_length = parsed["queue_length"]
         controller_cpu = parsed["controller_cpu"]
-        previous_action = parsed["previous_action"]
+        # previous_action = parsed["previous_action"]
 
         # Heuristic anomaly score
         anomaly_score = 0
@@ -134,7 +133,6 @@ class BaselineRuleBasedAgent:
                 "packet_loss": float(state.get("packet_loss", 0.0)),
                 "queue_length": float(state.get("queue_length", 0.0)),
                 "controller_cpu": float(state.get("controller_cpu", 0.0)),
-                "previous_action": int(state.get("previous_action", self.last_action)),
             }
 
         if isinstance(state, (list, tuple, np.ndarray)):
@@ -152,7 +150,7 @@ class BaselineRuleBasedAgent:
                 "packet_loss": float(state[5]),
                 "queue_length": float(state[6]),
                 "controller_cpu": float(state[7]),
-                "previous_action": int(state[8]),
+                # "previous_action": int(state[8]),
             }
 
         raise TypeError(

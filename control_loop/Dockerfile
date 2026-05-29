@@ -12,6 +12,8 @@ COPY ./control_loop /app/control_loop
 COPY ./rl_engine /app/rl_engine
 
 # Thiết lập PYTHONPATH để Python nhận diện được module ở thư mục gốc
-ENV PYTHONPATH="${PYTHONPATH}:/app"
+ENV PYTHONPATH=/app:$PYTHONPATH
+
+RUN pip install pandas numpy requests mlflow joblib
 
 CMD ["python", "control_loop/main_loop.py"]

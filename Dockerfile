@@ -1,37 +1,38 @@
+# 1. Base image siêu nhẹ
 FROM python:3.10-slim
 
+# 2. Thư mục làm việc và User non-root
 WORKDIR /app
+COPY . .
+RUN useradd -m -r appuser && chown appuser /app
 
-# Install system dependencies
+# 3. Cài đặt hệ thống (Xóa sạch supervisor, git, curl)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    build-essential \
-    supervisor \
-    && rm -rf /var/lib/apt/lists/*
+    build-essential && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy entire project
-COPY . /app/
+# 4. Tạo trước các thư mục cần thiết và cấp quyền
+RUN mkdir -p /app/logs /app/models && \
+    chown -R appuser:appuser /app/logs /app/models
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r /app/rl_engine/requirements.txt && \
-    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir numpy pandas scikit-learn gymnasium tensorboard matplotlib seaborn requests mlflow prometheus-client
+# 5. Cài đặt Python dependencies
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# Set Python path
+# 6. Copy source code
+COPY --chown=appuser:appuser . /app/
+
+# 7. Biến môi trường
 ENV PYTHONPATH=/app:$PYTHONPATH
 ENV PYTHONUNBUFFERED=1
 
-# Expose ports
-EXPOSE 8000 9000 5000
+EXPOSE 8000 8001 9002 9003
 
-# Copy supervisor configuration
-COPY supervisord.conf /etc/supervisord.conf
+# 8. Chạy bằng User bảo mật
+USER appuser
 
-# Copy entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Run entrypoint
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+# Lệnh chờ mặc định (Dành cho các container Agent Standby)
+# Còn container Serving thì file docker-compose.yml đã có entrypoint riêng rồi
+CMD ["tail", "-f", "/dev/null"]

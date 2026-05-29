@@ -1,91 +1,276 @@
 import os
 import logging
+import time
+import threading
+import subprocess
+import requests
+import mlflow
 from flask import Flask, request, jsonify
 from prometheus_client import Counter, Histogram, generate_latest
+from kubernetes import client, config
+from mlflow.tracking import MlflowClient
 
+mlflow.set_tracking_uri("http://mlflow.sdn-security.svc.cluster.local:5000")
+# 1. Cấu hình Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+K8S_API_SERVER = "https://kubernetes.default.svc"
+SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
 app = Flask(__name__)
+
+# 2. Khởi tạo K8s & MLflow Client
+def get_job_api():
+    """
+    Load lại Kubernetes in-cluster config mỗi lần cần gọi API.
+    Tránh lỗi client/token cũ sau khi rollout pod hoặc đổi ServiceAccount.
+    """
+    config.load_incluster_config()
+    return client.BatchV1Api()
+
+
+try:
+    job_api = get_job_api()
+    mlflow_client = MlflowClient()
+    logger.info("[+] Đã load cấu hình Kubernetes thành công.")
+except Exception as e:
+    job_api = None
+    logger.exception(f"[-] Lỗi load cấu hình K8s: {e}")
+
+NAMESPACE = "sdn-security"
 
 # Prometheus metrics
 alerts_received = Counter('alerts_received_total', 'Total alerts received', ['severity'])
 webhook_processing_time = Histogram('webhook_processing_seconds', 'Time to process webhook')
 
-@app.route('/webhook', methods=['POST'])
+def create_training_job(model_name):
+    """Tạo Kubernetes Job retrain bằng ServiceAccount token trực tiếp."""
+    model_name = str(model_name).lower()
+    job_name = f"retrain-{model_name}-{int(time.time())}"
+
+    job_manifest = {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": job_name,
+            "namespace": NAMESPACE,
+            "labels": {
+                "app": "retrain-job",
+                "model": model_name
+            }
+        },
+        "spec": {
+            "ttlSecondsAfterFinished": 3600,
+            "backoffLimit": 1,
+            "template": {
+                "metadata": {
+                    "labels": {
+                        "app": "retrain-job",
+                        "model": model_name
+                    }
+                },
+                "spec": {
+                    "restartPolicy": "OnFailure",
+                    "containers": [
+                        {
+                            "name": "trainer",
+                            "image": "hmm0411/sdn-rl-agent:latest",
+                            "command": [
+                                "python",
+                                "-m",
+                                f"rl_engine.agent.train_{model_name}"
+                            ],
+                            "env": [
+                                {"name": "PYTHONPATH", "value": "/app"},
+                                {
+                                    "name": "MLFLOW_TRACKING_URI",
+                                    "value": "http://mlflow.sdn-security.svc.cluster.local:5000"
+                                },
+                                {
+                                    "name": "MLFLOW_S3_ENDPOINT_URL",
+                                    "value": "http://s3:9005"
+                                },
+                                {"name": "MLFLOW_S3_IGNORE_TLS", "value": "true"},
+                                {"name": "AWS_DEFAULT_REGION", "value": "us-east-1"},
+                                {
+                                    "name": "AWS_ACCESS_KEY_ID",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": "minio-credentials",
+                                            "key": "ACCESS_KEY"
+                                        }
+                                    }
+                                },
+                                {
+                                    "name": "AWS_SECRET_ACCESS_KEY",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": "minio-credentials",
+                                            "key": "SECRET_KEY"
+                                        }
+                                    }
+                                }
+                            ],
+                            "volumeMounts": [
+                                {
+                                    "name": "app-vol",
+                                    "mountPath": "/app"
+                                }
+                            ]
+                        }
+                    ],
+                    "volumes": [
+                        {
+                            "name": "app-vol",
+                            "hostPath": {
+                                "path": "/home/g23520964/autonomous_sdn_security",
+                                "type": "Directory"
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    try:
+        with open(SA_TOKEN_PATH, "r") as f:
+            token = f.read().strip()
+
+        url = f"{K8S_API_SERVER}/apis/batch/v1/namespaces/{NAMESPACE}/jobs"
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.post(
+            url,
+            headers=headers,
+            json=job_manifest,
+            verify=SA_CA_PATH,
+            timeout=15
+        )
+
+        if response.status_code in [200, 201]:
+            logger.info(f"[+] Đã tạo Job training thành công: {job_name}")
+            return job_name
+
+        logger.error(
+            f"[-] Lỗi tạo Job {job_name}: "
+            f"status={response.status_code}, body={response.text}"
+        )
+        return None
+
+    except Exception as e:
+        logger.exception(f"[-] Exception khi tạo Job retrain {model_name}: {e}")
+        return None
+
+def run_promote_pipeline():
+    """Logic thăng cấp model"""
+    logger.info("[*] Kích hoạt Automated Promote Pipeline...")
+    try:
+        # Gọi script promote.py (đảm bảo bạn đã gộp logic hoặc trỏ đúng đường dẫn)
+        subprocess.run(["python", "/app/mlops/promote.py"], check=True)
+        
+        # Reload API Serving
+        requests.post("http://rl-serving-dqn:8000/reload", timeout=5)
+        requests.post("http://rl-serving-ppo:8001/reload", timeout=5)
+        logger.info("[+] Promote hoàn tất!")
+    except Exception as e:
+        logger.error(f"[-] Pipeline Promote thất bại: {e}")
+
+
+@app.route('/alert-webhook', methods=['POST'])
 @webhook_processing_time.time()
 def handle_alert():
-    """Handle alerts from AlertManager"""
     try:
-        data = request.json
-        
-        # Check if data is None
-        if data is None:
-            logger.warning("Received empty webhook payload")
-            return jsonify({'error': 'Empty payload'}), 400
-        
-        logger.info(f"Received alert: {data}")
-        
-        # Count alerts by severity
-        alerts = data.get('alerts', [])
-        if not alerts:
-            logger.warning("No alerts in payload")
-            return jsonify({'status': 'ok', 'alerts_count': 0}), 200
-        
-        for alert in alerts:
-            severity = alert.get('labels', {}).get('severity', 'unknown')
+        data = request.get_json(silent=True)
+
+        if not data or "alerts" not in data:
+            return jsonify({"status": "ok", "message": "no alerts"}), 200
+
+        triggered_actions = []
+
+        for alert in data["alerts"]:
+            labels = alert.get("labels", {})
+            alert_name = labels.get("alertname", "")
+            severity = labels.get("severity", "unknown")
+            status = alert.get("status", "unknown")
+
             alerts_received.labels(severity=severity).inc()
-            logger.info(f"Processed alert with severity: {severity}")
-        
-        return jsonify({'status': 'ok', 'alerts_count': len(alerts)}), 200
-    except TypeError as e:
-        logger.error(f"Type error processing alert: {e}")
-        return jsonify({'error': 'Invalid payload format'}), 400
+
+            logger.info(
+                f"[Alertmanager] alert={alert_name}, severity={severity}, status={status}"
+            )
+
+            if status != "firing":
+                continue
+
+            # 1. Runtime security alerts: chỉ ghi nhận để demo, không retrain liên tục
+            if alert_name in [
+                "SDN_Critical_Attack_Detected",
+                "SDN_Warning_Attack_Detected",
+                "SDN_Block_Action_Triggered",
+                "SDN_Isolate_Action_Triggered",
+            ]:
+                logger.warning(
+                    f"Nhận cảnh báo runtime security: {alert_name}. "
+                    "Dashboard/Alertmanager đã ghi nhận sự kiện."
+                )
+                triggered_actions.append(f"logged:{alert_name}")
+
+            # 2. Model quality alerts: trigger retrain
+            elif alert_name in ["Low_Reward_Detected", "DQN_Reward_Drop"]:
+                logger.warning(f"Phát hiện {alert_name}. Trigger Auto-Retrain DQN!")
+                job_name = create_training_job("DQN")
+
+                if job_name:
+                    triggered_actions.append(f"retrain:DQN:{job_name}")
+                else:
+                    triggered_actions.append("retrain:DQN:failed")
+
+            elif alert_name == "PPO_Reward_Drop":
+                logger.warning("Phát hiện PPO_Reward_Drop. Trigger Auto-Retrain PPO!")
+                job_name = create_training_job("PPO")
+
+                if job_name:
+                    triggered_actions.append(f"retrain:PPO:{job_name}")
+                else:
+                    triggered_actions.append("retrain:PPO:failed")
+
+            # 3. Promote model
+            elif alert_name == "Staging_Outperforms_Production":
+                logger.warning("Shadow Model thắng! Trigger Auto-Promote!")
+                threading.Thread(
+                    target=run_promote_pipeline,
+                    daemon=True
+                ).start()
+                triggered_actions.append("promote")
+
+            else:
+                logger.info(f"Alert chưa có action mapping: {alert_name}")
+                triggered_actions.append(f"ignored:{alert_name}")
+
+        return jsonify({
+            "status": "triggered",
+            "actions": triggered_actions
+        }), 202
+
     except Exception as e:
-        logger.error(f"Error processing alert: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception(f"Webhook error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint"""
-    return jsonify({'status': 'healthy'}), 200
+    return jsonify({'status': 'healthy'})
 
-@app.route('/metrics', methods=['GET'])
+@app.route("/metrics", methods=["GET"])
 def metrics():
-    """Prometheus metrics endpoint"""
-    return generate_latest()
-
-@app.route('/', methods=['GET'])
-
-def index():
-    """Root endpoint"""
-    return jsonify({
-        'service': 'MLOps Auto-Trigger',
-        'version': '1.0.0',
-        'endpoints': {
-            '/webhook': 'POST - Receive alerts from AlertManager',
-            '/health': 'GET - Health check',
-            '/metrics': 'GET - Prometheus metrics',
-            '/': 'GET - This endpoint'
-        }
-    }), 200
-
-@app.errorhandler(404)
-def not_found(error):
-    """Handle 404 errors"""
-    logger.warning(f"Route not found: {request.path}")
-    return jsonify({'error': 'Not found', 'path': request.path}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    """Handle 500 errors"""
-    logger.error(f"Internal server error: {error}")
-    return jsonify({'error': 'Internal server error'}), 500
+    return generate_latest(), 200, {"Content-Type": "text/plain; version=0.0.4"}
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5001))
-    host = os.getenv('HOST', '0.0.0.0')
-    debug = os.getenv('DEBUG', 'False').lower() == 'true'
-    
-    logger.info(f"Starting MLOps Auto-Trigger service on {host}:{port}")
-    app.run(host=host, port=port, debug=debug)
+    app.run(host='0.0.0.0', port=port)

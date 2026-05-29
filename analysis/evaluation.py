@@ -24,7 +24,7 @@ def safe_read(path):
     if os.path.exists(path):
         return pd.read_csv(path)
     else:
-        print(f"⚠ Không tìm thấy file: {path}")
+        print(f"Không tìm thấy file: {path}")
         return None
 
 

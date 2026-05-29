@@ -12,59 +12,55 @@ rule_files:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets:
-            - alertmanager:9093
+        - targets: ["alertmanager:9093"]
 
 # Scrape configurations
 scrape_configs:
   # Prometheus itself
   - job_name: "prometheus"
     static_configs:
-      - targets: [ "localhost:9090" ]
+      - targets: ["localhost:9090"]
 
   # ONOS Controller
-  - job_name: "onos"
-    static_configs:
-      - targets: [ "controller:8181" ]
-    metrics_path: "/onos/v1/metrics"
-    basic_auth:
-      username: "onos"
-      password: "rocks"
+  # - job_name: "onos"
+  #   static_configs:
+  #     - targets: ["controller:8181"]
+  #   metrics_path: "/onos/v1/network/configuration"
+  #   basic_auth:
+  #     username: "onos"
+  #     password: "rocks"
 
-  # MLflow
-  - job_name: "mlflow"
+  # Cấu hình "cào" dữ liệu từ quá trình huấn luyện DQN (Container rl-agent-dqn)
+  - job_name: "rl-agent-dqn"
     static_configs:
-      - targets: [ "mlflow:5000" ]
+      # Sửa tên host thành 'rl-agent-dqn' và cổng '9002'
+      - targets: ["rl-agent-dqn:9002"]
 
-  # DQN Agent (Prometheus metrics)
-  - job_name: "dqn-agent"
+  # Cấu hình "cào" dữ liệu từ quá trình huấn luyện PPO (Container rl-agent-ppo)
+  - job_name: "rl-agent-ppo"
     static_configs:
-      - targets: [ "rl-agent-dqn:9100" ]
-    scrape_interval: 10s
+      # Sửa tên host thành 'rl-agent-ppo' và cổng '9003'
+      - targets: ["rl-agent-ppo:9003"]
 
-  # PPO Agent (Prometheus metrics)
-  - job_name: "ppo-agent"
+  # Cấu hình "cào" dữ liệu từ quá trình dự đoán (Inference) của DQN
+  - job_name: "rl-serving-dqn"
     static_configs:
-      - targets: [ "rl-agent-ppo:9101" ]
-    scrape_interval: 10s
+      - targets: ["rl-serving-dqn:9002"]
 
-  # Control Loop (Runtime metrics)
+  - job_name: "rl-serving-ppo"
+    static_configs:
+      - targets: ["rl-serving-ppo:9003"]
+
   - job_name: "control_loop"
     static_configs:
-      - targets: [ "control_loop:8000" ]
+      - targets: ["control-loop:9100"]
     scrape_interval: 10s
 
-  - job_name: 'sdn-defense-agent'
+  - job_name: "sdn-defense-agent"
     scrape_interval: 2s
     static_configs:
-      - targets: ['sdn-defense-agent:8000']
+      - targets: ["sdn-defense-agent:8000"]
 
-  - job_name: 'rl-agent-dqn'
-    scrape_interval: 2s
+  - job_name: "auto-trigger"
     static_configs:
-      - targets: ['rl-agent-dqn:9000']
-
-  - job_name: 'rl-agent-ppo'
-    scrape_interval: 2s
-    static_configs:
-      - targets: ['rl-agent-ppo:9001']
+      - targets: ["auto-trigger:5001"]

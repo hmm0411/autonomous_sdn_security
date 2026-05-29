@@ -168,7 +168,7 @@ with col_info:
         else:
             st.warning("**No Defense Active.** Hệ thống đang chịu tải nặng.")
     else:
-        st.write("✅ Hệ thống hoạt động ổn định. Lưu lượng bình thường.")
+        st.write("Hệ thống hoạt động ổn định. Lưu lượng bình thường.")
         
     st.divider()
     st.markdown("#### Real-time Packet Rate")
@@ -192,7 +192,7 @@ with st.expander("RL Training Pipeline & Data Flow", expanded=False):
         st.error(f"Error occurred while fetching training logs: {e}")
 
 
-    st.markdown("### 📜 Security Event Logs (Lịch sử đánh chặn)")
+    st.markdown("### Security Event Logs (Lịch sử đánh chặn)")
     if not history_df.empty:
         # Lọc ra những dòng có tấn công (level != NORMAL) để show
         attack_logs = history_df[history_df['level'] != "NORMAL"].tail(5)[['packet_rate', 'flow_count', 'level', 'action_name']]

@@ -8,16 +8,16 @@ EPS_START = 1.0
 EPS_END = 0.05
 EPS_DECAY = 4000
 
-STATE_DIM = 9
+STATE_DIM = 8
 ACTION_DIM = 5
 
-MAX_EPISODES = 5000
+MAX_EPISODES = 3000
 MAX_STEPS = 1000
-#MAX_EPISODES = 100
-#MAX_STEPS = 20
+# MAX_EPISODES = 30
+# MAX_STEPS = 500
 WINDOW_SIZE = 50
 
-clip_eps = 0.15
-entropy_coef = 0.02
+clip_eps = 0.10
+entropy_coef = 0.08
 value_coef = 0.5
 LR_PPO = 1e-4
