@@ -3,7 +3,7 @@ name: Deploy NT549
 on:
   push:
     branches:
-      - nt549
+      - nt549-rl
   workflow_dispatch:
 
 concurrency:

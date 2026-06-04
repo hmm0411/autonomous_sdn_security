@@ -37,7 +37,7 @@ try:
     logger.info("[+] Đã load cấu hình Kubernetes thành công.")
 except Exception as e:
     job_api = None
-    logger.exception(f"[-] Lỗi load cấu hình K8s: {e}")
+    logger.exception(f"[-] Lỗi load cấu hình K3s: {e}")
 
 NAMESPACE = "sdn-security"
 
@@ -139,7 +139,7 @@ def create_training_job(model_name):
         with open(SA_TOKEN_PATH, "r") as f:
             token = f.read().strip()
 
-        url = f"{K8S_API_SERVER}/apis/batch/v1/namespaces/{NAMESPACE}/jobs"
+        url = f"{K3S_API_SERVER}/apis/batch/v1/namespaces/{NAMESPACE}/jobs"
 
         headers = {
             "Authorization": f"Bearer {token}",

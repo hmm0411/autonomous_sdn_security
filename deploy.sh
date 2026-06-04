@@ -36,9 +36,9 @@ python3 - <<'PY'
 import yaml
 
 files = [
-    "k8s/base.yaml",
-    "k8s/serving.yaml",
-    "k8s/monitoring-jobs.yaml",
+    "k3s/base.yaml",
+    "k3s/serving.yaml",
+    "k3s/monitoring-jobs.yaml",
 ]
 
 for path in files:
@@ -57,9 +57,9 @@ grep -R "alerts_received_total" mlops/main.py
 
 echo ""
 echo "[5/9] Apply Kubernetes manifests..."
-kubectl apply -f k8s/base.yaml
-kubectl apply -f k8s/serving.yaml
-kubectl apply -f k8s/monitoring-jobs.yaml
+kubectl apply -f k3s/base.yaml
+kubectl apply -f k3s/serving.yaml
+kubectl apply -f k3s/monitoring-jobs.yaml
 
 echo ""
 echo "[6/9] Update Grafana dashboard ConfigMap..."
