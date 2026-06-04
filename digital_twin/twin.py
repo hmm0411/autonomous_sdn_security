@@ -1,29 +1,52 @@
-import numpy as np
+import os
+
 import joblib
+import numpy as np
+
 
 class DigitalTwin:
-    def __init__(self, model_path="../../models/surrogate_model.pkl"):
+    """
+    Digital Twin surrogate model.
+
+    Input:
+      X = [state_8, action]
+      shape = 9 features
+
+    Output:
+      [next_latency, next_packet_loss]
+    """
+
+    def __init__(self, model_path="models/surrogate_model.pkl"):
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(
+                f"Surrogate model not found: {model_path}. "
+                f"Run: python3 -m digital_twin.train_surrogate first."
+            )
+
+        self.model_path = model_path
         self.model = joblib.load(model_path)
-        self.current_state = None
 
-    def update_state(self, state):
-        # Đảm bảo state là một list/array có 9 phần tử
-        self.current_state = np.array(state)
+        print(f"[TWIN] Loaded surrogate model: {model_path}", flush=True)
 
-    def simulate(self, action):
-        if self.current_state is None:
-            return None
+    def simulate(self, state, action):
+        state_arr = np.asarray(state, dtype=float).reshape(-1)
 
-        # Ghép 9 features của state với 1 action -> 10 features khớp với lúc train
-        x = np.concatenate([self.current_state, [action]])
-        
-        # Reshape thành mảng 2D cho sklearn predict
-        prediction = self.model.predict(x.reshape(1, -1))[0]
+        if len(state_arr) != 8:
+            raise ValueError(
+                f"DigitalTwin expects 8-dim state, got {len(state_arr)}"
+            )
 
-        predicted_latency = prediction[0]
-        predicted_loss = prediction[1]
+        x = np.concatenate(
+            [
+                state_arr,
+                np.array([float(action)], dtype=float),
+            ],
+            axis=0,
+        ).reshape(1, -1)
+
+        prediction = self.model.predict(x)[0]
 
         return {
-            "latency": predicted_latency,
-            "packet_loss": predicted_loss
+            "latency": float(prediction[0]),
+            "packet_loss": float(prediction[1]),
         }

@@ -1,22 +1,38 @@
-# safety.py
+import os
+
+
+LATENCY_THRESHOLD = float(os.getenv("TWIN_LATENCY_THRESHOLD", "150.0"))
+PACKET_LOSS_THRESHOLD = float(os.getenv("TWIN_PACKET_LOSS_THRESHOLD", "0.10"))
+
 
 def validate(predicted_qos):
     """
-    Kiểm tra xem hành động RL đề xuất có gây sập mạng hoặc 
-    giảm chất lượng dịch vụ (QoS) quá mức cho phép không.
+    Safety validator cho Digital Twin.
+
+    Return:
+      True  = action an toàn
+      False = action nên bị reject/fallback
     """
     if predicted_qos is None:
         return False
-        
-    LATENCY_THRESHOLD = 150.0  # Ví dụ: Không cho phép trễ quá 150ms
-    PACKET_LOSS_THRESHOLD = 0.1 # Ví dụ: Không cho phép rớt gói quá 10%
-    
-    if predicted_qos["latency"] > LATENCY_THRESHOLD:
-        print(f"Twin CẢNH BÁO: Độ trễ dự đoán quá cao ({predicted_qos['latency']}ms)")
+
+    latency = float(predicted_qos.get("latency", 999999.0))
+    packet_loss = float(predicted_qos.get("packet_loss", 1.0))
+
+    if latency > LATENCY_THRESHOLD:
+        print(
+            f"[TWIN_REJECT] latency too high: "
+            f"{latency:.4f} > {LATENCY_THRESHOLD}",
+            flush=True,
+        )
         return False
-        
-    if predicted_qos["packet_loss"] > PACKET_LOSS_THRESHOLD:
-        print(f"Twin CẢNH BÁO: Tỉ lệ rớt gói dự đoán quá cao ({predicted_qos['packet_loss']})")
+
+    if packet_loss > PACKET_LOSS_THRESHOLD:
+        print(
+            f"[TWIN_REJECT] packet_loss too high: "
+            f"{packet_loss:.4f} > {PACKET_LOSS_THRESHOLD}",
+            flush=True,
+        )
         return False
-        
+
     return True
