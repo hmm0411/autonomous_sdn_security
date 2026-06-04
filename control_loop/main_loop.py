@@ -1,7 +1,11 @@
 import time
 import numpy as np
 
+<<<<<<< Updated upstream
 from llm.prompt_builder import PromptBuilder
+=======
+
+>>>>>>> Stashed changes
 from rl_engine.state_builder import StateBuilder
 from control_loop.controller_client import execute_action
 from rl_engine.reward import Reward
@@ -75,6 +79,7 @@ while True:
         print(f"[BASELINE] action={action_base} | reward={reward_base}")
 
         # ===== LLM COGNITION LAYER =====
+<<<<<<< Updated upstream
         # Trigger LLM explanation only for non-trivial defense actions
         if LLM_ENABLED and action in LLM_TRIGGER_ACTIONS:
             try:
@@ -94,6 +99,46 @@ while True:
             except Exception as llm_err:
                 print(f"[LLM] Error during cognition: {llm_err}")
 
+=======
+        print(f"[DEBUG] LLM_ENABLED={LLM_ENABLED}")
+        print(f"[DEBUG] action={action}")
+
+        if LLM_ENABLED and action in LLM_TRIGGER_ACTIONS:
+            try:
+                state_dict = state_vector_to_dict(state)
+
+                qos = {
+                    "latency": float(state[4]),
+                    "packet_loss": float(state[5]),
+                    "throughput": None,
+                }
+
+                attack_context = raw.get("attack_type", None)
+
+                print("[DEBUG] Calling explain_decision")
+
+                explanation = explain_decision(
+                    state_dict,
+                    action,
+                    qos,
+                    attack_context
+                )
+
+                print("[DEBUG] LLM returned")
+
+                print("\nLLM EXPLANATION")
+                print(explanation)
+
+                log_decision(
+                    state_dict,
+                    action,
+                    qos,
+                    explanation
+                )
+
+            except Exception as llm_err:
+                print(f"[LLM] Error during cognition: {llm_err}")
+>>>>>>> Stashed changes
         time.sleep(SLEEP_TIME)
 
     except Exception as e:

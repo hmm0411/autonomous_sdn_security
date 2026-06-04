@@ -145,6 +145,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - ONOS_URL=http://controller:8181/onos/v1
+      - HF_TOKEN=${HF_TOKEN}
         
   # Prometheus
   prometheus:
