@@ -1,13 +1,13 @@
 import csv
 import os
 import time
-from typing import Optional, Callable, cast
+from typing import Any, Callable, Optional, cast
 
 import requests
 
 from rl_engine.state_builder import StateBuilder
 from rl_engine.reward import Reward
-from typing import Any, Callable, Optional
+
 from control_loop.controller_client import execute_action
 from control_loop.rl_client import get_action
 from control_loop.metrics import update_metrics, ensure_metrics_server
@@ -18,13 +18,17 @@ STATE_DIM = 8
 
 SLEEP_TIME = float(os.getenv("SLEEP_TIME", "2"))
 MODE = os.getenv("MODE", "collect").lower()
-# collect | no_defense | rule | rl | rl_twin | rl_llm | full
+MODEL_TYPE = os.getenv("MODEL_TYPE", "dqn").lower()
 
 ACTION_DRY_RUN = os.getenv("ACTION_DRY_RUN", "true").lower() == "true"
 
+# Bật fallback rule khi RL bị bias action=0.
+# Đây là safety guard/hybrid layer, giúp hệ thống vẫn phản ứng khi model chưa học tốt.
+RULE_FALLBACK = os.getenv("RULE_FALLBACK", "true").lower() == "true"
+
 LOG_PATH = os.getenv("RUNTIME_LOG", "logs/runtime_eval.csv")
 TRANSITION_PATH = os.getenv("TRANSITION_LOG", "logs/transition_log.csv")
-MODEL_TYPE = os.getenv("MODEL_TYPE", "dqn").lower()
+ATTACK_TYPE = os.getenv("ATTACK_TYPE", "unknown")
 
 ONOS_HEALTH = os.getenv(
     "ONOS_HEALTH",
@@ -41,8 +45,9 @@ reward_calc = Reward()
 ensure_metrics_server(9100)
 
 print(
-    f"AUTO CONTROL LOOP STARTED | MODE={MODE} | "
-    f"MODEL_TYPE={MODEL_TYPE} | DRY_RUN={ACTION_DRY_RUN}",
+    f"AUTO CONTROL LOOP STARTED | MODE={MODE} | MODEL_TYPE={MODEL_TYPE} | "
+    f"DRY_RUN={ACTION_DRY_RUN} | RULE_FALLBACK={RULE_FALLBACK} | "
+    f"ATTACK_TYPE={ATTACK_TYPE}",
     flush=True,
 )
 
@@ -79,31 +84,30 @@ except Exception as e:
 TWIN: Any = None
 TWIN_VALIDATE: Optional[Callable[[dict], bool]] = None
 
-if MODE in ("rl_twin", "full") and TWIN is not None and TWIN_VALIDATE is not None:
-            try:
-                pred = TWIN.simulate(state, final_action)
+if MODE in ("rl_twin", "full"):
+    try:
+        from digital_twin.twin import DigitalTwin
+        from digital_twin.safety import validate
 
-                pred_latency = float(pred.get("latency", 0.0))
-                pred_loss = float(pred.get("packet_loss", 0.0))
+        surrogate_path = os.getenv(
+            "SURROGATE_MODEL",
+            "models/surrogate_model.pkl"
+        )
 
-                validate_fn = cast(Callable[[dict], bool], TWIN_VALIDATE)
-                twin_safe = 1 if validate_fn(pred) else 0
+        TWIN = DigitalTwin(surrogate_path)
+        TWIN_VALIDATE = validate
 
-                if twin_safe == 0:
-                    print(
-                        f"[TWIN_REJECT] action={final_action} "
-                        f"pred_latency={pred_latency:.4f} "
-                        f"pred_loss={pred_loss:.4f} -> fallback no_action",
-                        flush=True,
-                    )
-                    final_action = 0
+        print(f"[TWIN] enabled | model={surrogate_path}", flush=True)
 
-            except Exception as e:
-                print(f"[TWIN_ERROR] {e}", flush=True)
-                twin_safe = 0
-                final_action = 0
+    except Exception as e:
+        print(f"[TWIN] disabled: {e}", flush=True)
+        TWIN = None
+        TWIN_VALIDATE = None
 
 
+# =========================================================
+# Helper
+# =========================================================
 def wait_http_service(name, url, auth=None):
     while True:
         try:
@@ -119,6 +123,7 @@ def wait_http_service(name, url, auth=None):
 
 def init_csv(path, header):
     parent = os.path.dirname(path)
+
     if parent:
         os.makedirs(parent, exist_ok=True)
 
@@ -127,7 +132,64 @@ def init_csv(path, header):
             csv.writer(f).writerow(header)
 
 
+def threat_score(raw):
+    """
+    Threat score dùng cho debug, rule và fallback.
+    State raw:
+    packet_rate, byte_rate, flow_count, flow_growth_rate,
+    src_ip_entropy, latency, packet_loss, controller_cpu
+    """
+    if raw is None:
+        return 0.0
+
+    pps = float(raw.get("packet_rate", 0.0) or 0.0)
+    flows = float(raw.get("flow_count", 0.0) or 0.0)
+    growth = abs(float(raw.get("flow_growth_rate", 0.0) or 0.0))
+    entropy = float(raw.get("src_ip_entropy", 0.0) or 0.0)
+    latency = float(raw.get("latency", 0.0) or 0.0)
+    loss = float(raw.get("packet_loss", 0.0) or 0.0)
+    cpu = float(raw.get("controller_cpu", 0.0) or 0.0)
+
+    score = 0.0
+
+    if pps > 500:
+        score += 1.0
+    if pps > 2000:
+        score += 1.0
+
+    if flows > 50:
+        score += 1.0
+    if flows > 150:
+        score += 1.0
+
+    if growth > 10:
+        score += 1.0
+    if growth > 50:
+        score += 1.0
+
+    if entropy > 1.5:
+        score += 1.0
+
+    if latency > 50:
+        score += 1.0
+    if latency > 120:
+        score += 1.0
+
+    if loss > 0.02:
+        score += 1.0
+    if loss > 0.10:
+        score += 1.0
+
+    if cpu > 60:
+        score += 1.0
+
+    return score
+
+
 def rule_action(raw):
+    """
+    Rule-based baseline đã hạ threshold để demo/evaluation thấy phản ứng.
+    """
     if raw is None:
         return 0
 
@@ -139,47 +201,65 @@ def rule_action(raw):
     loss = float(raw.get("packet_loss", 0.0) or 0.0)
     cpu = float(raw.get("controller_cpu", 0.0) or 0.0)
 
-    anomaly_score = 0
+    score = threat_score(raw)
 
-    if pps > 1000:
-        anomaly_score += 1
-    if flows > 150:
-        anomaly_score += 1
-    if growth > 30:
-        anomaly_score += 1
-    if entropy > 2.0:
-        anomaly_score += 1
-    if latency > 80:
-        anomaly_score += 1
-    if loss > 0.05:
-        anomaly_score += 1
-    if cpu > 80:
-        anomaly_score += 1
-
-    if anomaly_score >= 4:
+    # Severe case: ưu tiên block.
+    if pps > 5000 or loss > 0.20 or latency > 200 or growth > 200:
         return 1
-    if anomaly_score >= 2:
-        return 2
-    if entropy > 3.0 and flows > 80:
+
+    # Flow overflow/scan: redirect hoặc block nhẹ.
+    if growth > 50 or (entropy > 2.0 and flows > 50):
         return 3
+
+    # DDoS/traffic overload: limit bandwidth.
+    if pps > 500 or latency > 50 or loss > 0.02 or cpu > 60:
+        return 2
+
+    if score >= 3:
+        return 2
 
     return 0
 
 
 def choose_action(raw, state):
+    """
+    Return:
+      action_prod, action_staging, model_name, rl_action_raw, rule_action_raw
+    """
+    r_action = rule_action(raw)
+
     if MODE in ("collect", "no_defense"):
-        return 0, 0, "none"
+        return 0, 0, "none", 0, r_action
 
     if MODE == "rule":
-        action = rule_action(raw)
-        return action, action, "rule"
+        return r_action, r_action, "rule", 0, r_action
 
     action_prod, action_staging, model_name = get_action(
         state,
         model_type=MODEL_TYPE,
     )
 
-    return int(action_prod), int(action_staging), str(model_name).lower()
+    rl_action = int(action_prod)
+    action_prod = int(action_prod)
+    action_staging = int(action_staging)
+    model_name = str(model_name).lower()
+
+    # Hybrid safety guard:
+    # Nếu RL chọn no_action nhưng rule thấy threat rõ ràng, dùng rule để tránh action toàn 0.
+    if RULE_FALLBACK and MODE in ("rl", "rl_twin", "rl_llm", "full"):
+        score = threat_score(raw)
+
+        if action_prod == 0 and r_action != 0 and score >= 2:
+            print(
+                f"[RULE_FALLBACK] RL action=0 but threat_score={score:.2f}; "
+                f"use rule_action={r_action}",
+                flush=True,
+            )
+            action_prod = r_action
+            action_staging = r_action
+            model_name = f"{model_name}_guarded"
+
+    return action_prod, action_staging, model_name, rl_action, r_action
 
 
 def log_runtime(row):
@@ -187,6 +267,7 @@ def log_runtime(row):
         LOG_PATH,
         [
             "ts",
+            "attack_type",
             "mode",
             "model",
             "packet_rate",
@@ -197,6 +278,9 @@ def log_runtime(row):
             "latency",
             "packet_loss",
             "controller_cpu",
+            "threat_score",
+            "rl_action",
+            "rule_action",
             "action",
             "reward",
             "reward_staging",
@@ -253,6 +337,9 @@ def log_transition(prev_raw, action, next_raw, attack_type="unknown"):
         )
 
 
+# =========================================================
+# Wait dependencies
+# =========================================================
 wait_http_service(
     "ONOS",
     ONOS_HEALTH,
@@ -269,6 +356,9 @@ if MODE in ("rl", "rl_twin", "rl_llm", "full"):
         wait_http_service("RL DQN", "http://rl-serving-dqn:8000/health")
 
 
+# =========================================================
+# Main loop
+# =========================================================
 while True:
     try:
         raw = get_state()
@@ -287,12 +377,20 @@ while True:
             time.sleep(SLEEP_TIME)
             continue
 
-        action_prod, action_staging, model_name = choose_action(raw, state)
+        (
+            action_prod,
+            action_staging,
+            model_name,
+            rl_action_raw,
+            rule_action_raw,
+        ) = choose_action(raw, state)
 
         reward_prod = reward_calc.calculate(raw, action_prod)
         reward_staging = reward_calc.calculate(raw, action_staging)
 
-        final_action = action_prod
+        final_action = int(action_prod)
+
+        score = threat_score(raw)
 
         twin_safe = 1
         pred_latency = 0.0
@@ -300,14 +398,29 @@ while True:
         gap_latency = 0.0
         gap_loss = 0.0
 
-        if MODE in ("rl_twin", "full") and TWIN is not None:
+        print(
+            f"[ACTION_DEBUG] attack={ATTACK_TYPE} mode={MODE} model={model_name} "
+            f"rl={rl_action_raw} rule={rule_action_raw} final={final_action} "
+            f"score={score:.2f} pps={raw.get('packet_rate', 0.0):.2f} "
+            f"flows={raw.get('flow_count', 0.0):.2f} "
+            f"growth={raw.get('flow_growth_rate', 0.0):.2f} "
+            f"lat={raw.get('latency', 0.0):.2f} "
+            f"loss={raw.get('packet_loss', 0.0):.4f}",
+            flush=True,
+        )
+
+        # =========================
+        # Digital Twin validation
+        # =========================
+        if MODE in ("rl_twin", "full") and TWIN is not None and TWIN_VALIDATE is not None:
             try:
                 pred = TWIN.simulate(state, final_action)
 
                 pred_latency = float(pred.get("latency", 0.0))
                 pred_loss = float(pred.get("packet_loss", 0.0))
 
-                twin_safe = 1 if TWIN_VALIDATE(pred) else 0
+                validate_fn = cast(Callable[[dict], bool], TWIN_VALIDATE)
+                twin_safe = 1 if validate_fn(pred) else 0
 
                 if twin_safe == 0:
                     print(
@@ -323,11 +436,17 @@ while True:
                 twin_safe = 0
                 final_action = 0
 
+        # =========================
+        # Apply action
+        # =========================
         if ACTION_DRY_RUN:
             print(f"[DRY_RUN] would execute action={final_action}", flush=True)
         else:
             execute_action(final_action, raw=raw)
 
+        # =========================
+        # LLM explanation
+        # =========================
         if (
             MODE in ("rl_llm", "full")
             and LLM_ENABLED
@@ -349,7 +468,7 @@ while True:
                     state_dict,
                     final_action,
                     qos,
-                    raw.get("attack_type", None),
+                    raw.get("attack_type", ATTACK_TYPE),
                 )
 
                 print(
@@ -363,21 +482,22 @@ while True:
             except Exception as e:
                 print(f"[LLM_ERROR] {e}", flush=True)
 
+        # =========================
+        # Observe next state
+        # =========================
         time.sleep(0.5)
         next_raw = get_state()
 
         if next_raw is not None:
-            if pred_latency:
-                gap_latency = abs(float(next_raw.get("latency", 0.0)) - pred_latency)
-
-            if pred_loss:
-                gap_loss = abs(float(next_raw.get("packet_loss", 0.0)) - pred_loss)
+            # Không dùng if pred_latency nữa, vì pred=0 cũng cần tính gap.
+            gap_latency = abs(float(next_raw.get("latency", 0.0)) - pred_latency)
+            gap_loss = abs(float(next_raw.get("packet_loss", 0.0)) - pred_loss)
 
         log_transition(
             raw,
             final_action,
             next_raw,
-            os.getenv("ATTACK_TYPE", "unknown"),
+            ATTACK_TYPE,
         )
 
         update_metrics(
@@ -393,6 +513,7 @@ while True:
         log_runtime(
             [
                 time.time(),
+                ATTACK_TYPE,
                 MODE,
                 model_name,
                 raw.get("packet_rate", 0.0),
@@ -403,6 +524,9 @@ while True:
                 raw.get("latency", 0.0),
                 raw.get("packet_loss", 0.0),
                 raw.get("controller_cpu", 0.0),
+                score,
+                rl_action_raw,
+                rule_action_raw,
                 final_action,
                 reward_prod,
                 reward_staging,
@@ -415,7 +539,7 @@ while True:
         )
 
         print(
-            f"[LOOP] mode={MODE} model={model_name} "
+            f"[LOOP] attack={ATTACK_TYPE} mode={MODE} model={model_name} "
             f"action={final_action} reward={reward_prod:.4f} "
             f"twin_safe={twin_safe} gap_lat={gap_latency:.4f}",
             flush=True,
