@@ -102,6 +102,10 @@ def call_llm_json(
 
     raw_text = result["text"]
     clean_text = re.sub(r"```(?:json)?|```", "", raw_text).strip()
+    match = re.search(r"\{.*\}", clean_text, re.DOTALL)
+
+    if match:
+        clean_text = match.group(0)
 
     try:
         parsed = json.loads(clean_text)

@@ -131,7 +131,7 @@ def evaluate_record(rec: dict, scenario: str, use_llm_judge: bool) -> dict:
 
     # ── Sinh explanation ──────────────────────────────────────────────────────
     prompt     = build_explanation_prompt(state_dict, action_id, qos, attack_ctx)
-    llm_result = call_llm(prompt, max_tokens=350)
+    llm_result = call_llm(prompt, max_tokens=500)
     llm_text   = llm_result["text"]
     latency_ms = llm_result["latency_ms"]
 

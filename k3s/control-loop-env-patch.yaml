@@ -16,7 +16,7 @@ spec:
             - name: STATE_DIM
               value: "8"
             - name: MODE
-              value: "collect"
+              value: "rl"
             - name: MODEL_TYPE
               value: "dqn"
             - name: ACTION_DRY_RUN

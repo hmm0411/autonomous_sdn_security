@@ -8,6 +8,7 @@ import torch
 import joblib
 from prometheus_client import start_http_server, Counter, Histogram
 from mlflow.artifacts import download_artifacts
+from rl_engine.agent.dqn_agent import DQNAgent
 
 app = Flask(__name__)
 
@@ -74,15 +75,27 @@ def load_models():
     scaler = load_scaler()
 
     try:
-        model_prod = mlflow.pytorch.load_model(model_uri)
-        model_prod.eval()
-        print(f"[+] Đã load {model_type.upper()} PRODUCTION từ MLflow")
+        if model_type == "dqn":
+            agent = DQNAgent(
+                state_dim=8,
+                action_dim=5
+            )
+
+            agent.load("/app/models/dqn_model.pth")
+
+            model_prod = agent.q_net
+            model_prod.eval()
+
+            print("[+] Loaded DQN from /app/models/dqn_model.pth")
+
+        else:
+            model_prod = mlflow.pytorch.load_model(model_uri)
+            model_prod.eval()
+
     except Exception as e:
-        print(f"[!] Không load được model Production từ MLflow: {e}")
-        print("[!] Dùng fallback torch.nn.Linear(8, 5) để API không crash.")
+        print(f"[!] MODEL LOAD FAILED: {e}")
         model_prod = torch.nn.Linear(8, 5)
         model_prod.eval()
-
     try:
         model_staging = mlflow.pytorch.load_model(f"models:/{registered_model_name}/Staging")
         model_staging.eval()
