@@ -53,8 +53,8 @@ if not IS_CI:
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
     os.environ["MLFLOW_S3_IGNORE_TLS"] = "true"
     
-    # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow.sdn-security.svc.cluster.local:5000")
+    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+    # mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow.sdn-security.svc.cluster.local:5000")
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("SDN_Autonomous_Security")
 

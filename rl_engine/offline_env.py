@@ -71,8 +71,11 @@ class OfflineSDNEnv:
         controller_cpu = float(row["controller_cpu"])
         
         # ĐÂY LÀ NHÃN: Chỉ dùng để tính đúng/sai, không nằm trong State
-        attack_indicator = float(row["attack_indicator"])
-        attack_label = int(round(attack_indicator * 5))
+        #attack_indicator = float(row["attack_indicator"])
+        #attack_label = int(round(attack_indicator * 5))
+
+        # ĐÂY LÀ NHÃN THẬT TỪ DATASET
+        attack_label = int(row["label"])
 
         # QoS penalty nhỏ thôi, tránh làm reward luôn âm nặng
         qos_penalty = (
