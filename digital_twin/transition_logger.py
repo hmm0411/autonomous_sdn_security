@@ -9,20 +9,19 @@ class TransitionLogger:
     def _init_file(self):
         if not os.path.exists(self.file_path):
             header = [
-                "packet_rate", "byte_rate", "flow_count", "src_ip_entropy", 
-                "latency", "packet_loss", "queue_length", "controller_cpu", "attack_indicator",
+                "packet_rate", "byte_rate", "flow_count", "flow_growth_rate", "src_ip_entropy", 
+                "latency", "packet_loss", "controller_cpu",
                 "action", "next_latency", "next_packet_loss", "attack_type"
             ]
             with open(self.file_path, "w", newline="") as f:
                 csv.writer(f).writerow(header)
 
     def log(self, state, action, next_state, attack_type):
-        # state có 9 phần tử
-        # next_state cũng có 9 phần tử, ta lấy phần tử index 4 (latency) và 5 (packet_loss)
-        row = list(state) + \
+        FIELDS = ["packet_rate","byte_rate","flow_count","flow_growth_rate",
+              "src_ip_entropy","latency","packet_loss","controller_cpu"]
+        row = [state.get(f, 0.0) for f in FIELDS] + \
               [action] + \
-              [next_state[4], next_state[5]] + \
+              [next_state.get("latency", 0.0), next_state.get("packet_loss", 0.0)] + \
               [attack_type]
-
         with open(self.file_path, "a", newline="") as f:
             csv.writer(f).writerow(row)

@@ -167,8 +167,14 @@ def rule_action(raw):
 
 
 def choose_action(raw, state):
-    if MODE in ("collect", "no_defense"):
+    if MODE == "no_defense":
         return 0, 0, "none"
+
+    if MODE == "collect":
+        import random
+        # Random để dataset có đủ các action
+        action = random.randint(0, 4)
+        return action, action, "random"
 
     if MODE == "rule":
         action = rule_action(raw)
