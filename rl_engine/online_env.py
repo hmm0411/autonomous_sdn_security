@@ -12,7 +12,7 @@ class OnlineSDNEnv:
 
     def __init__(
         self,
-        controller_url="http://35.240.135.171:8181/onos/v1",
+        controller_url="http://controller:8181/onos/v1",
         username="onos",
         password="rocks",
         polling_interval=2
@@ -37,7 +37,6 @@ class OnlineSDNEnv:
     # ==========================================
     def reset(self):
         self.previous_action = 0
-        self.builder.prev_action = 0
         self.prev_packets = 0
         self.prev_bytes = 0
         self.prev_time = time.time()
@@ -69,7 +68,7 @@ class OnlineSDNEnv:
         )
 
         self.previous_action = action
-        self.builder.prev_action = action
+        # self.builder.prev_action = action
 
         done = False
 
@@ -92,6 +91,14 @@ class OnlineSDNEnv:
             )
 
         raw = self.collector.get_raw_state()
+
+        if raw is None:
+            print("Cảnh báo: Không kết nối được ONOS! Dùng state mặc định.")
+            raw = {
+                "packet_rate": 0.0, "byte_rate": 0.0, "flow_count": 0,
+                "flow_growth_rate": 0.0, "src_ip_entropy": 0.0,
+                "latency": 0.0, "packet_loss": 0.0, "controller_cpu": 0.0
+            }
         state = self.builder.build(raw)
 
         print(

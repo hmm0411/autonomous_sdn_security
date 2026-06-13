@@ -1,0 +1,831 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sdn-security
+---
+# 1. TÀI KHOẢN K8S CHO AUTO-TRIGGER (Để có quyền Retrain/Rollback)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: auto-trigger-sa
+  namespace: sdn-security
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: job-creator-role
+  namespace: sdn-security
+rules:
+  - apiGroups: ["batch", "apps"]
+    resources: ["jobs", "deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: job-creator-binding
+  namespace: sdn-security
+subjects:
+  - kind: ServiceAccount
+    name: auto-trigger-sa
+roleRef:
+  kind: Role
+  name: job-creator-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# 2. BẢO MẬT (SECRETS)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: sdn-security
+type: Opaque
+stringData:
+  ACCESS_KEY: "minioadmin"
+  SECRET_KEY: "minioadmin"
+---
+# 3. CẤU HÌNH ALERTMANAGER (Gọi Auto-Trigger khi có lỗi)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: sdn-security
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: [ "alertname", "cluster", "service" ]
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      receiver: "default"
+      routes:
+        - match: { severity: critical }
+          receiver: "critical"
+        - match: { severity: warning }
+          receiver: "warning"
+    receivers:
+      - name: "default"
+        webhook_configs:
+          - url: "http://auto-trigger:5001/alert-webhook"
+            send_resolved: true
+      - name: "critical"
+        webhook_configs:
+          - url: "http://auto-trigger:5001/alert-webhook"
+            send_resolved: true
+      - name: "warning"
+        webhook_configs:
+          - url: "http://auto-trigger:5001/alert-webhook"
+            send_resolved: true
+---
+# 4. CẤU HÌNH PROMETHEUS VÀ LUẬT CẢNH BÁO
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: sdn-security
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        monitor: "sdn-rl-monitor"
+
+    rule_files:
+      - "alert.rules.yml"
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - "alertmanager:9093"
+
+    scrape_configs:
+      - job_name: "prometheus"
+        static_configs:
+          - targets:
+              - "localhost:9090"
+
+      - job_name: "rl-serving-dqn"
+        static_configs:
+          - targets:
+              - "rl-serving-dqn:9002"
+
+      - job_name: "rl-serving-ppo"
+        static_configs:
+          - targets:
+              - "rl-serving-ppo:9003"
+
+      - job_name: "control_loop"
+        scrape_interval: 10s
+        static_configs:
+          - targets:
+              - "control-loop:9100"
+
+      - job_name: "sdn-defense-agent"
+        scrape_interval: 2s
+        static_configs:
+          - targets:
+              - "sdn-defense-agent:8000"
+
+      - job_name: "auto-trigger"
+        static_configs:
+          - targets:
+              - "auto-trigger:5001"
+  alert.rules.yml: |
+    groups:
+      - name: sdn_runtime_alerts
+        rules:
+          - alert: SDN_Critical_Attack_Detected
+            expr: sdn_current_score > 70
+            for: 15s
+            labels:
+              severity: critical
+            annotations:
+              summary: "SDN Defense Agent phát hiện tấn công nguy hiểm"
+              description: "Threat score hiện tại là {{ $value }}. Hệ thống đang ở mức CRITICAL."
+
+          - alert: SDN_Warning_Attack_Detected
+            expr: sdn_current_score > 30 and sdn_current_score <= 70
+            for: 15s
+            labels:
+              severity: warning
+            annotations:
+              summary: "SDN Defense Agent phát hiện dấu hiệu bất thường"
+              description: "Threat score hiện tại là {{ $value }}. Hệ thống đang ở mức WARNING."
+
+          - alert: SDN_Block_Action_Triggered
+            expr: sdn_rl_action == 1
+            for: 10s
+            labels:
+              severity: critical
+            annotations:
+              summary: "Defense action BLOCK đã được kích hoạt"
+              description: "RL action hiện tại là BLOCK."
+
+          - alert: SDN_Isolate_Action_Triggered
+            expr: sdn_rl_action == 4
+            for: 10s
+            labels:
+              severity: critical
+            annotations:
+              summary: "Defense action ISOLATE đã được kích hoạt"
+              description: "RL action hiện tại là ISOLATE."
+
+          - alert: Control_Loop_Down
+            expr: up{job="control_loop"} == 0
+            for: 30s
+            labels:
+              severity: critical
+            annotations:
+              summary: "Control Loop đang DOWN"
+
+          - alert: RL_Serving_DQN_Down
+            expr: up{job="rl-serving-dqn"} == 0
+            for: 30s
+            labels:
+              severity: critical
+            annotations:
+              summary: "RL Serving DQN đang DOWN"
+
+          - alert: RL_Serving_PPO_Down
+            expr: up{job="rl-serving-ppo"} == 0
+            for: 30s
+            labels:
+              severity: critical
+            annotations:
+              summary: "RL Serving PPO đang DOWN"
+
+          - alert: Auto_Trigger_Down
+            expr: up{job="auto-trigger"} == 0
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: "Auto-trigger đang DOWN"
+
+          - alert: Staging_Outperforms_Production
+            expr: avg_over_time(rl_reward{stage="staging"}[3m]) > (avg_over_time(rl_reward{stage="production"}[3m]) + 0.5)
+            for: 2m
+            labels:
+              severity: critical
+              action: promote_model
+            annotations:
+              summary: "Model Staging đang hoạt động tốt hơn Production"
+              description: "Reward của Staging cao hơn Production. Có thể promote model."
+---
+# 5. CẤU HÌNH GRAFANA (Nguồn dữ liệu & Dashboard)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: sdn-security
+data:
+  datasource.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: true
+      - name: Alertmanager
+        type: alertmanager
+        access: proxy
+        url: http://alertmanager:9093
+        isDefault: false
+        editable: true
+  dashboard.yml: |
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: 'SDN'
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: sdn-security
+data:
+  sdn_rl_dashboard.json: |
+    {
+      "title": "SDN RL Observability Dashboard",
+      "uid": "sdn-rl-observability",
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "5s",
+      "tags": ["SDN", "RL", "MLOps", "Prometheus"],
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "Runtime Reward - Production vs Staging",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rl_reward{stage=\"production\"}",
+              "legendFormat": "{{model_type}} Production",
+              "refId": "A"
+            },
+            {
+              "expr": "rl_reward{stage=\"staging\"}",
+              "legendFormat": "{{model_type}} Staging",
+              "refId": "B"
+            }
+          ],
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "Runtime Latency",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rl_latency",
+              "legendFormat": "{{model_type}} latency",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "Flow Count",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rl_flow_count",
+              "legendFormat": "{{model_type}} flow count",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "RL Action History",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rl_action",
+              "legendFormat": "{{model_type}} action",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": -0.5,
+              "max": 4.5,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": { "text": "0: No Action" },
+                    "1": { "text": "1: Block" },
+                    "2": { "text": "2: Limit Bandwidth" },
+                    "3": { "text": "3: Redirect" },
+                    "4": { "text": "4: Isolate" }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Packet Rate",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rl_packet_rate",
+              "legendFormat": "{{model_type}} packet rate",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "pps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Packet Loss",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rl_packet_loss",
+              "legendFormat": "{{model_type}} packet loss",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Controller CPU",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rl_controller_cpu",
+              "legendFormat": "{{model_type}} controller cpu",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Serving Requests",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rate(serving_requests_total[1m])",
+              "legendFormat": "{{model}} request/s",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Serving Latency",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rate(serving_latency_seconds_sum[1m]) / rate(serving_latency_seconds_count[1m])",
+              "legendFormat": "{{model}} avg latency",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 10,
+          "type": "stat",
+          "title": "Service Status",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "up{job=\"rl-serving-dqn\"}",
+              "legendFormat": "DQN Serving",
+              "refId": "A"
+            },
+            {
+              "expr": "up{job=\"rl-serving-ppo\"}",
+              "legendFormat": "PPO Serving",
+              "refId": "B"
+            },
+            {
+              "expr": "up{job=\"control_loop\"}",
+              "legendFormat": "Control Loop",
+              "refId": "C"
+            }
+          ],
+          "gridPos": { "x": 12, "y": 32, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": { "text": "DOWN" },
+                    "1": { "text": "UP" }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto"
+          }
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "Training Loss History",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "training_loss{agent=\"dqn\"}",
+              "legendFormat": "DQN Loss",
+              "refId": "A"
+            },
+            {
+              "expr": "training_loss{agent=\"ppo\"}",
+              "legendFormat": "PPO Loss",
+              "refId": "B"
+            }
+          ],
+          "gridPos": { "x": 0, "y": 40, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 12,
+          "type": "timeseries",
+          "title": "DQN Epsilon",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rl_epsilon",
+              "legendFormat": "DQN Epsilon",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "x": 12, "y": 40, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "max": 1
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        },
+        {
+          "id": 13,
+          "type": "gauge",
+          "title": "Current Threat Level",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "threat_level",
+              "legendFormat": "Threat Level",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "x": 0, "y": 48, "w": 8, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 50 },
+                  { "color": "red", "value": 80 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "id": 14,
+          "type": "timeseries",
+          "title": "Training Reward Mean",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "episode_reward_mean{agent=\"dqn\"}",
+              "legendFormat": "DQN Mean Reward",
+              "refId": "A"
+            },
+            {
+              "expr": "episode_reward_mean{agent=\"ppo\"}",
+              "legendFormat": "PPO Mean Reward",
+              "refId": "B"
+            }
+          ],
+          "gridPos": { "x": 8, "y": 48, "w": 16, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          }
+        }
+      ],
+      "time": {
+        "from": "now-15m",
+        "to": "now"
+      },
+      "templating": {
+        "list": []
+      },
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: s3, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: s3 }
+  ports:
+    - name: api
+      port: 9005
+      targetPort: 9005
+      nodePort: 30005
+    - name: console
+      port: 9001
+      targetPort: 9001
+      nodePort: 30001
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mlflow, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: mlflow }
+  ports: [{ port: 5000, targetPort: 5000, nodePort: 30007 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: controller, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: controller }
+  ports: [{ port: 8181, targetPort: 8181, nodePort: 30081 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: rl-serving-dqn, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: rl-serving-dqn }
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+    - name: metrics
+      port: 9002
+      targetPort: 9002
+      nodePort: 30002
+---
+apiVersion: v1
+kind: Service
+metadata: { name: rl-serving-ppo, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: rl-serving-ppo }
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+    - name: metrics
+      port: 9003
+      targetPort: 9003
+      nodePort: 30003
+---
+apiVersion: v1
+kind: Service
+metadata: { name: prometheus, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: prometheus }
+  ports: [{ port: 9090, targetPort: 9090, nodePort: 30090 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: grafana, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: grafana }
+  ports: [{ port: 3000, targetPort: 3000, nodePort: 30000 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: alertmanager, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: alertmanager }
+  ports: [{ port: 9093, targetPort: 9093, nodePort: 30093 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: control-loop, namespace: sdn-security }
+spec:
+  selector: { app: control-loop }
+  ports: [{ port: 9100, targetPort: 9100 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: sdn-defense-agent, namespace: sdn-security }
+spec:
+  selector: { app: sdn-defense-agent }
+  ports: [{ port: 8000, targetPort: 8000 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: sdn-dashboard, namespace: sdn-security }
+spec:
+  type: NodePort
+  selector: { app: sdn-dashboard }
+  ports: [{ port: 8501, targetPort: 8501, nodePort: 30501 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: auto-trigger, namespace: sdn-security }
+spec:
+  selector: { app: auto-trigger }
+  ports: [{ port: 5001, targetPort: 5001 }]

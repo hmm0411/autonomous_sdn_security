@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: train-surrogate-once
+  namespace: sdn-security
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: hmm0411/sdn-rl-agent:state8
+          workingDir: /app
+          command:
+            - "python"
+            - "-m"
+            - "digital_twin.train_surrogate"
+          env:
+            - name: PYTHONPATH
+              value: "/app"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: TRANSITION_LOG
+              value: "logs/transition_log.csv"
+            - name: SURROGATE_MODEL
+              value: "models/surrogate_model.pkl"
+            - name: TWIN_RESULT_DIR
+              value: "results/digital_twin"
+          volumeMounts:
+            - name: app-vol
+              mountPath: /app
+      volumes:
+        - name: app-vol
+          hostPath:
+            path: /home/g23520964/autonomous_sdn_security
+            type: Directory

@@ -2,6 +2,7 @@ import requests
 import numpy as np
 import logging
 from typing import Dict, Any, Optional
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 class ControllerClient:
     def __init__(
         self, 
-        onos_ip: str = "35.240.135.171", 
+        onos_ip: str = "controller", 
         port: str = "8181", 
         user: str = "onos", 
         pwd: str = "rocks", 
@@ -30,6 +31,7 @@ class ControllerClient:
         if self.use_mock:
             return self._get_mock_state()
         
+        time.sleep(30)
         try:
             response = requests.get(
                 f"{self.controller_url}/state",

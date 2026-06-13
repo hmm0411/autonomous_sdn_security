@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from typing import Optional, Tuple
-
+import mlflow
 from rl_engine.config import GAMMA, LR_PPO, clip_eps, entropy_coef, value_coef  
 
 
@@ -55,13 +55,12 @@ state = [
     latency,            # 5
     packet_loss,        # 6
     controller_cpu,     # 7
-    previous_action     # 8, normalized 0-1
 ]
 """
 
     def __init__(
         self,
-        state_dim: int = 9,
+        state_dim: int = 8,
         action_dim: int = 5,
         clip_eps: float = 0.15,
         entropy_coef: float = 0.02,
@@ -88,10 +87,6 @@ state = [
 
     def _parse_state(self, state) -> np.ndarray:
         if isinstance(state, dict):
-            previous_action = float(state.get("previous_action", self.last_action))
-            if previous_action > 1.0:
-                previous_action = previous_action / 4.0
-
             return np.array([
                 float(state.get("packet_rate", 0.0)),
                 float(state.get("byte_rate", 0.0)),
@@ -101,19 +96,14 @@ state = [
                 float(state.get("latency", 0.0)),
                 float(state.get("packet_loss", 0.0)),
                 float(state.get("controller_cpu", 0.0)),
-                previous_action,
             ], dtype=np.float32)
 
         if isinstance(state, (list, tuple, np.ndarray)):
             if len(state) < self.state_dim:
-                raise ValueError(
-                    f"State must have at least {self.state_dim} elements, got {len(state)}"
-                )
+                raise ValueError(f"State must have at least {self.state_dim} elements")
             return np.array(state[:self.state_dim], dtype=np.float32)
 
-        raise TypeError(
-            "Unsupported state type. Expected dict, list, tuple, or np.ndarray."
-        )
+        raise TypeError("Unsupported state type.")
 
     def select_action(self, state) -> Tuple[int, float]:
         """
@@ -153,6 +143,7 @@ state = [
 
     def predict(self, state) -> int:
         return self.select_greedy_action(state)
+
 
     def compute_returns(self, rewards, dones):
         returns = []

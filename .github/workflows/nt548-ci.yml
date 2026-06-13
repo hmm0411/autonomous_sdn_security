@@ -5,43 +5,103 @@ on:
     branches:
       - nt548-mlops
 
+  pull_request:
+    branches:
+      - nt548-mlops
+
 jobs:
-  test-mlops-system:
+  validate-and-test:
+    name: Validate and Test NT548 MLOps System
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-      # ===== INSTALL =====
       - name: Install dependencies
         run: |
-          pip install -r rl_engine/requirements.txt
-          pip install flask requests prometheus_client mlflow torch
+          python -m pip install --upgrade pip
 
-      # ===== SETUP DIR =====
-      - name: Create directories
+          if [ -f rl_engine/requirements.txt ]; then
+            pip install -r rl_engine/requirements.txt
+          fi
+
+          pip install \
+            flask \
+            requests \
+            prometheus_client \
+            mlflow \
+            torch \
+            numpy \
+            pandas \
+            pyyaml
+
+      - name: Create runtime directories
         run: |
           mkdir -p data/processed models results logs mlruns
 
-      # ===== MOCK DATA =====
       - name: Create mock dataset
         run: |
-          echo "packet_rate,byte_rate,flow_count,src_ip_entropy,latency,packet_loss,queue_length,controller_cpu,attack_indicator,previous_action" > data/processed/test.csv
-          echo "0.1,0.2,0.3,0.4,0.1,0.0,0.2,0.1,0,0" >> data/processed/test.csv
+          cat > data/processed/test.csv <<'EOF'
+          packet_rate,byte_rate,flow_count,src_ip_entropy,latency,packet_loss,queue_length,controller_cpu,attack_indicator,previous_action
+          0.1,0.2,0.3,0.4,0.1,0.0,0.2,0.1,0,0
+          EOF
 
-      # ===== TEST STATE BUILDER =====
+      - name: Validate Python syntax
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile realtime_pipeline.py
+          python -m py_compile mlops/main.py
+          python -m py_compile control_loop/metrics.py
+          python -m py_compile control_loop/main_loop.py
+          python -m py_compile control_loop/rl_client.py
+          python -m py_compile rl_engine/agent/api_serving.py
+          python -m py_compile rl_engine/agent/train_dqn.py
+          python -m py_compile rl_engine/agent/train_ppo.py
+          python -m py_compile traffic_generator/validate_attack_scenarios.py
+
+      - name: Validate Grafana dashboard JSON
+        run: |
+          python -m json.tool grafana/dashboards/sdn_rl_dashboard.json > /tmp/dashboard_check.json
+
+      - name: Validate Kubernetes YAML manifests
+        run: |
+          python - <<'PY'
+          import yaml
+
+          files = [
+              "k3s/base.yaml",
+              "k3s/serving.yaml",
+              "k3s/monitoring-jobs.yaml",
+          ]
+
+          for path in files:
+              with open(path, "r", encoding="utf-8") as f:
+                  list(yaml.safe_load_all(f))
+              print(f"YAML OK: {path}")
+          PY
+
+      - name: Check metric consistency between pipeline and dashboard
+        run: |
+          grep -R "sdn_current_score" realtime_pipeline.py grafana/dashboards/sdn_rl_dashboard.json
+          grep -R "sdn_rl_action" realtime_pipeline.py grafana/dashboards/sdn_rl_dashboard.json
+          grep -R "sdn_packet_rate" realtime_pipeline.py grafana/dashboards/sdn_rl_dashboard.json
+          grep -R "sdn_flow_count" realtime_pipeline.py grafana/dashboards/sdn_rl_dashboard.json
+          grep -R "alerts_received_total" mlops/main.py
+
       - name: Test StateBuilder
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python - <<EOF
+          python - <<'PY'
           from rl_engine.state_builder import StateBuilder
+
           raw = {
               "total_packets": 1000,
               "total_bytes": 2000,
@@ -53,64 +113,72 @@ jobs:
               "controller_cpu": 0.3,
               "attack_indicator": 0
           }
+
           sb = StateBuilder()
           state = sb.build(raw)
-          print("State:", state)
-          assert len(state) > 0
-          EOF
 
-      # ===== TEST REWARD =====
-      - name: Test Reward
+          print("State:", state)
+          assert state is not None
+          assert len(state) > 0
+          PY
+
+      - name: Test Reward calculation
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python - <<EOF
+          python - <<'PY'
           from rl_engine.reward import Reward
-          r = Reward()
+
           raw = {
               "latency": 10,
               "packet_loss": 0.1,
               "attack_indicator": 1
           }
-          reward = r.calculate(raw, 1)
-          print("Reward:", reward)
-          EOF
 
-      # ===== TEST RL SERVING =====
-      - name: Test RL Serving API
+          r = Reward()
+          reward = r.calculate(raw, 1)
+
+          print("Reward:", reward)
+          assert reward is not None
+          PY
+
+      - name: Test mock RL Serving API
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          echo "Starting mock RL server..."
-          python - <<EOF &
+          python - <<'PY' &
           from flask import Flask, request, jsonify
+
           app = Flask(__name__)
+
+          @app.route("/health", methods=["GET"])
+          def health():
+              return jsonify({"status": "healthy"})
 
           @app.route("/predict", methods=["POST"])
           def predict():
-              return jsonify({"action": 1})
+              payload = request.get_json()
+              assert "state" in payload
+              return jsonify({"action": 1, "model": "mock-dqn"})
 
-          app.run(port=9000)
-          EOF
+          app.run(host="0.0.0.0", port=9000)
+          PY
 
           sleep 3
 
-          curl -X POST http://localhost:9000/predict \
-          -H "Content-Type: application/json" \
-          -d '{"state":[0.1,0.2,0.3,0.4,0.5,0.1,0.2,0.3,0,0]}'
+          curl http://localhost:9000/health
 
-      # ===== TEST CONTROL LOOP (DRY RUN) =====
-      - name: Test Control Loop Logic
+          curl -X POST http://localhost:9000/predict \
+            -H "Content-Type: application/json" \
+            -d '{"state":[0.1,0.2,0.3,0.4,0.5,0.1,0.2,0.3]}'
+
+      - name: Test Control Loop dry-run logic
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python - <<EOF
-          import numpy as np
+          python - <<'PY'
           from rl_engine.state_builder import StateBuilder
           from rl_engine.reward import Reward
-
-          sb = StateBuilder()
-          r = Reward()
 
           raw = {
               "total_packets": 1000,
@@ -124,57 +192,58 @@ jobs:
               "attack_indicator": 0
           }
 
+          sb = StateBuilder()
+          reward_calc = Reward()
+
           state = sb.build(raw)
           action = 1
-          reward = r.calculate(raw, action)
+          reward = reward_calc.calculate(raw, action)
 
           print("State:", state)
+          print("Action:", action)
           print("Reward:", reward)
-          EOF
 
-      # ===== TEST PROMETHEUS METRICS =====
-      - name: Test Metrics Export
-        env:
-          PYTHONPATH: ${{ github.workspace }}
+          assert state is not None
+          assert reward is not None
+          PY
+
+      - name: Test Prometheus metrics export
         run: |
-          python - <<EOF &
+          python - <<'PY' &
           from prometheus_client import start_http_server, Gauge
           import time
 
-          g = Gauge('test_metric', 'test')
+          g = Gauge("test_metric", "test metric for CI")
           start_http_server(9001)
 
-          for i in range(3):
+          for i in range(5):
               g.set(i)
               time.sleep(1)
-          EOF
+          PY
 
           sleep 3
-          curl http://localhost:9001/metrics | head -20
+          curl http://localhost:9001/metrics | grep test_metric
 
-      # ===== TEST MLFLOW =====
-      - name: Test MLflow Tracking
+      - name: Test MLflow local tracking
         run: |
-          python - <<EOF
+          python - <<'PY'
           import mlflow
 
           mlflow.set_tracking_uri("file:./mlruns")
-
-          mlflow.set_experiment("nt548-test")
+          mlflow.set_experiment("nt548-ci-test")
 
           with mlflow.start_run():
-            mlflow.log_param("test", 1)
-            mlflow.log_metric("score", 0.9)
+              mlflow.log_param("ci_test", 1)
+              mlflow.log_metric("score", 0.9)
 
-          print("MLflow test done")
-          EOF
+          print("MLflow local tracking test done")
+          PY
 
-      # ===== ARTIFACT =====
-      - name: Upload artifacts
+      - name: Upload CI artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nt548-results-${{ github.run_id }}
+          name: nt548-ci-results-${{ github.run_id }}
           path: |
             results/
             models/
@@ -182,8 +251,38 @@ jobs:
             logs/
           retention-days: 30
 
+<<<<<<< HEAD
       - name: Train DQN
         run: python3 -m rl_engine.agent.train_dqn
 
       - name: Train PPO
         run: python3 -m rl_engine.agent.train_ppo
+=======
+  docker-build-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: validate-and-test
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Check Dockerfile exists
+        run: |
+          test -f Dockerfile || (echo "Dockerfile not found" && exit 1)
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/sdn-rl-agent:latest
+            ${{ secrets.DOCKER_USERNAME }}/sdn-rl-agent:${{ github.sha }}
+>>>>>>> e4ab797717f65cd4a41fe3f9929715604fc04776

@@ -2,36 +2,25 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
     build-essential \
-    supervisor \
+    curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy entire project
-COPY . /app/
+COPY requirements.txt /app/requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r /app/rl_engine/requirements.txt && \
-    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir numpy pandas scikit-learn gymnasium tensorboard matplotlib seaborn requests mlflow prometheus-client
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r /app/requirements.txt && \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# Set Python path
-ENV PYTHONPATH=/app:$PYTHONPATH
-ENV PYTHONUNBUFFERED=1
+COPY . /app
 
-# Expose ports
-EXPOSE 8000 9000 5000
+RUN mkdir -p /app/logs /app/models /app/results /app/mlruns
 
-# Copy supervisor configuration
-COPY supervisord.conf /etc/supervisord.conf
+EXPOSE 8000 8001 8501 9002 9003 9100
 
-# Copy entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Run entrypoint
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["tail", "-f", "/dev/null"]

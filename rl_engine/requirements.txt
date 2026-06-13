@@ -11,9 +11,9 @@ seaborn
 requests
 mlflow
 prometheus-client
-seaborn
-mlflow
-prometheus_client
-pandas
-tensorboard
-torch
+boto3
+flask
+python-dotenv
+joblib
+gunicorn
+kubernetes

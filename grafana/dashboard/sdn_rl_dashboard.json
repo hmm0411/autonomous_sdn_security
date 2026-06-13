@@ -1,0 +1,96 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "panels": [],
+      "title": "🔴 LIVE SDN SECURITY MONITORING (HỆ THỐNG TRỰC CHIẾN)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "NORMAL" }, "1": { "color": "orange", "index": 1, "text": "MEDIUM (Packet-In)" }, "2": { "color": "red", "index": 2, "text": "HIGH (DDoS/Spoofing/Scan)" } }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 2 } ] }
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "pluginVersion": "10.0.3",
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "editorMode": "code", "expr": "sdn_threat_level", "legendFormat": "Mức độ đe dọa", "range": true, "refId": "A" } ],
+      "title": "Threat Level (Trạng thái Tấn công)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "No Action" }, "1": { "color": "red", "index": 1, "text": "BLOCK (Drop Flow)" }, "2": { "color": "orange", "index": 2, "text": "RATE LIMIT" }, "3": { "color": "blue", "index": 3, "text": "REDIRECT (Honeypot)" } }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 }, { "color": "orange", "value": 2 }, { "color": "blue", "value": 3 } ] }
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "pluginVersion": "10.0.3",
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "editorMode": "code", "expr": "sdn_rl_action", "legendFormat": "Hành động của AI", "range": true, "refId": "A" } ],
+      "title": "RL Agent Action (Quyết định của AI)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "Packets / second", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 20, "gradientMode": "opacity", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 80 } ] } } },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 7 },
+      "id": 4,
+      "options": { "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single", "sort": "none" } },
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "editorMode": "code", "expr": "sdn_packet_rate", "legendFormat": "Packet Rate", "range": true, "refId": "A" } ],
+      "title": "Live Network Traffic (Lưu lượng Mạng)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "id": 5,
+      "panels": [],
+      "title": "🧠 RL MODEL PERFORMANCE (HIỆU SUẤT HUẤN LUYỆN)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "Reward", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 15, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "dashed" } }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 80 } ] } } },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "id": 6,
+      "options": { "legend": { "calcs": [ "lastNotNull", "max" ], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "editorMode": "code", "expr": "episode_reward_mean", "legendFormat": "{{agent}} Mean Reward", "range": true, "refId": "A" } ],
+      "title": "Training Convergence (Độ hội tụ của Model)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": [ "sdn", "security", "rl" ],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "SDN Autonomous Security",
+  "uid": "sdn-rl-live-final",
+  "version": 1,
+  "weekStart": ""
+}

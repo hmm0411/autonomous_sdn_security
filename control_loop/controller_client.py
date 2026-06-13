@@ -1,39 +1,119 @@
+import json
+import os
+import time
+
 import requests
 
-ONOS_URL = "http://onos:8181/onos/v1"
-AUTH = ("onos", "rocks")
 
-def execute_action(action):
+ONOS_URL = os.getenv("ONOS_URL", "http://controller:8181/onos/v1")
+AUTH = (
+    os.getenv("ONOS_USER", "onos"),
+    os.getenv("ONOS_PASS", "rocks"),
+)
+
+DEVICE_ID = os.getenv("ONOS_DEVICE_ID", "of:0000000000000001")
+
+
+def _headers():
+    return {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+def _install_drop_ipv4_rule(timeout=20):
+    """
+    Cài flow drop IPv4 tạm thời.
+    Không dùng DELETE /flows/{deviceId} vì rất nguy hiểm.
+    """
+    flow_rule = {
+        "priority": 50000,
+        "timeout": int(timeout),
+        "isPermanent": False,
+        "deviceId": DEVICE_ID,
+        "treatment": {
+            "instructions": []
+        },
+        "selector": {
+            "criteria": [
+                {
+                    "type": "ETH_TYPE",
+                    "ethType": "0x0800"
+                }
+            ]
+        }
+    }
+
     try:
-        if action == 0:
-            print("Quyết định: Bình thường (No Action)")
-            pass
-    #           no_action_id: int = 0
-    # block_action_id: int = 1
-    # limit_bw_action_id: int = 2
-    # redirect_action_id: int = 3
-    # isolate_action_id: int = 4
-        elif action == 1:
-            print("Quyết định: TẤN CÔNG! Ra lệnh chặn dòng dữ liệu...")
-            # Ví dụ: Xóa tất cả các flow rule để chặn mạng tạm thời
-            # Hoặc bạn có thể gọi API add flow rule để drop IP cụ thể
-            requests.delete(f"{ONOS_URL}/flows/application/org.onosproject.cli", auth=AUTH)
-            print("Đã áp dụng policy chặn mạng lên ONOS.")
-        elif action == 2:
-            print("Quyết định: Giới hạn băng thông (Rate Limit)")
-            # Ví dụ: Gọi API để thêm flow rule với instruction là RATE_LIMIT
-            # Cần xây dựng payload phù hợp với API của ONOS để áp dụng rate limit
-        elif action == 3:
-            print("Quyết định: Chuyển hướng (Redirect)")
-            # Ví dụ: Gọi API để thêm một flow rule mới vào ONOS
-            # Cần xây dựng payload phù hợp với API của ONOS để thêm flow rule
-        elif action == 4:
-            print("Quyết định: Cách ly (Isolate)")
-            # Ví dụ: Gọi API để thêm một flow rule mới vào ONOS
-            # Cần xây dựng payload phù hợp với API của ONOS để thêm flow rule
+        url = f"{ONOS_URL}/flows/{DEVICE_ID}"
 
-        else:
-            print(f"Action không xác định: {action}")
-            
+        response = requests.post(
+            url,
+            auth=AUTH,
+            headers=_headers(),
+            data=json.dumps(flow_rule),
+            timeout=3,
+        )
+
+        print(
+            f"[ONOS_ACTION] install_drop_ipv4 status={response.status_code} "
+            f"body={response.text[:200]}",
+            flush=True,
+        )
+
+        return response.status_code in (200, 201)
+
     except Exception as e:
-        print(f"Lỗi khi áp dụng action lên ONOS: {e}")
+        print(f"[ONOS_ACTION_ERROR] drop rule error={e}", flush=True)
+        return False
+
+
+def execute_action(action, raw=None):
+    """
+    Action map:
+    0 no_action
+    1 block_suspicious_flow
+    2 limit_bandwidth
+    3 redirect_traffic
+    4 isolate_device
+
+    Lưu ý:
+    - Khi đánh giá nghiên cứu, nên dùng ACTION_DRY_RUN=true.
+    - Chỉ bật apply thật khi demo và đã xác nhận đúng device/port.
+    """
+    action = int(action)
+
+    if action == 0:
+        print("[ACTION] no_action", flush=True)
+        return True
+
+    if action == 1:
+        print("[ACTION] block_suspicious_flow", flush=True)
+        return _install_drop_ipv4_rule(timeout=20)
+
+    if action == 2:
+        print(
+            "[ACTION] limit_bandwidth requested. "
+            "No destructive ONOS rule installed by default.",
+            flush=True,
+        )
+        return True
+
+    if action == 3:
+        print(
+            "[ACTION] redirect_traffic requested. "
+            "Implement honeypot flow after confirming output ports.",
+            flush=True,
+        )
+        return True
+
+    if action == 4:
+        print(
+            "[ACTION] isolate_device requested. "
+            "No destructive isolation rule installed by default.",
+            flush=True,
+        )
+        return True
+
+    print(f"[ACTION] unknown action={action}", flush=True)
+    return False

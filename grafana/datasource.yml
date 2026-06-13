@@ -7,3 +7,10 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     editable: true
+
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    isDefault: false
+    editable: true

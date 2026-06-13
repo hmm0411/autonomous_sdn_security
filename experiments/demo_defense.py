@@ -87,7 +87,8 @@ class DemoDefenseAgent:
 
         packet_rate = state[0]
         flow_count = state[2]
-        drop_rate = state[5]
+        # CẬP NHẬT: index của drop_rate (packet_loss) trong chuẩn 8-dim là 6
+        drop_rate = state[6]
 
         # Warmup baseline
         if step_count < self.warmup_steps:
@@ -108,7 +109,7 @@ class DemoDefenseAgent:
 def main():
 
     env = OnlineSDNEnv(
-        controller_url="http://35.240.135.171:8181/onos/v1"
+        controller_url="http://controller:8181/onos/v1"
     )
 
     agent = DemoDefenseAgent(env)
@@ -122,7 +123,8 @@ def main():
 
         attack, action = agent.step(state, step)
 
-        next_state, reward, _, _ = env.step(action)
+        # CẬP NHẬT: Hứng đủ 5 giá trị trả về từ env.step theo chuẩn Gymnasium
+        next_state, reward, _, _, _ = env.step(action)
 
         print(f"[Step {step}] Attack={attack} | Action={action} | Reward={reward}")
 
@@ -130,7 +132,8 @@ def main():
             "step": step,
             "packet_rate": next_state[0],
             "flow_count": next_state[2],
-            "drop_rate": next_state[5],
+            # CẬP NHẬT: index của drop_rate là 6
+            "drop_rate": next_state[6],
             "attack": attack,
             "action": action,
             "reward": reward

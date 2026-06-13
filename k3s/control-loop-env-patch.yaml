@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-loop
+  namespace: sdn-security
+spec:
+  template:
+    spec:
+      containers:
+        - name: loop
+          env:
+            - name: PYTHONPATH
+              value: "/app"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: STATE_DIM
+              value: "8"
+            - name: MODE
+              value: "rl"
+            - name: MODEL_TYPE
+              value: "dqn"
+            - name: ACTION_DRY_RUN
+              value: "true"
+            - name: SLEEP_TIME
+              value: "2"
+            - name: RUNTIME_LOG
+              value: "logs/runtime_eval.csv"
+            - name: TRANSITION_LOG
+              value: "logs/transition_log.csv"
+            - name: SURROGATE_MODEL
+              value: "models/surrogate_model.pkl"
+            - name: ONOS_URL
+              value: "http://controller:8181/onos/v1"
+            - name: ONOS_USER
+              value: "onos"
+            - name: ONOS_PASS
+              value: "rocks"

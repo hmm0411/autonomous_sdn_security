@@ -1,3 +1,19 @@
-mlflow
-prometheus_client
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch
+numpy
 pandas
+scikit-learn
+gymnasium
+tensorboard
+matplotlib
+seaborn
+requests
+mlflow
+prometheus-client
+boto3
+flask
+python-dotenv
+joblib
+gunicorn
+kubernetes

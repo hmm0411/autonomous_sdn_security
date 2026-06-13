@@ -12,23 +12,26 @@ PROM_PACKET_RATE = Gauge('sdn_packet_rate', 'Real-time Packet Rate')
 PROM_FLOW_COUNT = Gauge('sdn_flow_count', 'Real-time Flow Count')
 PROM_THREAT_LEVEL = Gauge('sdn_threat_level', 'Threat Level (0=Normal, 1=Medium, 2=High)')
 PROM_ACTION = Gauge('sdn_rl_action', 'Action taken by RL Agent')
-
+PROM_CURRENT_SCORE = Gauge('sdn_current_score', 'Dynamic Threat Score')
 # Đảm bảo thư mục tồn tại
 os.makedirs("logs", exist_ok=True)
 
+current_score = 0.0
 
-# ---------------------------------------------------------
-# 1. FIX LỖI: RESET TRẠNG THÁI NGAY KHI KHỞI ĐỘNG
-# ---------------------------------------------------------
-# Xóa bỏ dư âm của các lần test trước, ép về Normal Traffic
-with open(SIGNAL_FILE, "w") as f:
-    f.write("Normal Traffic")
-
-if not os.path.exists(LOG_FILE):
-    df_init = pd.DataFrame(columns=[
-        "timestamp", "packet_rate", "flow_count", "level", "action_id", "action_name"
-    ])
-    df_init.to_csv(LOG_FILE, index=False)
+def init_log_file():
+    if not os.path.exists(LOG_FILE):
+        df_init = pd.DataFrame(columns=[
+            "timestamp",
+            "packet_rate",
+            "flow_count",
+            "score",
+            "threat_level",
+            "level",
+            "action_id",
+            "action_name",
+            "attack_state",
+        ])
+        df_init.to_csv(LOG_FILE, index=False)
 
 def get_current_attack_state():
     if os.path.exists(SIGNAL_FILE):
@@ -40,89 +43,149 @@ def get_current_attack_state():
             pass
     return "Normal Traffic"
 
+def get_dynamic_score(target_score):
+    global current_score
+    step = 12.0
+
+    if current_score < target_score:
+        current_score = min(current_score + step, target_score)
+    elif current_score > target_score:
+        current_score = max(current_score - step, target_score)
+
+    return current_score
+
+def classify_attack(current_attack):
+    """Map attack signal -> target score, action, packet/flow target.
+
+    Đồng bộ với traffic_generator/validate_attack_scenarios.py:
+    - Normal Traffic
+    - DDoS Flood Attack
+    - IP Spoofing Detected
+    - Packet-In Anomaly
+    """
+
+    if "DDoS" in current_attack:
+        return {
+            "target_score": 99.0,
+            "level": "CRITICAL (DDoS Flood Attack)",
+            "action_id": 1,
+            "action_name": "Block (Drop Suspicious Flow)",
+            "target_packet_rate": random.randint(4000, 5500),
+            "target_flow_count": random.randint(30, 50),
+        }
+
+    if "Spoof" in current_attack:
+        return {
+            "target_score": 88.0,
+            "level": "CRITICAL (IP Spoofing Detected)",
+            "action_id": 4,
+            "action_name": "Isolate Device",
+            "target_packet_rate": random.randint(1800, 2500),
+            "target_flow_count": random.randint(40, 60),
+        }
+
+    if "Packet-In" in current_attack:
+        return {
+            "target_score": 78.0,
+            "level": "WARNING (Packet-In Anomaly)",
+            "action_id": 2,
+            "action_name": "Rate Limit Bandwidth",
+            "target_packet_rate": random.randint(150, 300),
+            "target_flow_count": random.randint(80, 110),
+        }
+
+    if "Flow Table" in current_attack or "Flow Overflow" in current_attack:
+        return {
+            "target_score": 85.0,
+            "level": "CRITICAL (Flow Table Overflow)",
+            "action_id": 2,
+            "action_name": "Rate Limit Bandwidth",
+            "target_packet_rate": random.randint(2000, 2800),
+            "target_flow_count": random.randint(120, 160),
+        }
+
+    if "Port Scanning" in current_attack or "Port Scan" in current_attack:
+        return {
+            "target_score": 65.0,
+            "level": "WARNING (Port Scanning)",
+            "action_id": 3,
+            "action_name": "Redirect to Honeypot",
+            "target_packet_rate": random.randint(3500, 4500),
+            "target_flow_count": random.randint(40, 60),
+        }
+
+    return {
+        "target_score": 0.0,
+        "level": "SAFE (Normal Traffic)",
+        "action_id": 0,
+        "action_name": "No Action",
+        "target_packet_rate": random.randint(10, 40),
+        "target_flow_count": random.randint(40, 80),
+    }
+
+
+def score_to_threat_level(score):
+    if score < 31:
+        return 0
+    if score < 71:
+        return 1
+    return 2
+
 def main():
     print("[*] Starting Smooth Demo Agent...")
-    
-    # Khởi tạo giá trị hiện tại (Dùng để tính toán hiệu ứng tăng/giảm dần)
+    init_log_file()
+
     current_packet_rate = 20.0
     current_flow_count = 50.0
-    
+
     while True:
         try:
             current_attack = get_current_attack_state()
-            
-            # ---------------------------------------------------------
-            # 2. XÁC ĐỊNH MỤC TIÊU VÀ HÀNH ĐỘNG THEO TỪNG LOẠI TẤN CÔNG
-            # ---------------------------------------------------------
-            threat_num = 0
-            if current_attack == "Normal Traffic":
-                level, action_id, action_name = "NORMAL", 0, "No Action"
-                target_pr = random.randint(10, 40)
-                target_fc = random.randint(40, 80)
-                
-            elif current_attack == "DDoS Flood":
-                level, action_id, action_name = "HIGH_ATTACK (DDoS Flood)", 1, "Block (Drop Suspicious Flow)"
-                target_pr = random.randint(4000, 5500)
-                target_fc = random.randint(30, 50)
-                
-            elif current_attack == "Flow Table Overflow":
-                level, action_id, action_name = "HIGH_ATTACK (Flow Table Overflow)", 2, "Rate Limit Bandwidth"
-                target_pr = random.randint(2000, 2800)
-                target_fc = random.randint(120, 160)
-                
-            elif current_attack == "Packet-In Flood":
-                level, action_id, action_name = "MEDIUM_ATTACK (Packet-In Flood)", 1, "Block (Drop Suspicious Flow)"
-                target_pr = random.randint(150, 300)
-                target_fc = random.randint(80, 110)
-                
-            elif current_attack == "IP Spoofing":
-                level, action_id, action_name = "HIGH_ATTACK (IP Spoofing)", 1, "Block (Drop Suspicious Flow)"
-                target_pr = random.randint(1800, 2500)
-                target_fc = random.randint(40, 60)
-                
-            elif current_attack == "Port Scanning":
-                level, action_id, action_name = "HIGH_ATTACK (Port Scanning)", 3, "Redirect to Honeypot"
-                target_pr = random.randint(3500, 4500)
-                target_fc = random.randint(40, 60)
-                
-            else: # Fallback an toàn
-                level, action_id, action_name = "NORMAL", 0, "No Action"
-                target_pr = random.randint(10, 40)
-                target_fc = random.randint(40, 80)
+            decision = classify_attack(current_attack)
 
-            # ---------------------------------------------------------
-            # 3. THUẬT TOÁN LÀM MƯỢT (SMOOTHING) - TĂNG DẦN / GIẢM DẦN
-            # ---------------------------------------------------------
-            # Mỗi 2 giây, đường line trên biểu đồ chỉ tiến thêm 35% về phía target.
-            # Giúp tạo cảm giác mạng đang "nóng lên" hoặc "hạ nhiệt" dần dần một cách rất thật.
-            current_packet_rate += (target_pr - current_packet_rate) * 0.35
-            current_flow_count += (target_fc - current_flow_count) * 0.35
+            display_score = get_dynamic_score(decision["target_score"])
+            threat_level = score_to_threat_level(display_score)
+            action_id = decision["action_id"]
+            action_name = decision["action_name"]
+            level = decision["level"]
 
+            current_packet_rate += (decision["target_packet_rate"] - current_packet_rate) * 0.35
+            current_flow_count += (decision["target_flow_count"] - current_flow_count) * 0.35
+
+            # ===== Prometheus metrics đồng bộ với Grafana dashboard =====
             PROM_PACKET_RATE.set(int(current_packet_rate))
             PROM_FLOW_COUNT.set(int(current_flow_count))
-            PROM_THREAT_LEVEL.set(threat_num)
+            PROM_THREAT_LEVEL.set(threat_level)
             PROM_ACTION.set(action_id)
-            
-            # Ghi dữ liệu ra file CSV
+            PROM_CURRENT_SCORE.set(display_score)
+
             new_data = pd.DataFrame([{
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "packet_rate": int(current_packet_rate),
                 "flow_count": int(current_flow_count),
+                "score": round(display_score, 1),
+                "threat_level": threat_level,
                 "level": level,
                 "action_id": action_id,
-                "action_name": action_name
+                "action_name": action_name,
+                "attack_state": current_attack,
             }])
-            
-            df = pd.read_csv(LOG_FILE)
-            df = pd.concat([df, new_data], ignore_index=True).tail(50)
-            df.to_csv(LOG_FILE, index=False)
-            
+
+            new_data.to_csv(LOG_FILE, mode="a", header=not os.path.exists(LOG_FILE), index=False)
+
+            print(
+                f"[{datetime.now().strftime('%H:%M:%S')}] "
+                f"Attack={current_attack} | Score={display_score:.1f} | "
+                f"Threat={threat_level} | Action={action_id}:{action_name} | "
+                f"PPS={int(current_packet_rate)} | Flows={int(current_flow_count)}"
+            )
+
         except Exception as e:
             print(f"[!] Pipeline Error: {e}")
-            
+
         time.sleep(2)
 
+
 if __name__ == "__main__":
-    # Start the Prometheus HTTP server
     start_http_server(8000)
     main()

@@ -1,58 +1,65 @@
-import numpy as np
-
 class Reward:
+    """
+    Runtime/evaluation reward for 8-dim state.
+
+    Action map:
+    0 no_action
+    1 block_suspicious_flow
+    2 limit_bandwidth
+    3 redirect_traffic
+    4 isolate_device
+    """
 
     def __init__(self):
-        self.prev_action = 0
-
-        # ===== weights (tune được) =====
-        self.w_latency = 0.8
-        self.w_loss = 1.5
-        self.w_flow = 0.6
-        self.w_switch = 0.2
-        self.w_action = 0.5
-
-        # ===== thresholds =====
-        self.flow_threshold = 50
-        self.latency_threshold = 20
+        self.last_action = 0
 
     def calculate(self, raw, action):
+        if raw is None:
+            return -1.0
 
-        latency = raw.get("latency", 0)
-        packet_loss = raw.get("packet_loss", 0)
-        flow_count = raw.get("flow_count", 0)
+        action = int(action)
 
-        reward = 0
+        packet_rate = float(raw.get("packet_rate", 0.0) or 0.0)
+        flow_count = float(raw.get("flow_count", 0.0) or 0.0)
+        flow_growth = abs(float(raw.get("flow_growth_rate", 0.0) or 0.0))
+        latency = float(raw.get("latency", 0.0) or 0.0)
+        packet_loss = float(raw.get("packet_loss", 0.0) or 0.0)
+        controller_cpu = float(raw.get("controller_cpu", 0.0) or 0.0)
 
-        # ===== 1. QoS penalty =====
-        reward -= self.w_latency * (latency / 100)
-        reward -= self.w_loss * packet_loss
+        threat = 0.0
+        threat += min(packet_rate / 1000.0, 3.0)
+        threat += min(flow_count / 200.0, 2.0)
+        threat += min(flow_growth / 50.0, 2.0)
+        threat += min(latency / 200.0, 1.5)
+        threat += min(packet_loss * 5.0, 2.0)
+        threat += min(controller_cpu / 100.0, 1.0)
 
-        # ===== 2. Adaptive overload penalty =====
-        overload = max(0, flow_count - self.flow_threshold)
-        reward -= self.w_flow * (overload / self.flow_threshold)
+        action_cost = {
+            0: 0.00,
+            1: 0.35,
+            2: 0.18,
+            3: 0.22,
+            4: 0.45,
+        }.get(action, 0.5)
 
-        # ===== 3. Switching penalty =====
-        if action != self.prev_action:
-            reward -= self.w_switch
+        switch_penalty = 0.08 if action != self.last_action else 0.0
 
-        # ===== 4. Action shaping =====
-        if flow_count < self.flow_threshold:
-            # mạng bình thường → ưu tiên no action
+        if threat < 0.8:
             if action == 0:
-                reward += self.w_action
+                reward = 1.0
             else:
-                reward -= self.w_action * 0.5
+                reward = 0.3 - action_cost
         else:
-            # nghi ngờ overload → cần hành động
-            if action != 0:
-                reward += self.w_action
+            if action == 0:
+                reward = -threat
+            elif action == 2:
+                reward = 1.2 - 0.18 * threat - action_cost
+            elif action in (1, 3, 4):
+                reward = 1.0 - 0.20 * threat - action_cost
             else:
-                reward -= self.w_action
+                reward = -0.5
 
-        # ===== normalize (optional nhưng nên có) =====
-        reward = np.clip(reward, -5, 5)
+        reward -= switch_penalty
+        self.last_action = action
 
-        self.prev_action = action
-
-        return float(reward)
+        return float(max(-5.0, min(2.0, reward)))

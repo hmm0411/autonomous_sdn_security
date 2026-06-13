@@ -2,16 +2,29 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Copy thư viện cần thiết (có thể tạo requirements.txt riêng cho control_loop)
-RUN pip install requests numpy prometheus_client
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
-# Copy thư mục control_loop
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir \
+    requests \
+    numpy \
+    pandas \
+    prometheus_client \
+    mlflow \
+    joblib \
+    scikit-learn \
+    matplotlib \
+    huggingface_hub \
+    transformers
+
 COPY ./control_loop /app/control_loop
-
-# CỰC KỲ QUAN TRỌNG: Copy rl_engine vào container để import được
 COPY ./rl_engine /app/rl_engine
+COPY ./digital_twin /app/digital_twin
+COPY ./llm /app/llm
 
-# Thiết lập PYTHONPATH để Python nhận diện được module ở thư mục gốc
-ENV PYTHONPATH="${PYTHONPATH}:/app"
+RUN mkdir -p /app/logs /app/models /app/results
+
+EXPOSE 9100
 
 CMD ["python", "control_loop/main_loop.py"]
