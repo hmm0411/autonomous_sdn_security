@@ -181,3 +181,9 @@ jobs:
             mlruns/
             logs/
           retention-days: 30
+
+      - name: Train DQN
+        run: python3 -m rl_engine.agent.train_dqn
+
+      - name: Train PPO
+        run: python3 -m rl_engine.agent.train_ppo
