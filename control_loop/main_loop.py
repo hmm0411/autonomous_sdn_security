@@ -141,26 +141,31 @@ def rule_action(raw):
 
     anomaly_score = 0
 
-    if pps > 1000:
+    if pps > 400:
         anomaly_score += 1
-    if flows > 150:
+    # Adjusted flow-count scoring: most observed flows are around 12-20.
+    # Give a stronger signal for >20 and a moderate one for >12.
+    if flows > 20:
+        anomaly_score += 2
+    elif flows > 12:
         anomaly_score += 1
-    if growth > 30:
+    if growth > 5:
         anomaly_score += 1
-    if entropy > 2.0:
+    if entropy > 0.5:
         anomaly_score += 1
-    if latency > 80:
+    if latency > 15:
         anomaly_score += 1
-    if loss > 0.05:
+    if loss > 0.005:
         anomaly_score += 1
-    if cpu > 80:
-        anomaly_score += 1
+    if cpu > 15:
+          anomaly_score += 1
 
     if anomaly_score >= 4:
         return 1
     if anomaly_score >= 2:
         return 2
-    if entropy > 3.0 and flows > 80:
+    # If entropy is high and flows are above typical levels (>=13), escalate.
+    if entropy > 0.5 and flows > 12:
         return 3
 
     return 0

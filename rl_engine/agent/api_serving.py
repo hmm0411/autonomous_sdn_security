@@ -18,6 +18,7 @@ model_staging = None
 scaler = None
 
 def load_scaler():
+    from sklearn.utils.validation import check_is_fitted
     local_paths = [
         "/app/models/scaler.pkl",
         "/app/models/scaler_dqn.pkl" if model_type == "dqn" else "/app/models/scaler_ppo.pkl",
@@ -28,8 +29,10 @@ def load_scaler():
     for path in local_paths:
         if os.path.exists(path):
             try:
+                s = joblib.load(path)
+                check_is_fitted(s)
                 print(f"[+] Load scaler local: {path}")
-                return joblib.load(path)
+                return s
             except Exception as e:
                 print(f"[-] Cannot load scaler {path}: {e}")
 
@@ -156,6 +159,7 @@ def reload_model_api():
         return jsonify({"status": "error", "message": str(e)}), 500
     
 if __name__ == '__main__':
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -163,5 +167,5 @@ if __name__ == '__main__':
     metrics_port = 9002 if model_type == "dqn" else 9003
     start_http_server(metrics_port, addr='0.0.0.0')
     print(f"[+] Prometheus Serving Metrics started on port {metrics_port}")
-    
+    load_models()
     app.run(host='0.0.0.0', port=args.port)
