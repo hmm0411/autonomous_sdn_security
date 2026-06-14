@@ -1,13 +1,13 @@
 import csv
 import os
 import time
-from typing import Optional, Callable, cast
+from typing import Any, Callable, Optional
 
 import requests
 
 from rl_engine.state_builder import StateBuilder
 from rl_engine.reward import Reward
-from typing import Any, Callable, Optional
+
 from control_loop.controller_client import execute_action
 from control_loop.rl_client import get_action
 from control_loop.metrics import update_metrics, ensure_metrics_server
@@ -18,7 +18,16 @@ STATE_DIM = 8
 
 SLEEP_TIME = float(os.getenv("SLEEP_TIME", "2"))
 MODE = os.getenv("MODE", "collect").lower()
-# collect | no_defense | rule | rl | rl_twin | rl_llm | full
+# Supported modes:
+# collect        : baseline collect, action always 0
+# collect_random : collect transition data with random actions for Digital Twin
+# no_defense     : no defense baseline, action always 0
+# rule           : rule-based heuristic
+# rl             : RL-only
+# rl_twin        : RL + Digital Twin safety validation
+# rl_llm         : RL + LLM explanation
+# full           : RL + Twin + LLM
+# hybrid         : DQN/PPO hybrid arbitration
 
 ACTION_DRY_RUN = os.getenv("ACTION_DRY_RUN", "true").lower() == "true"
 
@@ -28,7 +37,7 @@ MODEL_TYPE = os.getenv("MODEL_TYPE", "dqn").lower()
 
 ONOS_HEALTH = os.getenv(
     "ONOS_HEALTH",
-    "http://controller:8181/onos/v1/flows"
+    "http://controller:8181/onos/v1/flows",
 )
 
 os.makedirs("logs", exist_ok=True)
@@ -45,6 +54,54 @@ print(
     f"MODEL_TYPE={MODEL_TYPE} | DRY_RUN={ACTION_DRY_RUN}",
     flush=True,
 )
+
+
+# =========================================================
+# Helpers
+# =========================================================
+def raw_to_state_vector(raw: dict) -> list[float]:
+    """
+    Raw state vector 8 chiều dùng cho:
+    - logging
+    - Prometheus metric theo giá trị thật
+    - Digital Twin nếu surrogate được train từ transition_log.csv raw
+    """
+    return [
+        float(raw.get("packet_rate", 0.0) or 0.0),
+        float(raw.get("byte_rate", 0.0) or 0.0),
+        float(raw.get("flow_count", 0.0) or 0.0),
+        float(raw.get("flow_growth_rate", 0.0) or 0.0),
+        float(raw.get("src_ip_entropy", 0.0) or 0.0),
+        float(raw.get("latency", 0.0) or 0.0),
+        float(raw.get("packet_loss", 0.0) or 0.0),
+        float(raw.get("controller_cpu", 0.0) or 0.0),
+    ]
+
+
+def pressure_score(raw: dict) -> float:
+    """
+    Pressure score cho hybrid arbitration.
+    Giá trị càng cao thì hệ thống càng bất thường.
+    Dùng DQN khi pressure cao, PPO khi pressure thấp.
+    """
+    pps = float(raw.get("packet_rate", 0.0) or 0.0)
+    flows = float(raw.get("flow_count", 0.0) or 0.0)
+    growth = abs(float(raw.get("flow_growth_rate", 0.0) or 0.0))
+    entropy = float(raw.get("src_ip_entropy", 0.0) or 0.0)
+    latency = float(raw.get("latency", 0.0) or 0.0)
+    loss = float(raw.get("packet_loss", 0.0) or 0.0)
+    cpu = float(raw.get("controller_cpu", 0.0) or 0.0)
+
+    score = 0.0
+    score += min(pps / 5000.0, 1.0) * 0.25
+    score += min(flows / 200.0, 1.0) * 0.15
+    score += min(growth / 100.0, 1.0) * 0.15
+    score += min(entropy / 8.0, 1.0) * 0.15
+    score += min(latency / 300.0, 1.0) * 0.10
+    score += min(loss if loss <= 1.0 else loss / 100.0, 1.0) * 0.10
+    score += min(cpu / 100.0, 1.0) * 0.10
+
+    return float(score)
 
 
 # =========================================================
@@ -79,29 +136,21 @@ except Exception as e:
 TWIN: Any = None
 TWIN_VALIDATE: Optional[Callable[[dict], bool]] = None
 
-if MODE in ("rl_twin", "full") and TWIN is not None and TWIN_VALIDATE is not None:
-            try:
-                pred = TWIN.simulate(state, final_action)
+if MODE in ("rl_twin", "full"):
+    try:
+        from digital_twin.twin import DigitalTwin
+        from digital_twin.safety import validate
 
-                pred_latency = float(pred.get("latency", 0.0))
-                pred_loss = float(pred.get("packet_loss", 0.0))
+        TWIN = DigitalTwin(
+            os.getenv("SURROGATE_MODEL", "models/surrogate_model.pkl")
+        )
+        TWIN_VALIDATE = validate
+        print("[TWIN] enabled", flush=True)
 
-                validate_fn = cast(Callable[[dict], bool], TWIN_VALIDATE)
-                twin_safe = 1 if validate_fn(pred) else 0
-
-                if twin_safe == 0:
-                    print(
-                        f"[TWIN_REJECT] action={final_action} "
-                        f"pred_latency={pred_latency:.4f} "
-                        f"pred_loss={pred_loss:.4f} -> fallback no_action",
-                        flush=True,
-                    )
-                    final_action = 0
-
-            except Exception as e:
-                print(f"[TWIN_ERROR] {e}", flush=True)
-                twin_safe = 0
-                final_action = 0
+    except Exception as e:
+        print(f"[TWIN] disabled: {e}", flush=True)
+        TWIN = None
+        TWIN_VALIDATE = None
 
 
 def wait_http_service(name, url, auth=None):
@@ -143,28 +192,36 @@ def rule_action(raw):
 
     if pps > 400:
         anomaly_score += 1
-    # Adjusted flow-count scoring: most observed flows are around 12-20.
+
+    # Most observed flows are around 12-20.
     # Give a stronger signal for >20 and a moderate one for >12.
     if flows > 20:
         anomaly_score += 2
     elif flows > 12:
         anomaly_score += 1
+
     if growth > 5:
         anomaly_score += 1
+
     if entropy > 0.5:
         anomaly_score += 1
+
     if latency > 15:
         anomaly_score += 1
+
     if loss > 0.005:
         anomaly_score += 1
+
     if cpu > 15:
-          anomaly_score += 1
+        anomaly_score += 1
 
     if anomaly_score >= 4:
         return 1
+
     if anomaly_score >= 2:
         return 2
-    # If entropy is high and flows are above typical levels (>=13), escalate.
+
+    # If entropy is high and flows are above typical levels, redirect to honeypot.
     if entropy > 0.5 and flows > 12:
         return 3
 
@@ -172,12 +229,16 @@ def rule_action(raw):
 
 
 def choose_action(raw, state):
-    if MODE == "no_defense":
+    """
+    Return:
+    action_prod, action_staging, model_name
+    """
+    if MODE in ("collect", "no_defense"):
         return 0, 0, "none"
 
-    if MODE == "collect":
+    if MODE == "collect_random":
         import random
-        # Random để dataset có đủ các action
+
         action = random.randint(0, 4)
         return action, action, "random"
 
@@ -185,12 +246,24 @@ def choose_action(raw, state):
         action = rule_action(raw)
         return action, action, "rule"
 
-    action_prod, action_staging, model_name = get_action(
-        state,
-        model_type=MODEL_TYPE,
-    )
+    if MODE == "hybrid":
+        threshold = float(os.getenv("HYBRID_PRESSURE_THRESHOLD", "0.45"))
+        selected_model = "dqn" if pressure_score(raw) >= threshold else "ppo"
 
-    return int(action_prod), int(action_staging), str(model_name).lower()
+        action_prod, action_staging, model_name = get_action(
+            state,
+            model_type=selected_model,
+        )
+        return int(action_prod), int(action_staging), f"hybrid_{model_name}".lower()
+
+    if MODE in ("rl", "rl_twin", "rl_llm", "full"):
+        action_prod, action_staging, model_name = get_action(
+            state,
+            model_type=MODEL_TYPE,
+        )
+        return int(action_prod), int(action_staging), str(model_name).lower()
+
+    return 0, 0, "unknown"
 
 
 def log_runtime(row):
@@ -216,6 +289,9 @@ def log_runtime(row):
             "pred_loss",
             "gap_latency",
             "gap_loss",
+            "attack_type",
+            "intensity",
+            "run_id",
         ],
     )
 
@@ -223,7 +299,14 @@ def log_runtime(row):
         csv.writer(f).writerow(row)
 
 
-def log_transition(prev_raw, action, next_raw, attack_type="unknown"):
+def log_transition(
+    prev_raw,
+    action,
+    next_raw,
+    attack_type="unknown",
+    intensity="medium",
+    run_id="0",
+):
     init_csv(
         TRANSITION_PATH,
         [
@@ -239,6 +322,8 @@ def log_transition(prev_raw, action, next_raw, attack_type="unknown"):
             "next_latency",
             "next_packet_loss",
             "attack_type",
+            "intensity",
+            "run_id",
         ],
     )
 
@@ -260,6 +345,8 @@ def log_transition(prev_raw, action, next_raw, attack_type="unknown"):
                 next_raw.get("latency", 0.0),
                 next_raw.get("packet_loss", 0.0),
                 attack_type,
+                intensity,
+                run_id,
             ]
         )
 
@@ -273,8 +360,11 @@ wait_http_service(
     ),
 )
 
-if MODE in ("rl", "rl_twin", "rl_llm", "full"):
-    if MODEL_TYPE == "ppo":
+if MODE in ("rl", "rl_twin", "rl_llm", "full", "hybrid"):
+    if MODE == "hybrid":
+        wait_http_service("RL DQN", "http://rl-serving-dqn:8000/health")
+        wait_http_service("RL PPO", "http://rl-serving-ppo:8001/health")
+    elif MODEL_TYPE == "ppo":
         wait_http_service("RL PPO", "http://rl-serving-ppo:8001/health")
     else:
         wait_http_service("RL DQN", "http://rl-serving-dqn:8000/health")
@@ -289,6 +379,7 @@ while True:
             continue
 
         state = state_builder.build(raw)
+        raw_state = raw_to_state_vector(raw)
 
         if len(state) != STATE_DIM:
             print(
@@ -313,12 +404,15 @@ while True:
 
         if MODE in ("rl_twin", "full") and TWIN is not None:
             try:
-                pred = TWIN.simulate(state, final_action)
+                pred = TWIN.simulate(raw_state, final_action)
 
                 pred_latency = float(pred.get("latency", 0.0))
                 pred_loss = float(pred.get("packet_loss", 0.0))
 
-                twin_safe = 1 if TWIN_VALIDATE(pred) else 0
+                if TWIN_VALIDATE is not None:
+                    twin_safe = 1 if TWIN_VALIDATE(pred) else 0
+                else:
+                    twin_safe = 0
 
                 if twin_safe == 0:
                     print(
@@ -334,6 +428,8 @@ while True:
                 twin_safe = 0
                 final_action = 0
 
+        reward_final = reward_calc.calculate(raw, final_action)
+
         if ACTION_DRY_RUN:
             print(f"[DRY_RUN] would execute action={final_action}", flush=True)
         else:
@@ -348,7 +444,7 @@ while True:
             and final_action in (1, 2, 3, 4)
         ):
             try:
-                state_dict = state_vector_to_dict(state)
+                state_dict = state_vector_to_dict(raw_state)
 
                 qos = {
                     "latency": raw.get("latency", 0.0),
@@ -384,16 +480,22 @@ while True:
             if pred_loss:
                 gap_loss = abs(float(next_raw.get("packet_loss", 0.0)) - pred_loss)
 
+        attack_type = os.getenv("ATTACK_TYPE", "unknown")
+        intensity = os.getenv("ATTACK_INTENSITY", "medium")
+        run_id = os.getenv("RUN_ID", "0")
+
         log_transition(
             raw,
             final_action,
             next_raw,
-            os.getenv("ATTACK_TYPE", "unknown"),
+            attack_type,
+            intensity,
+            run_id,
         )
 
         update_metrics(
-            state=state,
-            reward_prod=reward_prod,
+            state=raw_state,
+            reward_prod=reward_final,
             reward_staging=reward_staging,
             model_type_str=model_name,
             action=final_action,
@@ -415,19 +517,22 @@ while True:
                 raw.get("packet_loss", 0.0),
                 raw.get("controller_cpu", 0.0),
                 final_action,
-                reward_prod,
+                reward_final,
                 reward_staging,
                 twin_safe,
                 pred_latency,
                 pred_loss,
                 gap_latency,
                 gap_loss,
+                attack_type,
+                intensity,
+                run_id,
             ]
         )
 
         print(
             f"[LOOP] mode={MODE} model={model_name} "
-            f"action={final_action} reward={reward_prod:.4f} "
+            f"action={final_action} reward={reward_final:.4f} "
             f"twin_safe={twin_safe} gap_lat={gap_latency:.4f}",
             flush=True,
         )

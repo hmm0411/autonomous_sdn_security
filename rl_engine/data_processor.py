@@ -94,7 +94,7 @@ def process_sdn_dataset():
 
     processed_df = pd.DataFrame(scaled, columns=feature_cols)
     processed_df["attack_indicator"] = master_df["label"].values / 5.0
-    processed_df["previous_action"] = 0.0
+    processed_df["label"] = master_df["label"].values
 
     train_frames = []
     val_frames = []

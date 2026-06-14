@@ -4,6 +4,8 @@ import numpy as np
 import requests
 
 
+STRICT_RL = os.getenv("STRICT_RL", "false").lower() == "true"
+
 RL_ENDPOINTS = {
     "dqn": os.getenv("DQN_ENDPOINT", "http://rl-serving-dqn:8000/predict"),
     "ppo": os.getenv("PPO_ENDPOINT", "http://rl-serving-ppo:8001/predict"),
@@ -44,4 +46,7 @@ def get_action(state, model_type="dqn"):
     except Exception as e:
         print(f"[RL_API_CONN_ERROR] model={model_type} error={e}", flush=True)
 
-    return 0, 0, model_type
+    if STRICT_RL:
+        raise RuntimeError(f"Failed to get action from RL model: {model_type}")
+
+    return 0, 0, f"{model_type}_fallback"

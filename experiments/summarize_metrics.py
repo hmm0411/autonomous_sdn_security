@@ -63,22 +63,42 @@ def plot_timeline(df: pd.DataFrame, col: str) -> None:
 
     plt.figure(figsize=(10, 5))
 
-    for mode, group in df.groupby("mode"):
-        values = numeric_series(group, col)
+    if "mode" in df.columns:
+        group_key = "mode"
+    else:
+        group_key = None
 
+    if group_key:
+        for mode, group in df.groupby(group_key):
+            values = numeric_series(group, col)
+
+            if values.empty:
+                continue
+
+            plt.plot(
+                list(range(len(values))),
+                values.to_numpy(dtype=float),
+                label=str(mode),
+            )
+    else:
+        values = numeric_series(df, col)
         if values.empty:
-            continue
+            plt.close()
+            return
 
         plt.plot(
             list(range(len(values))),
             values.to_numpy(dtype=float),
-            label=str(mode),
+            label=col,
         )
 
     plt.title(col)
     plt.xlabel("Step")
     plt.ylabel(col)
-    plt.legend()
+
+    if plt.gca().has_data():
+        plt.legend()
+
     plt.tight_layout()
 
     fig_path = os.path.join(OUT_DIR, f"{col}_timeline_by_mode.png")
@@ -86,6 +106,50 @@ def plot_timeline(df: pd.DataFrame, col: str) -> None:
     plt.close()
 
     print(f"[SUMMARY] saved figure: {fig_path}")
+
+
+def build_summary(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+
+    for keys, group in df.groupby(group_cols, dropna=False):
+        group_df = pd.DataFrame(group)
+
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+
+        row: dict[str, Any] = {
+            col: value
+            for col, value in zip(group_cols, keys)
+        }
+
+        twin_safe_mean = safe_mean(group_df, "twin_safe", default=1.0)
+
+        row.update(
+            {
+                "mean_reward": safe_mean(group_df, "reward"),
+                "std_reward": safe_std(group_df, "reward"),
+                "mean_latency": safe_mean(group_df, "latency"),
+                "latency_var": safe_var(group_df, "latency"),
+                "mean_packet_loss": safe_mean(group_df, "packet_loss"),
+                "mean_packet_rate": safe_mean(group_df, "packet_rate"),
+                "mean_byte_rate": safe_mean(group_df, "byte_rate"),
+                "mean_flow_count": safe_mean(group_df, "flow_count"),
+                "mean_flow_growth_rate": safe_mean(group_df, "flow_growth_rate"),
+                "mean_src_ip_entropy": safe_mean(group_df, "src_ip_entropy"),
+                "mean_controller_cpu": safe_mean(group_df, "controller_cpu"),
+                "switching_rate": switching_rate(group_df["action"])
+                if "action" in group_df.columns
+                else 0.0,
+                "mean_twin_gap_latency": safe_mean(group_df, "gap_latency"),
+                "mean_twin_gap_loss": safe_mean(group_df, "gap_loss"),
+                "twin_reject_rate": float(1.0 - twin_safe_mean),
+                "samples": int(len(group_df)),
+            }
+        )
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
 
 
 def main() -> None:
@@ -105,48 +169,70 @@ def main() -> None:
     if "mode" not in df.columns:
         raise ValueError("runtime_eval.csv must contain column: mode")
 
-    rows: list[dict[str, Any]] = []
+    preferred_group_cols = [
+        "attack_type",
+        "intensity",
+        "run_id",
+        "mode",
+        "model",
+    ]
 
-    for mode, group in df.groupby("mode"):
-        group_df = pd.DataFrame(group)
+    group_cols = [
+        col for col in preferred_group_cols
+        if col in df.columns
+    ]
 
-        twin_safe_mean = safe_mean(group_df, "twin_safe", default=1.0)
+    if "mode" not in group_cols:
+        group_cols.append("mode")
 
-        rows.append(
-            {
-                "mode": str(mode),
-                "mean_reward": safe_mean(group_df, "reward"),
-                "std_reward": safe_std(group_df, "reward"),
-                "mean_latency": safe_mean(group_df, "latency"),
-                "latency_var": safe_var(group_df, "latency"),
-                "mean_packet_loss": safe_mean(group_df, "packet_loss"),
-                "mean_packet_rate": safe_mean(group_df, "packet_rate"),
-                "mean_flow_count": safe_mean(group_df, "flow_count"),
-                "mean_flow_growth_rate": safe_mean(group_df, "flow_growth_rate"),
-                "switching_rate": switching_rate(group_df["action"])
-                if "action" in group_df.columns
-                else 0.0,
-                "mean_twin_gap_latency": safe_mean(group_df, "gap_latency"),
-                "mean_twin_gap_loss": safe_mean(group_df, "gap_loss"),
-                "twin_reject_rate": float(1.0 - twin_safe_mean),
-                "samples": int(len(group_df)),
-            }
-        )
+    # =========================
+    # Full benchmark summary:
+    # attack_type x intensity x run_id x mode x model
+    # =========================
+    summary_full = build_summary(df, group_cols)
 
-    summary = pd.DataFrame(rows)
-    summary_path = os.path.join(OUT_DIR, "summary_4_modes.csv")
-    summary.to_csv(summary_path, index=False)
+    full_path = os.path.join(OUT_DIR, "summary_full_benchmark.csv")
+    summary_full.to_csv(full_path, index=False)
 
-    print(summary.to_string(index=False))
-    print(f"[SUMMARY] saved: {summary_path}")
+    print("[SUMMARY] full benchmark:")
+    print(summary_full.to_string(index=False))
+    print(f"[SUMMARY] saved: {full_path}")
+
+    # =========================
+    # Compatibility file:
+    # summary_4_modes.csv
+    # =========================
+    mode_group_cols = [
+        col for col in ["mode", "model"]
+        if col in df.columns
+    ]
+
+    if not mode_group_cols:
+        mode_group_cols = ["mode"]
+
+    summary_mode = build_summary(df, mode_group_cols)
+
+    mode_path = os.path.join(OUT_DIR, "summary_4_modes.csv")
+    summary_mode.to_csv(mode_path, index=False)
+
+    by_mode_path = os.path.join(OUT_DIR, "summary_by_mode.csv")
+    summary_mode.to_csv(by_mode_path, index=False)
+
+    print("[SUMMARY] by mode:")
+    print(summary_mode.to_string(index=False))
+    print(f"[SUMMARY] saved: {mode_path}")
+    print(f"[SUMMARY] saved: {by_mode_path}")
 
     for col in [
         "reward",
         "packet_rate",
+        "byte_rate",
         "flow_count",
         "flow_growth_rate",
+        "src_ip_entropy",
         "latency",
         "packet_loss",
+        "controller_cpu",
         "action",
         "gap_latency",
         "gap_loss",

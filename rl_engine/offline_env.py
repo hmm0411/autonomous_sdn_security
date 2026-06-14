@@ -1,7 +1,11 @@
 import numpy as np
 
+
 class OfflineSDNEnv:
     def __init__(self, dataframe, max_steps_per_episode=1000):
+        if dataframe is None or dataframe.empty:
+            raise ValueError("OfflineSDNEnv received an empty dataframe.")
+
         self.df = dataframe.reset_index(drop=True)
         self.max_steps_per_episode = max_steps_per_episode
         self.idx = 0
@@ -35,54 +39,136 @@ class OfflineSDNEnv:
         self.current_step += 1
 
         done = (
-            self.idx >= len(self.df) - 1 or
-            self.current_step >= self.max_steps_per_episode
+            self.idx >= len(self.df) - 1
+            or self.current_step >= self.max_steps_per_episode
         )
 
         next_state = self._get_state()
 
         return next_state, reward, done, False, {}
 
+    def _value(self, row, key, default=0.0):
+        if key in row:
+            value = row[key]
+            if value is None:
+                return float(default)
+
+            try:
+                if np.isnan(value):
+                    return float(default)
+            except TypeError:
+                pass
+
+            return float(value)
+
+        return float(default)
+
+    def _scale(self, value, raw_max):
+        """
+        Chấp nhận cả dataset đã normalize 0-1 và dataset raw.
+        Nếu value nằm trong khoảng nhỏ, giữ nguyên.
+        Nếu value lớn, scale theo raw_max.
+        """
+        value = float(value)
+
+        if value < 0:
+            value = abs(value)
+
+        if value <= 1.5:
+            return float(np.clip(value, 0.0, 1.0))
+
+        return float(np.clip(value / raw_max, 0.0, 1.0))
+
+    def _get_attack_label(self, row):
+        """
+        Nhãn chỉ dùng cho offline reward.
+        Không đưa label/attack_indicator vào state runtime.
+        Label convention:
+        0 normal
+        1 ddos
+        2 flow_overflow
+        3 ip_spoofing
+        4 packet_in_flood
+        5 port_scanning
+        """
+        if "label" in row:
+            try:
+                return int(row["label"])
+            except Exception:
+                return 0
+
+        if "attack_indicator" in row:
+            try:
+                return int(round(float(row["attack_indicator"]) * 5))
+            except Exception:
+                return 0
+
+        return 0
+
     def _get_state(self):
-        # CHUẨN 8 CHIỀU: Đưa vào mạng Neural
+        """
+        CHUẨN 8 CHIỀU:
+        [
+            packet_rate,
+            byte_rate,
+            flow_count,
+            flow_growth_rate,
+            src_ip_entropy,
+            latency,
+            packet_loss,
+            controller_cpu,
+        ]
+        """
         row = self.df.iloc[self.idx]
 
-        return np.array([
-            row["packet_rate"],
-            row["byte_rate"],
-            row["flow_count"],
-            row["flow_growth_rate"],
-            row["src_ip_entropy"],
-            row["latency"],
-            row["packet_loss"],
-            row["controller_cpu"],
-        ], dtype=np.float32)
+        return np.array(
+            [
+                self._value(row, "packet_rate"),
+                self._value(row, "byte_rate"),
+                self._value(row, "flow_count"),
+                self._value(row, "flow_growth_rate", 0.0),
+                self._value(row, "src_ip_entropy"),
+                self._value(row, "latency"),
+                self._value(row, "packet_loss"),
+                self._value(row, "controller_cpu"),
+            ],
+            dtype=np.float32,
+        )
 
     def _compute_reward(self, action, row):
         action = int(action)
 
-        packet_rate = float(row["packet_rate"])
-        byte_rate = float(row["byte_rate"])
-        flow_count = float(row["flow_count"])
-        flow_growth_rate = float(row["flow_growth_rate"])
-        src_ip_entropy = float(row["src_ip_entropy"])
-        latency = float(row["latency"])
-        packet_loss = float(row["packet_loss"])
-        controller_cpu = float(row["controller_cpu"])
-        
-        # ĐÂY LÀ NHÃN: Chỉ dùng để tính đúng/sai, không nằm trong State
-        #attack_indicator = float(row["attack_indicator"])
-        #attack_label = int(round(attack_indicator * 5))
+        packet_rate = self._value(row, "packet_rate")
+        byte_rate = self._value(row, "byte_rate")
+        flow_count = self._value(row, "flow_count")
+        flow_growth_rate = self._value(row, "flow_growth_rate", 0.0)
+        src_ip_entropy = self._value(row, "src_ip_entropy")
+        latency = self._value(row, "latency")
+        packet_loss = self._value(row, "packet_loss")
+        controller_cpu = self._value(row, "controller_cpu")
 
-        # ĐÂY LÀ NHÃN THẬT TỪ DATASET
-        attack_label = int(row["label"])
+        attack_label = self._get_attack_label(row)
 
-        # QoS penalty nhỏ thôi, tránh làm reward luôn âm nặng
+        # Normalize robustly for reward calculation.
+        packet_norm = self._scale(packet_rate, 5000.0)
+        byte_norm = self._scale(byte_rate, 5_000_000.0)
+        flow_norm = self._scale(flow_count, 200.0)
+        growth_norm = self._scale(flow_growth_rate, 100.0)
+        entropy_norm = self._scale(src_ip_entropy, 8.0)
+        latency_norm = self._scale(latency, 300.0)
+
+        if packet_loss <= 1.0:
+            loss_norm = float(np.clip(packet_loss, 0.0, 1.0))
+        else:
+            loss_norm = float(np.clip(packet_loss / 100.0, 0.0, 1.0))
+
+        cpu_norm = self._scale(controller_cpu, 100.0)
+
         qos_penalty = (
-            0.10 * latency +
-            0.20 * packet_loss +
-            0.10 * controller_cpu +
-            0.10 * flow_growth_rate
+            0.10 * latency_norm
+            + 0.20 * loss_norm
+            + 0.10 * cpu_norm
+            + 0.10 * growth_norm
         )
 
         action_costs = {
@@ -97,12 +183,12 @@ class OfflineSDNEnv:
         switching_penalty = 0.03 if action != self.previous_action else 0.0
 
         risk_score = (
-            0.20 * packet_rate +
-            0.15 * byte_rate +
-            0.15 * flow_count +
-            0.20 * flow_growth_rate +
-            0.15 * src_ip_entropy +
-            0.15 * controller_cpu
+            0.20 * packet_norm
+            + 0.15 * byte_norm
+            + 0.15 * flow_norm
+            + 0.20 * growth_norm
+            + 0.15 * entropy_norm
+            + 0.15 * cpu_norm
         )
 
         # =========================
@@ -155,7 +241,6 @@ class OfflineSDNEnv:
 
         # 3 = ip_spoofing
         elif attack_label == 3:
-            # isolate chỉ nên rất tốt khi risk cao
             if action == 4 and risk_score >= 0.55:
                 security_reward = 2.80
             elif action == 1:
@@ -202,7 +287,7 @@ class OfflineSDNEnv:
                 security_reward = -1.50
 
         else:
-            security_reward = -1.0
+            security_reward = -1.00
 
         severity_bonus = 0.0
         if attack_label != 0 and action != 0:
