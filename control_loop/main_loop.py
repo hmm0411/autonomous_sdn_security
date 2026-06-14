@@ -77,6 +77,22 @@ def raw_to_state_vector(raw: dict) -> list[float]:
         float(raw.get("controller_cpu", 0.0) or 0.0),
     ]
 
+def is_clearly_normal(raw: dict) -> bool:
+    pps = float(raw.get("packet_rate", 0.0) or 0.0)
+    flows = float(raw.get("flow_count", 0.0) or 0.0)
+    growth = abs(float(raw.get("flow_growth_rate", 0.0) or 0.0))
+    latency = float(raw.get("latency", 0.0) or 0.0)
+    loss = float(raw.get("packet_loss", 0.0) or 0.0)
+    cpu = float(raw.get("controller_cpu", 0.0) or 0.0)
+
+    return (
+        pps < 50
+        and flows < 15
+        and growth < 2
+        and latency < 10
+        and loss < 0.001
+        and cpu < 15
+    )
 
 def pressure_score(raw: dict) -> float:
     """
@@ -395,6 +411,13 @@ while True:
         reward_staging = reward_calc.calculate(raw, action_staging)
 
         final_action = action_prod
+
+        if MODE in ("rl", "rl_twin", "rl_llm", "full", "hybrid") and is_clearly_normal(raw):
+            print(
+                f"[NORMAL_GUARD] raw metrics look normal, override action {final_action} -> 0",
+                flush=True,
+            )
+            final_action = 0
 
         twin_safe = 1
         pred_latency = 0.0
