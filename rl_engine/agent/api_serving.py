@@ -319,10 +319,9 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
+    load_models()
+
     metrics_port = 9002 if model_type == "dqn" else 9003
     start_http_server(metrics_port, addr="0.0.0.0")
     print(f"[+] Prometheus Serving Metrics started on port {metrics_port}", flush=True)
-
-    load_models()
-
     app.run(host="0.0.0.0", port=args.port)
