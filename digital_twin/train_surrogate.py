@@ -47,7 +47,10 @@ def main():
             f"Run control loop with MODE=collect first."
         )
 
-    df = pd.read_csv(DATA_PATH).dropna()
+    df = pd.read_csv(
+        DATA_PATH,
+        on_bad_lines="skip"
+    ).dropna()
 
     missing_cols = [
         col
