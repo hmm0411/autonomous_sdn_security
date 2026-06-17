@@ -1,11 +1,13 @@
 class Reward:
     """
-    Reward dùng cho runtime benchmark và training.
-    Mục tiêu:
-    - Normal + no_action: thưởng cao.
-    - Attack + no_action: phạt.
-    - Attack + action phòng vệ: thưởng/ít phạt hơn.
+    Reward cho runtime benchmark.
+
+    Nguyên tắc:
+    - Không dùng flow_count đơn lẻ để kết luận attack vì ONOS có thể giữ flow cũ.
+    - Normal + action 0: thưởng cao.
     - Normal + action phòng vệ: phạt overreaction.
+    - Attack + action 0: phạt nặng.
+    - Attack + action phòng vệ: thưởng cao hơn no_action.
     """
 
     def __init__(self):
@@ -24,7 +26,6 @@ class Reward:
 
         pps = self._f(raw, "packet_rate")
         bps = self._f(raw, "byte_rate")
-        flows = self._f(raw, "flow_count")
         growth = abs(self._f(raw, "flow_growth_rate"))
         entropy = self._f(raw, "src_ip_entropy")
         latency = self._f(raw, "latency")
@@ -33,14 +34,14 @@ class Reward:
 
         score = 0.0
 
+        # Không dùng flow_count ở đây để tránh false positive do flow cũ.
         score += min(pps / 500.0, 4.0)
         score += min(bps / 100000.0, 2.0)
-        score += min(max(flows - 12.0, 0.0) / 10.0, 2.0)
         score += min(growth / 5.0, 2.0)
         score += min(entropy * 2.0, 2.0)
         score += min(max(latency - 5.0, 0.0) / 20.0, 4.0)
         score += min(loss / 0.01, 4.0)
-        score += min(max(cpu - 10.0, 0.0) / 20.0, 3.0)
+        score += min(max(cpu - 10.0, 0.0) / 25.0, 3.0)
 
         return score
 
@@ -49,7 +50,7 @@ class Reward:
             return False
 
         pps = self._f(raw, "packet_rate")
-        flows = self._f(raw, "flow_count")
+        bps = self._f(raw, "byte_rate")
         growth = abs(self._f(raw, "flow_growth_rate"))
         latency = self._f(raw, "latency")
         loss = self._f(raw, "packet_loss")
@@ -57,6 +58,7 @@ class Reward:
 
         return (
             pps >= 100
+            or bps >= 10000
             or growth >= 3
             or latency >= 8
             or loss >= 0.001
@@ -69,30 +71,28 @@ class Reward:
             return 0.0
 
         action = int(action)
-        score = self.threat_score(raw)
         attack = self.is_attack_like(raw)
+        score = self.threat_score(raw)
 
         latency = self._f(raw, "latency")
         loss = self._f(raw, "packet_loss")
         cpu = self._f(raw, "controller_cpu")
 
-        # Base QoS penalty
         qos_penalty = 0.0
-        qos_penalty += min(max(latency - 5.0, 0.0) / 20.0, 3.0)
-        qos_penalty += min(loss / 0.01, 3.0)
-        qos_penalty += min(max(cpu - 10.0, 0.0) / 30.0, 2.0)
+        qos_penalty += min(max(latency - 5.0, 0.0) / 50.0, 3.0)
+        qos_penalty += min(loss / 0.05, 3.0)
+        qos_penalty += min(max(cpu - 10.0, 0.0) / 50.0, 2.0)
 
         # Normal traffic
         if not attack:
             if action == 0:
                 return 1.0
-            return -1.0  # overreaction
+            return -1.0
 
         # Attack traffic
         if action == 0:
-            return max(-5.0, -1.0 - 0.6 * score - qos_penalty)
+            return max(-5.0, -1.0 - 0.5 * score - 0.3 * qos_penalty)
 
-        # Có phòng vệ khi attack
         action_cost = {
             1: 0.30,  # block
             2: 0.20,  # limit
@@ -100,12 +100,6 @@ class Reward:
             4: 0.40,  # isolate
         }.get(action, 0.30)
 
-        reward = 1.5 - 0.25 * qos_penalty - action_cost
-
-        # Nếu attack rất nặng mà có hành động phòng vệ thì thưởng thêm
-        if score >= 6:
-            reward += 0.8
-        elif score >= 3:
-            reward += 0.4
+        reward = 0.8 + 0.18 * score - 0.20 * qos_penalty - action_cost
 
         return max(-5.0, min(3.0, reward))
