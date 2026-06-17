@@ -1,65 +1,112 @@
 class Reward:
     """
-    Runtime/evaluation reward for 8-dim state.
-
-    Action map:
-    0 no_action
-    1 block_suspicious_flow
-    2 limit_bandwidth
-    3 redirect_traffic
-    4 isolate_device
+    Reward dùng cho runtime benchmark và training.
+    Mục tiêu:
+    - Normal + no_action: thưởng cao.
+    - Attack + no_action: phạt.
+    - Attack + action phòng vệ: thưởng/ít phạt hơn.
+    - Normal + action phòng vệ: phạt overreaction.
     """
 
     def __init__(self):
-        self.last_action = 0
+        pass
+
+    @staticmethod
+    def _f(raw, key, default=0.0):
+        try:
+            return float(raw.get(key, default) or default)
+        except Exception:
+            return float(default)
+
+    def threat_score(self, raw):
+        if raw is None:
+            return 0.0
+
+        pps = self._f(raw, "packet_rate")
+        bps = self._f(raw, "byte_rate")
+        flows = self._f(raw, "flow_count")
+        growth = abs(self._f(raw, "flow_growth_rate"))
+        entropy = self._f(raw, "src_ip_entropy")
+        latency = self._f(raw, "latency")
+        loss = self._f(raw, "packet_loss")
+        cpu = self._f(raw, "controller_cpu")
+
+        score = 0.0
+
+        score += min(pps / 500.0, 4.0)
+        score += min(bps / 100000.0, 2.0)
+        score += min(max(flows - 12.0, 0.0) / 10.0, 2.0)
+        score += min(growth / 5.0, 2.0)
+        score += min(entropy * 2.0, 2.0)
+        score += min(max(latency - 5.0, 0.0) / 20.0, 4.0)
+        score += min(loss / 0.01, 4.0)
+        score += min(max(cpu - 10.0, 0.0) / 20.0, 3.0)
+
+        return score
+
+    def is_attack_like(self, raw):
+        if raw is None:
+            return False
+
+        pps = self._f(raw, "packet_rate")
+        flows = self._f(raw, "flow_count")
+        growth = abs(self._f(raw, "flow_growth_rate"))
+        latency = self._f(raw, "latency")
+        loss = self._f(raw, "packet_loss")
+        cpu = self._f(raw, "controller_cpu")
+
+        return (
+            pps >= 100
+            or flows >= 20
+            or growth >= 3
+            or latency >= 8
+            or loss >= 0.001
+            or cpu >= 18
+            or self.threat_score(raw) >= 3
+        )
 
     def calculate(self, raw, action):
         if raw is None:
-            return -1.0
+            return 0.0
 
         action = int(action)
+        score = self.threat_score(raw)
+        attack = self.is_attack_like(raw)
 
-        packet_rate = float(raw.get("packet_rate", 0.0) or 0.0)
-        flow_count = float(raw.get("flow_count", 0.0) or 0.0)
-        flow_growth = abs(float(raw.get("flow_growth_rate", 0.0) or 0.0))
-        latency = float(raw.get("latency", 0.0) or 0.0)
-        packet_loss = float(raw.get("packet_loss", 0.0) or 0.0)
-        controller_cpu = float(raw.get("controller_cpu", 0.0) or 0.0)
+        latency = self._f(raw, "latency")
+        loss = self._f(raw, "packet_loss")
+        cpu = self._f(raw, "controller_cpu")
 
-        threat = 0.0
-        threat += min(packet_rate / 1000.0, 3.0)
-        threat += min(flow_count / 200.0, 2.0)
-        threat += min(flow_growth / 50.0, 2.0)
-        threat += min(latency / 200.0, 1.5)
-        threat += min(packet_loss * 5.0, 2.0)
-        threat += min(controller_cpu / 100.0, 1.0)
+        # Base QoS penalty
+        qos_penalty = 0.0
+        qos_penalty += min(max(latency - 5.0, 0.0) / 20.0, 3.0)
+        qos_penalty += min(loss / 0.01, 3.0)
+        qos_penalty += min(max(cpu - 10.0, 0.0) / 30.0, 2.0)
 
+        # Normal traffic
+        if not attack:
+            if action == 0:
+                return 1.0
+            return -1.0  # overreaction
+
+        # Attack traffic
+        if action == 0:
+            return max(-5.0, -1.0 - 0.6 * score - qos_penalty)
+
+        # Có phòng vệ khi attack
         action_cost = {
-            0: 0.00,
-            1: 0.35,
-            2: 0.18,
-            3: 0.22,
-            4: 0.45,
-        }.get(action, 0.5)
+            1: 0.30,  # block
+            2: 0.20,  # limit
+            3: 0.25,  # redirect
+            4: 0.40,  # isolate
+        }.get(action, 0.30)
 
-        switch_penalty = 0.08 if action != self.last_action else 0.0
+        reward = 1.5 - 0.25 * qos_penalty - action_cost
 
-        if threat < 0.8:
-            if action == 0:
-                reward = 1.0
-            else:
-                reward = 0.3 - action_cost
-        else:
-            if action == 0:
-                reward = -threat
-            elif action == 2:
-                reward = 1.2 - 0.18 * threat - action_cost
-            elif action in (1, 3, 4):
-                reward = 1.0 - 0.20 * threat - action_cost
-            else:
-                reward = -0.5
+        # Nếu attack rất nặng mà có hành động phòng vệ thì thưởng thêm
+        if score >= 6:
+            reward += 0.8
+        elif score >= 3:
+            reward += 0.4
 
-        reward -= switch_penalty
-        self.last_action = action
-
-        return float(max(-5.0, min(2.0, reward)))
+        return max(-5.0, min(3.0, reward))

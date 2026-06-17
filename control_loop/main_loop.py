@@ -77,23 +77,6 @@ def raw_to_state_vector(raw: dict) -> list[float]:
         float(raw.get("controller_cpu", 0.0) or 0.0),
     ]
 
-def is_clearly_normal(raw: dict) -> bool:
-    pps = float(raw.get("packet_rate", 0.0) or 0.0)
-    flows = float(raw.get("flow_count", 0.0) or 0.0)
-    growth = abs(float(raw.get("flow_growth_rate", 0.0) or 0.0))
-    latency = float(raw.get("latency", 0.0) or 0.0)
-    loss = float(raw.get("packet_loss", 0.0) or 0.0)
-    cpu = float(raw.get("controller_cpu", 0.0) or 0.0)
-
-    return (
-        pps < 50
-        and flows < 15
-        and growth < 2
-        and latency < 10
-        and loss < 0.001
-        and cpu < 15
-    )
-
 def pressure_score(raw: dict) -> float:
     """
     Pressure score cho hybrid arbitration.
@@ -192,56 +175,205 @@ def init_csv(path, header):
             csv.writer(f).writerow(header)
 
 
-def rule_action(raw):
+def _f(raw, key, default=0.0):
+    try:
+        return float(raw.get(key, default) or default)
+    except Exception:
+        return float(default)
+
+
+def threat_score(raw):
+    """
+    Tính điểm bất thường từ raw state runtime.
+    Hàm này dùng cho rule-based, action guard và benchmark.
+    """
     if raw is None:
         return 0
 
-    pps = float(raw.get("packet_rate", 0.0) or 0.0)
-    flows = float(raw.get("flow_count", 0.0) or 0.0)
-    growth = abs(float(raw.get("flow_growth_rate", 0.0) or 0.0))
-    entropy = float(raw.get("src_ip_entropy", 0.0) or 0.0)
-    latency = float(raw.get("latency", 0.0) or 0.0)
-    loss = float(raw.get("packet_loss", 0.0) or 0.0)
-    cpu = float(raw.get("controller_cpu", 0.0) or 0.0)
+    pps = _f(raw, "packet_rate")
+    bps = _f(raw, "byte_rate")
+    flows = _f(raw, "flow_count")
+    growth = abs(_f(raw, "flow_growth_rate"))
+    entropy = _f(raw, "src_ip_entropy")
+    latency = _f(raw, "latency")
+    loss = _f(raw, "packet_loss")
+    cpu = _f(raw, "controller_cpu")
 
-    anomaly_score = 0
+    score = 0
 
-    if pps > 400:
-        anomaly_score += 1
+    # Packet/byte rate
+    if pps >= 2000:
+        score += 3
+    elif pps >= 500:
+        score += 2
+    elif pps >= 100:
+        score += 1
 
-    # Most observed flows are around 12-20.
-    # Give a stronger signal for >20 and a moderate one for >12.
-    if flows > 20:
-        anomaly_score += 2
-    elif flows > 12:
-        anomaly_score += 1
+    if bps >= 100000:
+        score += 2
+    elif bps >= 10000:
+        score += 1
 
-    if growth > 5:
-        anomaly_score += 1
+    # Flow pressure
+    if flows >= 50:
+        score += 2
+    elif flows >= 20:
+        score += 1
 
-    if entropy > 0.5:
-        anomaly_score += 1
+    if growth >= 20:
+        score += 2
+    elif growth >= 3:
+        score += 1
 
-    if latency > 15:
-        anomaly_score += 1
+    # Source diversity / spoofing indicator
+    if entropy >= 0.7:
+        score += 2
+    elif entropy >= 0.4:
+        score += 1
 
-    if loss > 0.005:
-        anomaly_score += 1
+    # QoS degradation
+    if latency >= 100:
+        score += 3
+    elif latency >= 20:
+        score += 2
+    elif latency >= 8:
+        score += 1
 
-    if cpu > 15:
-        anomaly_score += 1
+    if loss >= 0.05:
+        score += 3
+    elif loss >= 0.005:
+        score += 2
+    elif loss >= 0.001:
+        score += 1
 
-    if anomaly_score >= 4:
-        return 1
+    # Controller overload
+    if cpu >= 80:
+        score += 3
+    elif cpu >= 40:
+        score += 2
+    elif cpu >= 18:
+        score += 1
 
-    if anomaly_score >= 2:
-        return 2
+    return score
 
-    # If entropy is high and flows are above typical levels, redirect to honeypot.
-    if entropy > 0.5 and flows > 12:
-        return 3
+def is_clearly_normal(raw):
+    """
+    Normal guard:
+    Không nên chỉ dựa vào flow_count vì ONOS có thể giữ flow cũ.
+    Tập trung vào packet_rate, latency, loss, cpu, flow_growth.
+    """
+    if raw is None:
+        return True
+
+    pps = _f(raw, "packet_rate")
+    growth = abs(_f(raw, "flow_growth_rate"))
+    latency = _f(raw, "latency")
+    loss = _f(raw, "packet_loss")
+    cpu = _f(raw, "controller_cpu")
+    entropy = _f(raw, "src_ip_entropy")
+
+    return (
+        pps < 80
+        and growth < 3
+        and entropy < 0.4
+        and latency < 8
+        and loss < 0.001
+        and cpu < 18
+    )
+
+def rule_action(raw):
+    """
+    Rule-based baseline đã chỉnh theo metric thực tế bạn đang thấy.
+    Không dùng ngưỡng quá cao nữa, vì log runtime có nhiều attack ở mức
+    packet_rate 100-500 nhưng vẫn đã làm latency/loss tăng.
+    """
+    if raw is None:
+        return 0
+
+    pps = _f(raw, "packet_rate")
+    bps = _f(raw, "byte_rate")
+    flows = _f(raw, "flow_count")
+    growth = abs(_f(raw, "flow_growth_rate"))
+    entropy = _f(raw, "src_ip_entropy")
+    latency = _f(raw, "latency")
+    loss = _f(raw, "packet_loss")
+    cpu = _f(raw, "controller_cpu")
+
+    score = threat_score(raw)
+
+    # Mạng bình thường thì không can thiệp
+    if is_clearly_normal(raw):
+        return 0
+
+    # Tấn công/overload rất nặng: block
+    if (
+        pps >= 2000
+        or latency >= 100
+        or loss >= 0.05
+        or cpu >= 80
+        or score >= 6
+    ):
+        return 1  # block_suspicious_flow
+
+    # Packet-in/flow pressure: limit bandwidth
+    if (
+        pps >= 100
+        or bps >= 10000
+        or latency >= 8
+        or loss >= 0.001
+        or cpu >= 18
+        or flows >= 16
+        or score >= 3
+    ):
+        return 2  # limit_bandwidth
+
+    # Flow growth/scan/spread traffic: redirect
+    if growth >= 3 or entropy >= 0.4:
+        return 3  # redirect_traffic
 
     return 0
+
+
+def apply_action_guard(raw, proposed_action, mode):
+    """
+    Lớp bảo vệ quyết định:
+    - collect/no_defense: luôn giữ 0 để đúng baseline.
+    - collect_random: giữ random action để thu transition đa dạng cho Twin.
+    - normal traffic: ép action về 0 để tránh overreaction.
+    - attack rõ ràng nhưng RL trả 0: override bằng rule_action.
+    """
+    try:
+        proposed_action = int(proposed_action)
+    except Exception:
+        proposed_action = 0
+
+    mode = str(mode).lower()
+
+    if mode in ("collect", "no_defense"):
+        return 0
+
+    if mode == "collect_random":
+        return proposed_action
+
+    if is_clearly_normal(raw):
+        if proposed_action != 0:
+            print(
+                f"[ACTION_GUARD] normal traffic detected, override {proposed_action} -> 0",
+                flush=True,
+            )
+        return 0
+
+    fallback_action = rule_action(raw)
+
+    if proposed_action == 0 and fallback_action != 0:
+        print(
+            f"[ACTION_GUARD] attack detected, override 0 -> {fallback_action} | "
+            f"threat_score={threat_score(raw)} raw={raw}",
+            flush=True,
+        )
+        return fallback_action
+
+    return proposed_action
 
 
 def choose_action(raw, state):
@@ -407,10 +539,13 @@ while True:
 
         action_prod, action_staging, model_name = choose_action(raw, state)
 
-        reward_prod = reward_calc.calculate(raw, action_prod)
-        reward_staging = reward_calc.calculate(raw, action_staging)
+        final_action = apply_action_guard(
+            raw=raw,
+            proposed_action=action_prod,
+            mode=MODE,
+        )
 
-        final_action = action_prod
+        reward_staging = reward_calc.calculate(raw, action_staging)
 
         if MODE in ("rl", "rl_twin", "rl_llm", "full", "hybrid") and is_clearly_normal(raw):
             print(
