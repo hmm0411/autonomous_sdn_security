@@ -33,7 +33,6 @@ MODEL_TYPE = os.getenv("MODEL_TYPE", "dqn").lower()
 # rl_llm          : RL + LLM explanation
 # full            : RL + Twin + LLM
 # hybrid          : DQN/PPO hybrid arbitration
-
 ACTION_DRY_RUN = os.getenv("ACTION_DRY_RUN", "true").lower() == "true"
 
 LOG_PATH = os.getenv("RUNTIME_LOG", "logs/runtime_eval.csv")
@@ -43,6 +42,20 @@ ONOS_HEALTH = os.getenv(
     "ONOS_HEALTH",
     "http://controller:8181/onos/v1/flows",
 )
+
+EVAL_CONFIG = os.getenv("EVAL_CONFIG", "").lower()
+PHASE = os.getenv("PHASE", "unknown").lower()
+ATTACK_TYPE = os.getenv("ATTACK_TYPE", "unknown").lower()
+ATTACK_INTENSITY = os.getenv("ATTACK_INTENSITY", "medium").lower()
+RUN_ID = os.getenv("RUN_ID", "0")
+
+ENABLE_GUARD = os.getenv("ENABLE_GUARD", "false").lower() == "true"
+ENABLE_TWIN = os.getenv("ENABLE_TWIN", "false").lower() == "true"
+ENABLE_LLM = os.getenv("ENABLE_LLM", "false").lower() == "true"
+
+SLA_LATENCY_THRESHOLD = float(os.getenv("SLA_LATENCY_THRESHOLD", "100"))
+SLA_LOSS_THRESHOLD = float(os.getenv("SLA_LOSS_THRESHOLD", "0.05"))
+HYBRID_PRESSURE_THRESHOLD = float(os.getenv("HYBRID_PRESSURE_THRESHOLD", "0.45"))
 
 os.makedirs("logs", exist_ok=True)
 os.makedirs("models", exist_ok=True)
@@ -55,9 +68,48 @@ ensure_metrics_server(9100)
 
 print(
     f"AUTO CONTROL LOOP STARTED | MODE={MODE} | "
-    f"MODEL_TYPE={MODEL_TYPE} | DRY_RUN={ACTION_DRY_RUN}",
+    f"MODEL_TYPE={MODEL_TYPE} | DRY_RUN={ACTION_DRY_RUN} | "
+    f"GUARD={ENABLE_GUARD} | TWIN={ENABLE_TWIN} | LLM={ENABLE_LLM}",
     flush=True,
 )
+
+
+# =========================================================
+# Evaluation Config Helper
+# =========================================================
+def resolve_eval_config() -> str:
+    if EVAL_CONFIG:
+        return EVAL_CONFIG
+
+    if MODE == "no_defense":
+        return "no_defense"
+
+    if MODE == "rule":
+        return "rule"
+
+    if MODE == "rl":
+        if ENABLE_GUARD:
+            return f"rl_guard_{MODEL_TYPE}"
+        return f"rl_{MODEL_TYPE}"
+
+    if MODE == "hybrid":
+        if ENABLE_GUARD:
+            return "hybrid_guard"
+        return "hybrid"
+
+    if MODE == "rl_twin":
+        return f"rl_twin_{MODEL_TYPE}"
+
+    if MODE in ("full", "rl_llm"):
+        return f"full_system_{MODEL_TYPE}"
+
+    if MODE == "collect":
+        return "collect"
+
+    if MODE == "collect_random":
+        return "collect_random"
+
+    return MODE
 
 
 # =========================================================
@@ -65,10 +117,9 @@ print(
 # =========================================================
 def raw_to_state_vector(raw: dict) -> list[float]:
     """
-    Raw state vector 8 chiều dùng cho:
-    - logging
-    - Prometheus metrics
-    - Digital Twin nếu surrogate được train từ transition_log.csv raw
+    Runtime state 8 chiều:
+    [packet_rate, byte_rate, flow_count, flow_growth_rate,
+     src_ip_entropy, latency, packet_loss, controller_cpu]
     """
     return [
         float(raw.get("packet_rate", 0.0) or 0.0),
@@ -93,8 +144,8 @@ def _f(raw: Optional[dict], key: str, default: float = 0.0) -> float:
 
 def pressure_score(raw: dict) -> float:
     """
-    Pressure score cho hybrid arbitration.
-    Không dùng flow_count đơn lẻ làm tín hiệu mạnh vì ONOS có thể giữ flow cũ.
+    Pressure score dùng cho hybrid arbitration.
+    Giá trị cao -> ưu tiên DQN; thấp -> ưu tiên PPO.
     """
     pps = _f(raw, "packet_rate")
     growth = abs(_f(raw, "flow_growth_rate"))
@@ -117,10 +168,7 @@ def pressure_score(raw: dict) -> float:
 def threat_score(raw: Optional[dict]) -> float:
     """
     Điểm bất thường dùng cho rule-based và action guard.
-
-    Lưu ý:
-    - Không dùng flow_count ở mức 20/24 để kết luận attack.
-    - flow_count chỉ được xem là tín hiệu phụ khi rất cao.
+    flow_count chỉ là tín hiệu phụ khi rất cao.
     """
     if raw is None:
         return 0.0
@@ -136,7 +184,6 @@ def threat_score(raw: Optional[dict]) -> float:
 
     score = 0.0
 
-    # Packet/byte rate
     if pps >= 2000:
         score += 3
     elif pps >= 500:
@@ -149,7 +196,6 @@ def threat_score(raw: Optional[dict]) -> float:
     elif bps >= 10000:
         score += 1
 
-    # Flow count chỉ là tín hiệu phụ nếu rất cao
     if flows >= 100:
         score += 2
     elif flows >= 60:
@@ -160,13 +206,11 @@ def threat_score(raw: Optional[dict]) -> float:
     elif growth >= 3:
         score += 1
 
-    # Source diversity / spoofing indicator
     if entropy >= 0.7:
         score += 2
     elif entropy >= 0.4:
         score += 1
 
-    # QoS degradation
     if latency >= 100:
         score += 3
     elif latency >= 20:
@@ -181,7 +225,6 @@ def threat_score(raw: Optional[dict]) -> float:
     elif loss >= 0.001:
         score += 1
 
-    # Controller overload
     if cpu >= 80:
         score += 3
     elif cpu >= 40:
@@ -192,42 +235,47 @@ def threat_score(raw: Optional[dict]) -> float:
     return float(score)
 
 
-def is_clearly_normal(raw: Optional[dict]) -> bool:
-    """
-    Normal guard:
-    Không dùng flow_count vì ONOS có thể giữ flow cũ.
-    Chỉ dựa vào traffic hiện tại, QoS, loss, CPU, entropy, growth.
-    """
-    if raw is None:
-        return True
-
-    pps = _f(raw, "packet_rate")
-    bps = _f(raw, "byte_rate")
-    growth = abs(_f(raw, "flow_growth_rate"))
-    entropy = _f(raw, "src_ip_entropy")
+def is_clearly_normal(raw: dict) -> bool:
+    packet_rate = _f(raw, "packet_rate")
+    flow_count = _f(raw, "flow_count")
+    flow_growth = abs(_f(raw, "flow_growth_rate"))
     latency = _f(raw, "latency")
-    loss = _f(raw, "packet_loss")
-    cpu = _f(raw, "controller_cpu")
+    packet_loss = _f(raw, "packet_loss")
+    controller_cpu = _f(raw, "controller_cpu")
 
     return (
-        pps < 80
-        and bps < 10000
-        and growth < 3
-        and entropy < 0.4
-        and latency < 8
-        and loss < 0.001
-        and cpu < 18
+        packet_rate < 50
+        and flow_count < 15
+        and flow_growth < 2
+        and latency < 10
+        and packet_loss < 0.001
+        and controller_cpu < 20
     )
 
 
+def apply_normal_guard(raw: dict, action: int) -> tuple[int, int]:
+    """
+    Return:
+    - final_action
+    - guard_overrode
+    """
+    if not ENABLE_GUARD:
+        return action, 0
+
+    if action != 0 and is_clearly_normal(raw):
+        print(
+            f"[GUARD] normal traffic detected, override action {action} -> 0",
+            flush=True,
+        )
+        return 0, 1
+
+    return action, 0
+
+
+# =========================================================
+# Rule-based Baseline
+# =========================================================
 def rule_action(raw: Optional[dict]) -> int:
-    """
-    Rule-based baseline.
-    - Normal: action 0
-    - Attack/overload nặng: action 1
-    - Attack vừa/nhẹ: action 2
-    - Scan/spread/growth: action 3 nếu chưa bị bắt bởi rule trên
-    """
     if raw is None:
         return 0
 
@@ -245,7 +293,6 @@ def rule_action(raw: Optional[dict]) -> int:
     if is_clearly_normal(raw):
         return 0
 
-    # Tấn công/overload rất nặng
     if (
         pps >= 2000
         or latency >= 100
@@ -255,7 +302,6 @@ def rule_action(raw: Optional[dict]) -> int:
     ):
         return 1  # block_suspicious_flow
 
-    # Bất thường vừa/nhẹ
     if (
         pps >= 100
         or bps >= 10000
@@ -267,53 +313,10 @@ def rule_action(raw: Optional[dict]) -> int:
     ):
         return 2  # limit_bandwidth
 
-    # Growth/entropy bất thường
     if growth >= 3 or entropy >= 0.4:
         return 3  # redirect_traffic
 
     return 0
-
-
-def apply_action_guard(raw: Optional[dict], proposed_action: int, mode: str) -> int:
-    """
-    Safety guard cho quyết định:
-    - collect/no_defense: giữ action 0 để đúng baseline.
-    - collect_random: giữ random action để thu transition đa dạng.
-    - normal traffic: ép action về 0 để tránh over-defense.
-    - attack rõ ràng nhưng RL trả 0: override bằng rule_action.
-    """
-    try:
-        proposed_action = int(proposed_action)
-    except Exception:
-        proposed_action = 0
-
-    mode = str(mode).lower()
-
-    if mode in ("collect", "no_defense"):
-        return 0
-
-    if mode == "collect_random":
-        return proposed_action
-
-    if is_clearly_normal(raw):
-        if proposed_action != 0:
-            print(
-                f"[ACTION_GUARD] normal traffic detected, override {proposed_action} -> 0",
-                flush=True,
-            )
-        return 0
-
-    fallback_action = rule_action(raw)
-
-    if proposed_action == 0 and fallback_action != 0:
-        print(
-            f"[ACTION_GUARD] attack detected, override 0 -> {fallback_action} | "
-            f"threat_score={threat_score(raw)} raw={raw}",
-            flush=True,
-        )
-        return fallback_action
-
-    return proposed_action
 
 
 # =========================================================
@@ -336,7 +339,7 @@ try:
     state_vector_to_dict = _state_vector_to_dict
 
     LLM_ENABLED = True
-    print("[LLM] enabled", flush=True)
+    print("[LLM] module available", flush=True)
 
 except Exception as e:
     print(f"[LLM] disabled: {e}", flush=True)
@@ -348,7 +351,7 @@ except Exception as e:
 TWIN: Any = None
 TWIN_VALIDATE: Optional[Callable[[dict], bool]] = None
 
-if MODE in ("rl_twin", "full"):
+if MODE in ("rl_twin", "full") and ENABLE_TWIN:
     try:
         from digital_twin.twin import DigitalTwin
         from digital_twin.safety import validate
@@ -363,6 +366,8 @@ if MODE in ("rl_twin", "full"):
         print(f"[TWIN] disabled: {e}", flush=True)
         TWIN = None
         TWIN_VALIDATE = None
+else:
+    print("[TWIN] disabled by mode or ENABLE_TWIN=false", flush=True)
 
 
 # =========================================================
@@ -397,8 +402,13 @@ def log_runtime(row: list[Any]) -> None:
         LOG_PATH,
         [
             "ts",
+            "eval_config",
+            "phase",
             "mode",
             "model",
+            "attack_type",
+            "intensity",
+            "run_id",
             "packet_rate",
             "byte_rate",
             "flow_count",
@@ -407,17 +417,24 @@ def log_runtime(row: list[Any]) -> None:
             "latency",
             "packet_loss",
             "controller_cpu",
-            "action",
+            "action_requested",
+            "action_final",
+            "action_staging",
             "reward",
             "reward_staging",
+            "guard_enabled",
+            "guard_overrode",
+            "twin_enabled",
+            "twin_checked",
             "twin_safe",
+            "twin_rejected",
             "pred_latency",
             "pred_loss",
             "gap_latency",
             "gap_loss",
-            "attack_type",
-            "intensity",
-            "run_id",
+            "llm_enabled",
+            "llm_latency",
+            "sla_violation",
         ],
     )
 
@@ -480,17 +497,12 @@ def log_transition(
 # =========================================================
 # Action Selection
 # =========================================================
-def choose_action(raw: dict, state: list[float]) -> tuple[int, int, str]:
-    """
-    Return:
-    action_prod, action_staging, model_name
-    """
+def choose_action(raw: dict, state) -> tuple[int, int, str]:
     if MODE in ("collect", "no_defense"):
         return 0, 0, "none"
 
     if MODE == "collect_random":
         import random
-
         action = random.randint(0, 4)
         return action, action, "random"
 
@@ -499,9 +511,7 @@ def choose_action(raw: dict, state: list[float]) -> tuple[int, int, str]:
         return action, action, "rule"
 
     if MODE == "hybrid":
-        threshold = float(os.getenv("HYBRID_PRESSURE_THRESHOLD", "0.45"))
-        selected_model = "dqn" if pressure_score(raw) >= threshold else "ppo"
-
+        selected_model = "dqn" if pressure_score(raw) >= HYBRID_PRESSURE_THRESHOLD else "ppo"
         action_prod, action_staging, model_name = get_action(
             state,
             model_type=selected_model,
@@ -552,15 +562,7 @@ while True:
             time.sleep(SLEEP_TIME)
             continue
 
-        # decision_raw là state DUY NHẤT dùng để:
-        # - build input cho RL
-        # - chọn action
-        # - action guard
-        # - tính reward
-        # - log runtime
-        # next_raw chỉ dùng cho transition và twin gap.
         decision_raw = dict(raw)
-
         state = state_builder.build(decision_raw)
         raw_state = raw_to_state_vector(decision_raw)
 
@@ -572,25 +574,35 @@ while True:
             time.sleep(SLEEP_TIME)
             continue
 
-        action_prod, action_staging, model_name = choose_action(decision_raw, state)
+        eval_config = resolve_eval_config()
 
-        final_action = apply_action_guard(
-            raw=decision_raw,
-            proposed_action=action_prod,
-            mode=MODE,
-        )
+        action_requested, action_staging, model_name = choose_action(decision_raw, state)
+        final_action = action_requested
 
-        reward_staging = reward_calc.calculate(decision_raw, action_staging)
-
+        guard_overrode = 0
+        twin_checked = 0
         twin_safe = 1
+        twin_rejected = 0
+
         pred_latency = 0.0
         pred_loss = 0.0
         gap_latency = 0.0
         gap_loss = 0.0
+        llm_latency = 0.0
 
-        if MODE in ("rl_twin", "full") and TWIN is not None:
+        # =========================
+        # Guard layer
+        # =========================
+        final_action, guard_overrode = apply_normal_guard(decision_raw, final_action)
+
+        # =========================
+        # Digital Twin validation
+        # =========================
+        if MODE in ("rl_twin", "full") and ENABLE_TWIN and TWIN is not None:
+            twin_checked = 1
             try:
-                pred = TWIN.simulate(raw_state, final_action)
+                twin_state = raw_to_state_vector(decision_raw)
+                pred = TWIN.simulate(twin_state, final_action)
 
                 pred_latency = float(pred.get("latency", 0.0))
                 pred_loss = float(pred.get("packet_loss", 0.0))
@@ -598,13 +610,14 @@ while True:
                 if TWIN_VALIDATE is not None:
                     twin_safe = 1 if TWIN_VALIDATE(pred) else 0
                 else:
-                    twin_safe = 0
+                    twin_safe = 1
 
                 if twin_safe == 0:
+                    twin_rejected = 1
                     print(
-                        f"[TWIN_REJECT] action={final_action} "
-                        f"pred_latency={pred_latency:.4f} "
-                        f"pred_loss={pred_loss:.4f} -> fallback no_action",
+                        f"[TWIN_REJECT] requested={action_requested} "
+                        f"after_guard={final_action} -> fallback 0 "
+                        f"pred_latency={pred_latency:.4f} pred_loss={pred_loss:.4f}",
                         flush=True,
                     )
                     final_action = 0
@@ -612,8 +625,10 @@ while True:
             except Exception as e:
                 print(f"[TWIN_ERROR] {e}", flush=True)
                 twin_safe = 0
+                twin_rejected = 1
                 final_action = 0
 
+        reward_staging = reward_calc.calculate(decision_raw, action_staging)
         reward_final = reward_calc.calculate(decision_raw, final_action)
 
         if ACTION_DRY_RUN:
@@ -621,17 +636,21 @@ while True:
         else:
             execute_action(final_action, raw=decision_raw)
 
+        # =========================
+        # LLM explanation layer
+        # =========================
         if (
-            MODE in ("rl_llm", "full")
+            MODE in ("full", "rl_llm")
+            and ENABLE_LLM
             and LLM_ENABLED
             and explain_decision is not None
             and log_decision is not None
             and state_vector_to_dict is not None
-            and final_action in (1, 2, 3, 4)
         ):
             try:
-                state_dict = state_vector_to_dict(raw_state)
+                llm_start = time.time()
 
+                state_dict = state_vector_to_dict(raw_state)
                 qos = {
                     "latency": decision_raw.get("latency", 0.0),
                     "packet_loss": decision_raw.get("packet_loss", 0.0),
@@ -642,8 +661,10 @@ while True:
                     state_dict,
                     final_action,
                     qos,
-                    decision_raw.get("attack_type", None),
+                    ATTACK_TYPE,
                 )
+
+                llm_latency = time.time() - llm_start
 
                 print(
                     "[LLM]",
@@ -655,6 +676,7 @@ while True:
 
             except Exception as e:
                 print(f"[LLM_ERROR] {e}", flush=True)
+                llm_latency = 0.0
 
         # Chờ ngắn để lấy next state sau action.
         time.sleep(0.5)
@@ -663,21 +685,16 @@ while True:
         if next_raw is not None:
             if pred_latency:
                 gap_latency = abs(float(next_raw.get("latency", 0.0)) - pred_latency)
-
             if pred_loss:
                 gap_loss = abs(float(next_raw.get("packet_loss", 0.0)) - pred_loss)
-
-        attack_type = os.getenv("ATTACK_TYPE", "unknown")
-        intensity = os.getenv("ATTACK_INTENSITY", "medium")
-        run_id = os.getenv("RUN_ID", "0")
 
         log_transition(
             decision_raw,
             final_action,
             next_raw,
-            attack_type,
-            intensity,
-            run_id,
+            ATTACK_TYPE,
+            ATTACK_INTENSITY,
+            RUN_ID,
         )
 
         update_metrics(
@@ -690,11 +707,24 @@ while True:
             twin_gap_latency=gap_latency,
         )
 
+        latency = _f(decision_raw, "latency")
+        packet_loss = _f(decision_raw, "packet_loss")
+
+        sla_violation = int(
+            latency > SLA_LATENCY_THRESHOLD
+            or packet_loss > SLA_LOSS_THRESHOLD
+        )
+
         log_runtime(
             [
                 time.time(),
+                eval_config,
+                PHASE,
                 MODE,
                 model_name,
+                ATTACK_TYPE,
+                ATTACK_INTENSITY,
+                RUN_ID,
                 decision_raw.get("packet_rate", 0.0),
                 decision_raw.get("byte_rate", 0.0),
                 decision_raw.get("flow_count", 0.0),
@@ -703,28 +733,36 @@ while True:
                 decision_raw.get("latency", 0.0),
                 decision_raw.get("packet_loss", 0.0),
                 decision_raw.get("controller_cpu", 0.0),
+                action_requested,
                 final_action,
+                action_staging,
                 reward_final,
                 reward_staging,
+                int(ENABLE_GUARD),
+                guard_overrode,
+                int(ENABLE_TWIN),
+                twin_checked,
                 twin_safe,
+                twin_rejected,
                 pred_latency,
                 pred_loss,
                 gap_latency,
                 gap_loss,
-                attack_type,
-                intensity,
-                run_id,
+                int(ENABLE_LLM),
+                llm_latency,
+                sla_violation,
             ]
         )
 
         print(
-            f"[LOOP] mode={MODE} model={model_name} "
+            f"[LOOP] config={eval_config} phase={PHASE} mode={MODE} model={model_name} "
             f"pps={decision_raw.get('packet_rate', 0.0):.4f} "
             f"lat={decision_raw.get('latency', 0.0):.4f} "
             f"loss={decision_raw.get('packet_loss', 0.0):.4f} "
             f"cpu={decision_raw.get('controller_cpu', 0.0):.4f} "
-            f"action={final_action} reward={reward_final:.4f} "
-            f"twin_safe={twin_safe} gap_lat={gap_latency:.4f}",
+            f"requested={action_requested} final={final_action} "
+            f"guard={guard_overrode} twin_rejected={twin_rejected} "
+            f"reward={reward_final:.4f} gap_lat={gap_latency:.4f}",
             flush=True,
         )
 

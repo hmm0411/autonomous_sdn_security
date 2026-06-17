@@ -1,7 +1,7 @@
 import os
 from typing import Any
 
-import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 
@@ -9,156 +9,523 @@ INPUT_PATH = os.getenv("RUNTIME_LOG", "logs/runtime_eval.csv")
 OUT_DIR = os.getenv("EVAL_OUT_DIR", "results/evaluation")
 
 
-def numeric_series(df: pd.DataFrame, col: str) -> pd.Series:
+# =========================================================
+# Basic helpers
+# =========================================================
+def to_num(df: pd.DataFrame, col: str, default: float | None = None) -> pd.Series:
+    """
+    Convert a column to numeric.
+    If the column does not exist, return an empty Series by default.
+    """
     if col not in df.columns:
-        return pd.Series(dtype="float64")
+        if default is None:
+            return pd.Series(dtype="float64")
+        return pd.Series([default] * len(df), index=df.index, dtype="float64")
 
-    return pd.to_numeric(df[col], errors="coerce").dropna()
+    return pd.to_numeric(df[col], errors="coerce")
 
 
-def switching_rate(series: pd.Series) -> float:
-    values = pd.to_numeric(series, errors="coerce").dropna().astype(int).tolist()
+def clean_numeric(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
+    """
+    Convert a column to numeric and replace NaN with default.
+    This is safer for action/rate calculations.
+    """
+    return to_num(df, col, default=default).fillna(default)
 
+
+def safe_mean(df: pd.DataFrame, col: str, default: float = 0.0) -> float:
+    values = to_num(df, col)
+    if values.empty:
+        return default
+
+    value = values.mean()
+    if pd.isna(value):
+        return default
+
+    return float(value)
+
+
+def safe_std(df: pd.DataFrame, col: str, default: float = 0.0) -> float:
+    values = to_num(df, col)
+    if values.empty:
+        return default
+
+    value = values.std()
+    if pd.isna(value):
+        return default
+
+    return float(value)
+
+
+def safe_var(df: pd.DataFrame, col: str, default: float = 0.0) -> float:
+    values = to_num(df, col)
+    if values.empty:
+        return default
+
+    value = values.var()
+    if pd.isna(value):
+        return default
+
+    return float(value)
+
+
+def safe_sum(df: pd.DataFrame, col: str, default: float = 0.0) -> float:
+    values = to_num(df, col)
+    if values.empty:
+        return default
+
+    value = values.sum()
+    if pd.isna(value):
+        return default
+
+    return float(value)
+
+
+def get_action_series(group: pd.DataFrame, preferred_col: str = "action_final") -> pd.Series:
+    """
+    Prefer action_final because this is the action after Guard/Twin validation.
+    Fall back to legacy action if old runtime logs are used.
+    """
+    if preferred_col in group.columns:
+        return clean_numeric(group, preferred_col, default=0.0).astype(int)
+
+    if "action" in group.columns:
+        return clean_numeric(group, "action", default=0.0).astype(int)
+
+    return pd.Series([0] * len(group), index=group.index, dtype="int64")
+
+
+def switching_rate(actions: pd.Series) -> float:
+    values = pd.to_numeric(actions, errors="coerce").dropna().astype(int).tolist()
     if len(values) < 2:
         return 0.0
 
-    switch_count = sum(
-        current != nxt
-        for current, nxt in zip(values, values[1:])
+    switches = sum(a != b for a, b in zip(values, values[1:]))
+    return float(switches / (len(values) - 1))
+
+
+def action_entropy(actions: pd.Series) -> float:
+    values = pd.to_numeric(actions, errors="coerce").dropna().astype(int)
+    if values.empty:
+        return 0.0
+
+    probs = values.value_counts(normalize=True).values
+    return float(-(probs * np.log2(probs + 1e-12)).sum())
+
+
+# =========================================================
+# Phase-based metrics
+# =========================================================
+def recovery_time_steps(group: pd.DataFrame) -> float:
+    """
+    Recovery time proxy:
+    number of recovery steps where SLA is still violated.
+
+    Requires:
+    - phase column
+    - sla_violation column
+    """
+    if "phase" not in group.columns or "sla_violation" not in group.columns:
+        return 0.0
+
+    rec = group[group["phase"].astype(str).str.lower() == "recovery"]
+    if rec.empty:
+        return 0.0
+
+    return float(clean_numeric(rec, "sla_violation", default=0.0).sum())
+
+
+def mitigation_success_rate(group: pd.DataFrame) -> float:
+    """
+    Simple mitigation success proxy:
+    During attack phase, success = no SLA violation.
+    """
+    if "phase" not in group.columns or "sla_violation" not in group.columns:
+        return 0.0
+
+    attack = group[group["phase"].astype(str).str.lower() == "attack"]
+    if attack.empty:
+        return 0.0
+
+    violations = clean_numeric(attack, "sla_violation", default=0.0)
+    return float(1.0 - violations.mean())
+
+
+def attack_phase_mean(group: pd.DataFrame, col: str, default: float = 0.0) -> float:
+    if "phase" not in group.columns:
+        return safe_mean(group, col, default=default)
+
+    attack = group[group["phase"].astype(str).str.lower() == "attack"]
+    if attack.empty:
+        return safe_mean(group, col, default=default)
+
+    return safe_mean(attack, col, default=default)
+
+
+# =========================================================
+# Group summarization
+# =========================================================
+def summarize_group(group: pd.DataFrame) -> dict[str, Any]:
+    actions_final = get_action_series(group, preferred_col="action_final")
+
+    if "action_requested" in group.columns:
+        actions_requested = clean_numeric(group, "action_requested", default=0.0).astype(int)
+    else:
+        actions_requested = actions_final.copy()
+
+    attack_type = (
+        str(group["attack_type"].iloc[0]).lower()
+        if "attack_type" in group.columns and not group.empty
+        else "unknown"
     )
 
-    return float(switch_count / (len(values) - 1))
+    action_changed_rate = float((actions_requested != actions_final).mean()) if len(group) else 0.0
+    action_nonzero_rate = float((actions_final != 0).mean()) if len(group) else 0.0
+    action_requested_nonzero_rate = float((actions_requested != 0).mean()) if len(group) else 0.0
 
+    out: dict[str, Any] = {
+        "samples": int(len(group)),
 
-def safe_mean(group: pd.DataFrame, col: str, default: float = 0.0) -> float:
-    values = numeric_series(group, col)
+        # Reward
+        "mean_reward": safe_mean(group, "reward"),
+        "std_reward": safe_std(group, "reward"),
+        "cumulative_reward": safe_sum(group, "reward"),
 
-    if values.empty:
-        return default
+        # QoS overall
+        "mean_latency": safe_mean(group, "latency"),
+        "std_latency": safe_std(group, "latency"),
+        "latency_var": safe_var(group, "latency"),
+        "mean_packet_loss": safe_mean(group, "packet_loss"),
+        "std_packet_loss": safe_std(group, "packet_loss"),
+        "mean_packet_rate": safe_mean(group, "packet_rate"),
+        "mean_byte_rate": safe_mean(group, "byte_rate"),
+        "mean_flow_count": safe_mean(group, "flow_count"),
+        "mean_flow_growth_rate": safe_mean(group, "flow_growth_rate"),
+        "mean_src_ip_entropy": safe_mean(group, "src_ip_entropy"),
+        "mean_controller_cpu": safe_mean(group, "controller_cpu"),
 
-    return float(values.mean())
+        # Attack phase QoS
+        "attack_mean_latency": attack_phase_mean(group, "latency"),
+        "attack_mean_packet_loss": attack_phase_mean(group, "packet_loss"),
+        "attack_mean_packet_rate": attack_phase_mean(group, "packet_rate"),
+        "attack_mean_controller_cpu": attack_phase_mean(group, "controller_cpu"),
 
+        # Decision behavior
+        "switching_rate": switching_rate(actions_final),
+        "action_entropy": action_entropy(actions_final),
+        "action_nonzero_rate": action_nonzero_rate,
+        "action_requested_nonzero_rate": action_requested_nonzero_rate,
+        "action_changed_rate": action_changed_rate,
 
-def safe_std(group: pd.DataFrame, col: str, default: float = 0.0) -> float:
-    values = numeric_series(group, col)
+        # SLA / mitigation
+        "sla_violation_rate": safe_mean(group, "sla_violation"),
+        "recovery_time_steps": recovery_time_steps(group),
+        "mitigation_success_rate": mitigation_success_rate(group),
 
-    if values.empty:
-        return default
+        # Guard
+        "guard_enabled_rate": safe_mean(group, "guard_enabled"),
+        "guard_overrode_rate": safe_mean(group, "guard_overrode"),
 
-    return float(values.std())
+        # Digital Twin
+        "twin_enabled_rate": safe_mean(group, "twin_enabled"),
+        "twin_checked_rate": safe_mean(group, "twin_checked"),
+        "twin_safe_rate": safe_mean(group, "twin_safe", default=1.0),
+        "twin_reject_rate": safe_mean(group, "twin_rejected"),
+        "mean_gap_latency": safe_mean(group, "gap_latency"),
+        "mean_gap_loss": safe_mean(group, "gap_loss"),
+        "mean_pred_latency": safe_mean(group, "pred_latency"),
+        "mean_pred_loss": safe_mean(group, "pred_loss"),
 
+        # LLM runtime overhead
+        "llm_enabled_rate": safe_mean(group, "llm_enabled"),
+        "mean_llm_latency": safe_mean(group, "llm_latency"),
+    }
 
-def safe_var(group: pd.DataFrame, col: str, default: float = 0.0) -> float:
-    values = numeric_series(group, col)
-
-    if values.empty:
-        return default
-
-    return float(values.var())
-
-
-def plot_timeline(df: pd.DataFrame, col: str) -> None:
-    if col not in df.columns:
-        return
-
-    plt.figure(figsize=(10, 5))
-
-    if "mode" in df.columns:
-        group_key = "mode"
-    else:
-        group_key = None
-
-    if group_key:
-        for mode, group in df.groupby(group_key):
-            values = numeric_series(group, col)
-
-            if values.empty:
-                continue
-
-            plt.plot(
-                list(range(len(values))),
-                values.to_numpy(dtype=float),
-                label=str(mode),
-            )
-    else:
-        values = numeric_series(df, col)
-        if values.empty:
-            plt.close()
-            return
-
-        plt.plot(
-            list(range(len(values))),
-            values.to_numpy(dtype=float),
-            label=col,
+    for action in range(5):
+        out[f"action_{action}_count"] = int((actions_final == action).sum())
+        out[f"action_{action}_rate"] = float((actions_final == action).mean()) if len(group) else 0.0
+        out[f"requested_action_{action}_count"] = int((actions_requested == action).sum())
+        out[f"requested_action_{action}_rate"] = (
+            float((actions_requested == action).mean()) if len(group) else 0.0
         )
 
-    plt.title(col)
-    plt.xlabel("Step")
-    plt.ylabel(col)
+    # False positive is meaningful for normal traffic:
+    # any non-zero final action in normal traffic is considered unnecessary mitigation.
+    out["false_positive_rate"] = action_nonzero_rate if attack_type == "normal" else 0.0
 
-    if plt.gca().has_data():
-        plt.legend()
-
-    plt.tight_layout()
-
-    fig_path = os.path.join(OUT_DIR, f"{col}_timeline_by_mode.png")
-    plt.savefig(fig_path, dpi=300)
-    plt.close()
-
-    print(f"[SUMMARY] saved figure: {fig_path}")
+    return out
 
 
-def build_summary(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
+def build_group_summary(df: pd.DataFrame) -> pd.DataFrame:
+    group_cols = [
+        "attack_type",
+        "intensity",
+        "run_id",
+        "eval_config",
+        "mode",
+        "model",
+    ]
+    group_cols = [col for col in group_cols if col in df.columns]
+
+    if not group_cols:
+        raise ValueError("No grouping columns found. Expected at least eval_config/mode/model.")
+
     rows: list[dict[str, Any]] = []
 
     for keys, group in df.groupby(group_cols, dropna=False):
-        group_df = pd.DataFrame(group)
-
         if not isinstance(keys, tuple):
             keys = (keys,)
 
-        row: dict[str, Any] = {
-            col: value
-            for col, value in zip(group_cols, keys)
-        }
-
-        twin_safe_mean = safe_mean(group_df, "twin_safe", default=1.0)
-
-        row.update(
-            {
-                "mean_reward": safe_mean(group_df, "reward"),
-                "std_reward": safe_std(group_df, "reward"),
-                "mean_latency": safe_mean(group_df, "latency"),
-                "latency_var": safe_var(group_df, "latency"),
-                "mean_packet_loss": safe_mean(group_df, "packet_loss"),
-                "mean_packet_rate": safe_mean(group_df, "packet_rate"),
-                "mean_byte_rate": safe_mean(group_df, "byte_rate"),
-                "mean_flow_count": safe_mean(group_df, "flow_count"),
-                "mean_flow_growth_rate": safe_mean(group_df, "flow_growth_rate"),
-                "mean_src_ip_entropy": safe_mean(group_df, "src_ip_entropy"),
-                "mean_controller_cpu": safe_mean(group_df, "controller_cpu"),
-                "switching_rate": switching_rate(group_df["action"])
-                if "action" in group_df.columns
-                else 0.0,
-                "mean_twin_gap_latency": safe_mean(group_df, "gap_latency"),
-                "mean_twin_gap_loss": safe_mean(group_df, "gap_loss"),
-                "twin_reject_rate": float(1.0 - twin_safe_mean),
-                "samples": int(len(group_df)),
-            }
-        )
-
+        row = {col: value for col, value in zip(group_cols, keys)}
+        row.update(summarize_group(group))
         rows.append(row)
 
     return pd.DataFrame(rows)
 
 
+# =========================================================
+# Derived comparison metrics
+# =========================================================
+def minmax_good(series: pd.Series, higher_is_better: bool) -> pd.Series:
+    values = pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan)
+    min_v = values.min()
+    max_v = values.max()
+
+    if pd.isna(min_v) or pd.isna(max_v) or max_v == min_v:
+        return pd.Series([0.5] * len(values), index=values.index, dtype="float64")
+
+    norm = (values - min_v) / (max_v - min_v)
+    if higher_is_better:
+        return norm.fillna(0.0)
+
+    return (1.0 - norm).fillna(0.0)
+
+
+def add_defense_score(summary: pd.DataFrame) -> pd.DataFrame:
+    summary = summary.copy()
+
+    summary["reward_score"] = minmax_good(summary["mean_reward"], higher_is_better=True)
+    summary["latency_score"] = minmax_good(summary["mean_latency"], higher_is_better=False)
+    summary["loss_score"] = minmax_good(summary["mean_packet_loss"], higher_is_better=False)
+    summary["recovery_score"] = minmax_good(summary["recovery_time_steps"], higher_is_better=False)
+    summary["stability_score"] = minmax_good(summary["switching_rate"], higher_is_better=False)
+    summary["mitigation_score"] = clean_numeric(summary, "mitigation_success_rate", default=0.0)
+    summary["normal_safety_score"] = 1.0 - clean_numeric(summary, "false_positive_rate", default=0.0)
+
+    summary["defense_score"] = (
+        0.25 * summary["reward_score"]
+        + 0.20 * summary["latency_score"]
+        + 0.20 * summary["loss_score"]
+        + 0.15 * summary["recovery_score"]
+        + 0.10 * summary["mitigation_score"]
+        + 0.05 * summary["stability_score"]
+        + 0.05 * summary["normal_safety_score"]
+    )
+
+    return summary
+
+
+def add_improvement_vs_no_defense(summary: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add percentage improvement relative to no_defense for each:
+    attack_type x intensity x run_id group.
+
+    Lower is better:
+    - mean_latency
+    - mean_packet_loss
+    - recovery_time_steps
+    - sla_violation_rate
+
+    Higher is better:
+    - mean_reward
+    - cumulative_reward
+    - defense_score
+    """
+    summary = summary.copy()
+
+    compare_cols = [
+        "latency_reduction_vs_no_defense_pct",
+        "packet_loss_reduction_vs_no_defense_pct",
+        "recovery_reduction_vs_no_defense_pct",
+        "sla_reduction_vs_no_defense_pct",
+        "reward_gain_vs_no_defense",
+        "cumulative_reward_gain_vs_no_defense",
+        "defense_score_gain_vs_no_defense",
+    ]
+
+    for col in compare_cols:
+        summary[col] = np.nan
+
+    base_group_cols = [
+        col for col in ["attack_type", "intensity", "run_id"] if col in summary.columns
+    ]
+
+    if not base_group_cols or "eval_config" not in summary.columns:
+        return summary
+
+    for _, group_idx in summary.groupby(base_group_cols, dropna=False).groups.items():
+        group = summary.loc[group_idx]
+        baseline = group[group["eval_config"].astype(str) == "no_defense"]
+
+        if baseline.empty:
+            continue
+
+        base = baseline.iloc[0]
+
+        def reduction_pct(metric: str) -> pd.Series:
+            base_value = float(base.get(metric, np.nan))
+            if pd.isna(base_value) or base_value == 0:
+                return pd.Series([np.nan] * len(group), index=group.index)
+            return (base_value - pd.to_numeric(group[metric], errors="coerce")) / base_value * 100.0
+
+        summary.loc[group.index, "latency_reduction_vs_no_defense_pct"] = reduction_pct("mean_latency")
+        summary.loc[group.index, "packet_loss_reduction_vs_no_defense_pct"] = reduction_pct("mean_packet_loss")
+        summary.loc[group.index, "recovery_reduction_vs_no_defense_pct"] = reduction_pct("recovery_time_steps")
+        summary.loc[group.index, "sla_reduction_vs_no_defense_pct"] = reduction_pct("sla_violation_rate")
+
+        summary.loc[group.index, "reward_gain_vs_no_defense"] = (
+            pd.to_numeric(group["mean_reward"], errors="coerce") - float(base.get("mean_reward", 0.0))
+        )
+        summary.loc[group.index, "cumulative_reward_gain_vs_no_defense"] = (
+            pd.to_numeric(group["cumulative_reward"], errors="coerce")
+            - float(base.get("cumulative_reward", 0.0))
+        )
+        summary.loc[group.index, "defense_score_gain_vs_no_defense"] = (
+            pd.to_numeric(group["defense_score"], errors="coerce")
+            - float(base.get("defense_score", 0.0))
+        )
+
+    return summary
+
+
+# =========================================================
+# Output tables
+# =========================================================
+def save_outputs(summary: pd.DataFrame) -> None:
+    os.makedirs(OUT_DIR, exist_ok=True)
+
+    full_path = os.path.join(OUT_DIR, "summary_full_benchmark.csv")
+    summary.to_csv(full_path, index=False)
+
+    by_config = (
+        summary.groupby(["eval_config"], dropna=False)
+        .mean(numeric_only=True)
+        .reset_index()
+        if "eval_config" in summary.columns
+        else pd.DataFrame()
+    )
+    by_config_path = os.path.join(OUT_DIR, "summary_by_config.csv")
+    by_config.to_csv(by_config_path, index=False)
+
+    # Backward-compatible name for old report scripts.
+    summary_4_modes_path = os.path.join(OUT_DIR, "summary_4_modes.csv")
+    by_config.to_csv(summary_4_modes_path, index=False)
+
+    by_attack_config_cols = [
+        col for col in ["attack_type", "intensity", "eval_config"] if col in summary.columns
+    ]
+    if by_attack_config_cols:
+        by_attack_config = (
+            summary.groupby(by_attack_config_cols, dropna=False)
+            .mean(numeric_only=True)
+            .reset_index()
+        )
+    else:
+        by_attack_config = summary.copy()
+
+    by_attack_config_path = os.path.join(OUT_DIR, "summary_by_attack_config.csv")
+    by_attack_config.to_csv(by_attack_config_path, index=False)
+
+    action_cols = [
+        col
+        for col in summary.columns
+        if col.startswith("action_")
+        or col.startswith("requested_action_")
+        or col in [
+            "attack_type",
+            "intensity",
+            "run_id",
+            "eval_config",
+            "mode",
+            "model",
+            "samples",
+            "switching_rate",
+            "action_entropy",
+            "action_nonzero_rate",
+            "action_requested_nonzero_rate",
+            "action_changed_rate",
+            "false_positive_rate",
+        ]
+    ]
+    actions_path = os.path.join(OUT_DIR, "summary_actions.csv")
+    summary[action_cols].to_csv(actions_path, index=False)
+
+    twin_cols = [
+        col
+        for col in [
+            "attack_type",
+            "intensity",
+            "run_id",
+            "eval_config",
+            "mode",
+            "model",
+            "twin_enabled_rate",
+            "twin_checked_rate",
+            "twin_safe_rate",
+            "twin_reject_rate",
+            "mean_gap_latency",
+            "mean_gap_loss",
+            "mean_pred_latency",
+            "mean_pred_loss",
+            "latency_var",
+            "mean_reward",
+            "defense_score",
+        ]
+        if col in summary.columns
+    ]
+    twin_path = os.path.join(OUT_DIR, "summary_twin.csv")
+    summary[twin_cols].to_csv(twin_path, index=False)
+
+    llm_cols = [
+        col
+        for col in [
+            "attack_type",
+            "intensity",
+            "run_id",
+            "eval_config",
+            "mode",
+            "model",
+            "llm_enabled_rate",
+            "mean_llm_latency",
+            "mean_reward",
+            "defense_score",
+        ]
+        if col in summary.columns
+    ]
+    llm_runtime_path = os.path.join(OUT_DIR, "summary_llm_runtime.csv")
+    llm_path = os.path.join(OUT_DIR, "summary_llm.csv")
+    summary[llm_cols].to_csv(llm_runtime_path, index=False)
+    summary[llm_cols].to_csv(llm_path, index=False)
+
+    print("[OK] saved:", full_path)
+    print("[OK] saved:", by_config_path)
+    print("[OK] saved:", summary_4_modes_path)
+    print("[OK] saved:", by_attack_config_path)
+    print("[OK] saved:", actions_path)
+    print("[OK] saved:", twin_path)
+    print("[OK] saved:", llm_runtime_path)
+    print("[OK] saved:", llm_path)
+
+
+# =========================================================
+# Main
+# =========================================================
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
 
     if not os.path.exists(INPUT_PATH):
         raise FileNotFoundError(
-            f"Runtime log not found: {INPUT_PATH}. "
-            f"Run control_loop first."
+            f"Runtime log not found: {INPUT_PATH}. Run control_loop benchmark first."
         )
 
     df = pd.read_csv(INPUT_PATH)
@@ -166,78 +533,25 @@ def main() -> None:
     if df.empty:
         raise RuntimeError(f"Runtime log is empty: {INPUT_PATH}")
 
-    if "mode" not in df.columns:
-        raise ValueError("runtime_eval.csv must contain column: mode")
+    # Compatibility for older runtime logs.
+    if "eval_config" not in df.columns:
+        if "mode" in df.columns and "model" in df.columns:
+            df["eval_config"] = df["mode"].astype(str) + "_" + df["model"].astype(str)
+            df.loc[df["mode"].astype(str) == "no_defense", "eval_config"] = "no_defense"
+            df.loc[df["mode"].astype(str) == "rule", "eval_config"] = "rule"
+        else:
+            raise ValueError("Missing eval_config column and cannot infer from mode/model.")
 
-    preferred_group_cols = [
-        "attack_type",
-        "intensity",
-        "run_id",
-        "mode",
-        "model",
-    ]
+    # Normalize text columns for grouping.
+    for col in ["attack_type", "intensity", "phase", "mode", "model", "eval_config"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.lower()
 
-    group_cols = [
-        col for col in preferred_group_cols
-        if col in df.columns
-    ]
+    summary = build_group_summary(df)
+    summary = add_defense_score(summary)
+    summary = add_improvement_vs_no_defense(summary)
 
-    if "mode" not in group_cols:
-        group_cols.append("mode")
-
-    # =========================
-    # Full benchmark summary:
-    # attack_type x intensity x run_id x mode x model
-    # =========================
-    summary_full = build_summary(df, group_cols)
-
-    full_path = os.path.join(OUT_DIR, "summary_full_benchmark.csv")
-    summary_full.to_csv(full_path, index=False)
-
-    print("[SUMMARY] full benchmark:")
-    print(summary_full.to_string(index=False))
-    print(f"[SUMMARY] saved: {full_path}")
-
-    # =========================
-    # Compatibility file:
-    # summary_4_modes.csv
-    # =========================
-    mode_group_cols = [
-        col for col in ["mode", "model"]
-        if col in df.columns
-    ]
-
-    if not mode_group_cols:
-        mode_group_cols = ["mode"]
-
-    summary_mode = build_summary(df, mode_group_cols)
-
-    mode_path = os.path.join(OUT_DIR, "summary_4_modes.csv")
-    summary_mode.to_csv(mode_path, index=False)
-
-    by_mode_path = os.path.join(OUT_DIR, "summary_by_mode.csv")
-    summary_mode.to_csv(by_mode_path, index=False)
-
-    print("[SUMMARY] by mode:")
-    print(summary_mode.to_string(index=False))
-    print(f"[SUMMARY] saved: {mode_path}")
-    print(f"[SUMMARY] saved: {by_mode_path}")
-
-    for col in [
-        "reward",
-        "packet_rate",
-        "byte_rate",
-        "flow_count",
-        "flow_growth_rate",
-        "src_ip_entropy",
-        "latency",
-        "packet_loss",
-        "controller_cpu",
-        "action",
-        "gap_latency",
-        "gap_loss",
-    ]:
-        plot_timeline(df, col)
+    save_outputs(summary)
 
 
 if __name__ == "__main__":
