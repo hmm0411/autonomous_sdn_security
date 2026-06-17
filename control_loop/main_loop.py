@@ -547,13 +547,6 @@ while True:
 
         reward_staging = reward_calc.calculate(raw, action_staging)
 
-        if MODE in ("rl", "rl_twin", "rl_llm", "full", "hybrid") and is_clearly_normal(raw):
-            print(
-                f"[NORMAL_GUARD] raw metrics look normal, override action {final_action} -> 0",
-                flush=True,
-            )
-            final_action = 0
-
         twin_safe = 1
         pred_latency = 0.0
         pred_loss = 0.0

@@ -57,7 +57,6 @@ class Reward:
 
         return (
             pps >= 100
-            or flows >= 20
             or growth >= 3
             or latency >= 8
             or loss >= 0.001
