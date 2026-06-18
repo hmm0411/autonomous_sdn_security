@@ -57,7 +57,7 @@ function attack_cmd() {
 
     case "$attack" in
         normal)
-            echo "py net.manager.normal_medium()"
+            echo ""
             ;;
         ddos_flood)
             echo "py net.manager.ddos_flood(num_attackers=3, intensity='medium')"
@@ -135,7 +135,7 @@ function start_mininet() {
     cleanup_mininet
 
     tmux new-session -d -s "$MN_SESSION" \
-        "cd '$REPO/traffic_generator' && sudo -E python3 run.py"
+        "cd '$REPO' && sudo -E env PYTHONPATH='$REPO' python3 -m traffic_generator.run"
 
     log "Waiting Mininet boot ${MININET_BOOT_SECONDS}s"
     sleep "$MININET_BOOT_SECONDS"
@@ -253,7 +253,9 @@ function run_one_case() {
     cmd="$(attack_cmd "$attack")"
 
     if [ -n "$cmd" ]; then
-        mn_send "$cmd" || return 1
+        mn_send "$cmd" || {
+            log "WARN: attack command failed, but continue to recovery"
+        }
     else
         log "normal traffic: no attack command"
     fi
