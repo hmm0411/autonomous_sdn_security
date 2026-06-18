@@ -57,22 +57,22 @@ function attack_cmd() {
 
     case "$attack" in
         normal)
-            echo ""
+            echo "py net.manager.normal_medium()"
             ;;
         ddos_flood)
-            echo "py net.manager.ddos_flood()"
+            echo "py net.manager.ddos_flood(num_attackers=3, intensity='medium')"
             ;;
         flow_overflow)
-            echo "py net.manager.flow_overflow()"
+            echo "py net.manager.flow_overflow(num_attackers=3, flows_per_attacker=500)"
             ;;
         packet_in_flood)
-            echo "py net.manager.packet_in_flood()"
+            echo "py net.manager.packet_in_flood(num_attackers=3, intensity='medium')"
             ;;
         ip_spoofing)
-            echo "py net.manager.ip_spoofing()"
+            echo "py net.manager.ip_spoofing(num_attackers=2, intensity='medium')"
             ;;
         port_scanning)
-            echo "py net.manager.port_scanning()"
+            echo "py net.manager.port_scanning(attacker_index=0, start_port=1, end_port=1000)"
             ;;
         *)
             echo ""
