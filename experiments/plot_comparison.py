@@ -149,21 +149,34 @@ def plot_heatmap(summary, metric, title, filename):
 
 
 def plot_metric_by_attack_lines(summary, metric, title, ylabel, filename):
-    """
-    Biểu đồ đường gộp:
-    - Trục X: attack_type
-    - Mỗi line: eval_config
-    - Trục Y: metric
-    """
     if metric not in summary.columns:
         print(f"[SKIP] missing metric: {metric}")
         return
 
-    attacks = ordered_attacks(summary)
-    configs = ordered_configs(summary)
+    attack_order = [
+        "normal",
+        "ddos_flood",
+        "flow_overflow",
+        "packet_in_flood",
+        "ip_spoofing",
+        "port_scanning",
+    ]
+
+    config_order = [
+        "no_defense",
+        "rule",
+        "rl_dqn",
+        "rl_ppo",
+        "rl_guard_ppo",
+        "rl_twin_ppo",
+        "full_system_ppo",
+    ]
+
+    df = summary.copy()
+    df = df[~df["eval_config"].isin(["collect", "collect_random"])]
 
     data = (
-        summary.groupby(["attack_type", "eval_config"], dropna=False)[metric]
+        df.groupby(["attack_type", "eval_config"], dropna=False)[metric]
         .mean()
         .reset_index()
     )
@@ -172,17 +185,18 @@ def plot_metric_by_attack_lines(summary, metric, title, ylabel, filename):
         index="attack_type",
         columns="eval_config",
         values=metric,
-    ).reindex(index=attacks, columns=configs)
+    )
+
+    attacks = [a for a in attack_order if a in pivot.index]
+    configs = [c for c in config_order if c in pivot.columns]
+
+    pivot = pivot.reindex(index=attacks, columns=configs)
 
     plt.figure(figsize=(13, 6))
-
-    x = np.arange(len(pivot.index))
+    x = range(len(pivot.index))
 
     for config in pivot.columns:
-        y = pd.to_numeric(pivot[config], errors="coerce").values
-        if np.all(pd.isna(y)):
-            continue
-        plt.plot(x, y, marker="o", label=config)
+        plt.plot(x, pivot[config], marker="o", label=config)
 
     plt.xticks(x, pivot.index, rotation=20, ha="right")
     plt.xlabel("Attack type")
@@ -344,7 +358,7 @@ def main():
     plot_bar_by_config(
         summary,
         "mean_latency",
-        "Average latency by evaluation config",
+        "Mean latency by evaluation config",
         "Mean latency",
         "bar_mean_latency_by_config.png",
     )
@@ -352,18 +366,21 @@ def main():
     plot_bar_by_config(
         summary,
         "mean_packet_loss",
-        "Average packet loss by evaluation config",
+        "Mean packet loss by evaluation config",
         "Mean packet loss",
         "bar_mean_packet_loss_by_config.png",
     )
 
-    plot_bar_by_config(
-        summary,
-        "recovery_time_steps",
-        "Recovery time by evaluation config",
-        "Recovery time steps",
-        "bar_recovery_time_by_config.png",
-    )
+    if "recovery_time_steps" in summary.columns and summary["recovery_time_steps"].sum() > 0:
+        plot_bar_by_config(
+            summary,
+            "recovery_time_steps",
+            "Recovery time by evaluation config",
+            "Recovery time steps",
+            "bar_recovery_time_by_config.png",
+        )
+    else:
+        print("[SKIP] recovery_time_steps is empty/all zero")
 
     plot_bar_by_config(
         summary,
@@ -466,13 +483,16 @@ def main():
         "line_attack_switching_rate_by_config.png",
     )
 
-    plot_metric_by_attack_lines(
-        summary,
-        "recovery_time_steps",
-        "Recovery time across attack types",
-        "Recovery time steps",
-        "line_attack_recovery_time_by_config.png",
-    )
+    if "recovery_time_steps" in summary.columns and summary["recovery_time_steps"].sum() > 0:
+        plot_metric_by_attack_lines(
+            summary,
+            "recovery_time_steps",
+            "Recovery time across attack types",
+            "Recovery time steps",
+            "line_attack_recovery_time_by_config.png",
+        )
+    else:
+        print("[SKIP] line recovery_time because recovery phase is missing/all zero")
 
     if "defense_score" in summary.columns:
         plot_metric_by_attack_lines(

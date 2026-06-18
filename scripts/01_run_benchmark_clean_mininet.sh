@@ -122,7 +122,9 @@ function reset_control_loop_idle() {
 function final_cleanup() {
     log "FINAL CLEANUP"
     cleanup_mininet
-    reset_control_loop_idle
+
+    # Dừng control-loop để không ghi thêm collect/idle sau benchmark
+    kubectl -n "$NS" scale deployment/"$CONTROL_DEPLOY" --replicas=0 || true
 }
 
 trap final_cleanup EXIT
@@ -259,17 +261,28 @@ function run_one_case() {
     sleep "$ATTACK_SECONDS"
 
     log "PHASE RECOVERY ${RECOVERY_SECONDS}s"
+
     set_control_env "$eval_config" "$mode" "$model" "$guard" "$twin" "$llm" "$attack" "recovery" "$run_id" || return 1
     restart_control_loop || return 1
+
     mn_send "py net.manager.stop_all()" || true
+    sleep 3
+
+    log "Check recovery env inside pod"
+    kubectl -n "$NS" exec deployment/"$CONTROL_DEPLOY" -- \
+        sh -lc 'echo EVAL_CONFIG=$EVAL_CONFIG PHASE=$PHASE ATTACK_TYPE=$ATTACK_TYPE MODE=$MODE MODEL_TYPE=$MODEL_TYPE' || true
+
+    log "Waiting recovery ${RECOVERY_SECONDS}s"
     sleep "$RECOVERY_SECONDS"
 
+    log "Recovery logs tail"
+    kubectl -n "$NS" logs deployment/"$CONTROL_DEPLOY" --tail=30 || true
     cleanup_mininet
 
     local rows_after
     rows_after="$(count_rows)"
-
     log "CASE END run=$run_id attack=$attack config=$eval_config rows_before=$rows_before rows_after=$rows_after"
+
     return 0
 }
 
@@ -296,7 +309,10 @@ for run_id in $(seq 1 "$RUNS"); do
                 FAILED_CASES=$((FAILED_CASES + 1))
                 log "CASE FAILED attack=$attack config=$config"
                 cleanup_mininet
-                reset_control_loop_idle
+
+                # Không reset về collect/idle để tránh ghi log rác.
+                kubectl -n "$NS" scale deployment/"$CONTROL_DEPLOY" --replicas=0 || true
+
                 sleep 5
             fi
         done

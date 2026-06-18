@@ -494,6 +494,24 @@ def main() -> None:
     for col in ["attack_type", "intensity", "phase", "mode", "model", "eval_config"]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.lower()
+            if "eval_config" in df.columns:
+                df = df[
+                    ~df["eval_config"].isin(["collect", "collect_random"])
+                ].copy()
+
+            if "phase" in df.columns:
+                df = df[
+                    ~df["phase"].isin(["idle", "unknown"])
+                ].copy()
+
+            if "attack_type" in df.columns:
+                df = df[
+                    df["attack_type"] != "unknown"
+                ].copy()
+
+            if df.empty:
+                raise RuntimeError("No valid benchmark rows after filtering collect/idle/unknown.")
+            
 
     summary = build_group_summary(df)
     summary = add_defense_score(summary)

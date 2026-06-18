@@ -311,13 +311,13 @@ main() {
   cleanup_mininet
 
   ATTACKS=(
-    normal
-    ddos_flood
-    flow_overflow
-    packet_in_flood
-    ip_spoofing
-    port_scanning
-  )
+    "normal"
+    "ddos_flood"
+    "flow_overflow"
+    "packet_in_flood"
+    "ip_spoofing"
+    "port_scanning"
+  )   
 
   CONFIGS=(
     "no_defense|no_defense|dqn"
