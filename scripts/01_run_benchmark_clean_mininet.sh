@@ -1,31 +1,30 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
-# =========================================================
-# CONFIG
-# =========================================================
 REPO="${REPO:-$HOME/autonomous_sdn_security}"
 NS="${NS:-sdn-security}"
 CONTROL_DEPLOY="${CONTROL_DEPLOY:-control-loop}"
 MN_SESSION="${MN_SESSION:-mn}"
 
-WARMUP_SECONDS="${WARMUP_SECONDS:-30}"
-ATTACK_SECONDS="${ATTACK_SECONDS:-90}"
-RECOVERY_SECONDS="${RECOVERY_SECONDS:-30}"
-MININET_BOOT_SECONDS="${MININET_BOOT_SECONDS:-18}"
+WARMUP_SECONDS="${WARMUP_SECONDS:-20}"
+ATTACK_SECONDS="${ATTACK_SECONDS:-40}"
+RECOVERY_SECONDS="${RECOVERY_SECONDS:-20}"
+MININET_BOOT_SECONDS="${MININET_BOOT_SECONDS:-20}"
 RUNS="${RUNS:-1}"
 
 ACTION_DRY_RUN="${ACTION_DRY_RUN:-true}"
 STRICT_RL="${STRICT_RL:-true}"
 
-cd "$REPO"
+cd "$REPO" || exit 1
 export PYTHONPATH="$PWD"
+
+mkdir -p logs results/evaluation
+
+PROGRESS_LOG="logs/benchmark_progress_$(date +%Y%m%d_%H%M%S).log"
+exec > >(tee -a "$PROGRESS_LOG") 2>&1
 
 sudo -v
 
-# =========================================================
-# ATTACKS
-# =========================================================
 ATTACKS=(
   "normal"
   "ddos_flood"
@@ -35,11 +34,6 @@ ATTACKS=(
   "port_scanning"
 )
 
-# =========================================================
-# CONFIGS
-# format:
-# eval_config|mode|model|guard|twin|llm
-# =========================================================
 CONFIGS=(
   "no_defense|no_defense|dqn|false|false|false"
   "rule|rule|dqn|false|false|false"
@@ -50,12 +44,14 @@ CONFIGS=(
   "full_system_ppo|full|ppo|true|true|true"
 )
 
-# Nếu chưa muốn chạy LLM để tiết kiệm thời gian/API,
-# comment dòng full_system_ppo ở trên.
+function now() {
+    date "+%Y-%m-%d %H:%M:%S"
+}
 
-# =========================================================
-# HELPER FUNCTIONS
-# =========================================================
+function log() {
+    echo "[$(now)] $*"
+}
+
 function attack_cmd() {
     local attack="$1"
 
@@ -85,42 +81,68 @@ function attack_cmd() {
 }
 
 function cleanup_mininet() {
-    echo
-    echo "========== CLEANUP MININET =========="
+    log "CLEANUP MININET"
 
     if tmux has-session -t "$MN_SESSION" 2>/dev/null; then
-        echo "[INFO] sending stop_all to Mininet"
         tmux send-keys -t "$MN_SESSION" "py net.manager.stop_all()" C-m || true
         sleep 2
-
-        echo "[INFO] exiting Mininet CLI"
         tmux send-keys -t "$MN_SESSION" "exit" C-m || true
         sleep 2
-
-        echo "[INFO] killing tmux session $MN_SESSION"
         tmux kill-session -t "$MN_SESSION" || true
         sleep 1
     fi
 
-    echo "[INFO] running sudo mn -c"
     sudo mn -c || true
     sleep 2
 }
 
+function reset_control_loop_idle() {
+    log "RESET CONTROL LOOP TO IDLE/COLLECT"
+
+    kubectl -n "$NS" set env deployment/"$CONTROL_DEPLOY" \
+        MODE=collect \
+        MODEL_TYPE=dqn \
+        EVAL_CONFIG=collect \
+        PHASE=idle \
+        ATTACK_TYPE=normal \
+        ATTACK_INTENSITY=none \
+        RUN_ID=0 \
+        ENABLE_GUARD=false \
+        ENABLE_TWIN=false \
+        ENABLE_LLM=false \
+        ACTION_DRY_RUN=true \
+        STRICT_RL=true \
+        RUNTIME_LOG=/app/logs/runtime_eval.csv \
+        TRANSITION_LOG=/app/logs/transition_log.csv \
+        >/dev/null 2>&1 || true
+
+    kubectl -n "$NS" rollout restart deployment/"$CONTROL_DEPLOY" >/dev/null 2>&1 || true
+}
+
+function final_cleanup() {
+    log "FINAL CLEANUP"
+    cleanup_mininet
+    reset_control_loop_idle
+}
+
+trap final_cleanup EXIT
+
 function start_mininet() {
-    echo
-    echo "========== START MININET =========="
+    log "START MININET"
 
     cleanup_mininet
 
-    tmux new-session -d -s "$MN_SESSION" "cd '$REPO/traffic_generator' && sudo -E python3 run.py"
+    tmux new-session -d -s "$MN_SESSION" \
+        "cd '$REPO/traffic_generator' && sudo -E python3 run.py"
 
-    echo "[INFO] waiting Mininet boot ${MININET_BOOT_SECONDS}s"
+    log "Waiting Mininet boot ${MININET_BOOT_SECONDS}s"
     sleep "$MININET_BOOT_SECONDS"
 
-    echo "[INFO] pingall sanity check"
     tmux send-keys -t "$MN_SESSION" "pingall" C-m || true
     sleep 5
+
+    log "Mininet pane tail:"
+    tmux capture-pane -t "$MN_SESSION" -p | tail -20 || true
 }
 
 function mn_send() {
@@ -131,12 +153,16 @@ function mn_send() {
     fi
 
     if ! tmux has-session -t "$MN_SESSION" 2>/dev/null; then
-        echo "[ERROR] Mininet tmux session does not exist"
+        log "ERROR: Mininet tmux session does not exist"
         return 1
     fi
 
-    echo "[MN] $cmd"
+    log "MN CMD: $cmd"
     tmux send-keys -t "$MN_SESSION" "$cmd" C-m
+    sleep 2
+
+    log "Mininet pane tail after command:"
+    tmux capture-pane -t "$MN_SESSION" -p | tail -20 || true
 }
 
 function set_control_env() {
@@ -149,6 +175,8 @@ function set_control_env() {
     local attack="$7"
     local phase="$8"
     local run_id="$9"
+
+    log "SET ENV config=$eval_config attack=$attack phase=$phase run=$run_id"
 
     kubectl -n "$NS" set env deployment/"$CONTROL_DEPLOY" \
         EVAL_CONFIG="$eval_config" \
@@ -167,12 +195,29 @@ function set_control_env() {
         RUNTIME_LOG=/app/logs/runtime_eval.csv \
         TRANSITION_LOG=/app/logs/transition_log.csv \
         SURROGATE_MODEL=models/surrogate_model.pkl
+
+    return $?
 }
 
 function restart_control_loop() {
-    kubectl -n "$NS" rollout restart deployment/"$CONTROL_DEPLOY"
-    kubectl -n "$NS" rollout status deployment/"$CONTROL_DEPLOY" --timeout=120s
+    log "RESTART CONTROL LOOP"
+
+    kubectl -n "$NS" scale deployment/"$CONTROL_DEPLOY" --replicas=1 || return 1
+    kubectl -n "$NS" rollout restart deployment/"$CONTROL_DEPLOY" || return 1
+    kubectl -n "$NS" rollout status deployment/"$CONTROL_DEPLOY" --timeout=120s || return 1
+
     sleep 3
+
+    log "control-loop logs tail:"
+    kubectl -n "$NS" logs deployment/"$CONTROL_DEPLOY" --tail=20 || true
+}
+
+function count_rows() {
+    if [ -f logs/runtime_eval.csv ]; then
+        wc -l logs/runtime_eval.csv | awk '{print $1}'
+    else
+        echo 0
+    fi
 }
 
 function run_one_case() {
@@ -182,112 +227,91 @@ function run_one_case() {
 
     IFS="|" read -r eval_config mode model guard twin llm <<< "$config_line"
 
-    echo
-    echo "========================================================="
-    echo "[CASE] run=$run_id attack=$attack config=$eval_config"
-    echo "       mode=$mode model=$model guard=$guard twin=$twin llm=$llm"
-    echo "========================================================="
+    log "========================================================="
+    log "CASE START run=$run_id attack=$attack config=$eval_config"
+    log "mode=$mode model=$model guard=$guard twin=$twin llm=$llm"
+    log "========================================================="
 
-    # Mỗi case tạo Mininet mới cho sạch.
-    start_mininet
+    local rows_before
+    rows_before="$(count_rows)"
 
-    # -------------------------
-    # WARMUP
-    # -------------------------
-    echo
-    echo "[PHASE] WARMUP ${WARMUP_SECONDS}s"
+    start_mininet || return 1
 
-    set_control_env "$eval_config" "$mode" "$model" "$guard" "$twin" "$llm" "$attack" "warmup" "$run_id"
-    restart_control_loop
-
+    log "PHASE WARMUP ${WARMUP_SECONDS}s"
+    set_control_env "$eval_config" "$mode" "$model" "$guard" "$twin" "$llm" "$attack" "warmup" "$run_id" || return 1
+    restart_control_loop || return 1
     mn_send "py net.manager.stop_all()" || true
     sleep "$WARMUP_SECONDS"
 
-    # -------------------------
-    # ATTACK
-    # -------------------------
-    echo
-    echo "[PHASE] ATTACK ${ATTACK_SECONDS}s"
-
-    set_control_env "$eval_config" "$mode" "$model" "$guard" "$twin" "$llm" "$attack" "attack" "$run_id"
-    restart_control_loop
+    log "PHASE ATTACK ${ATTACK_SECONDS}s"
+    set_control_env "$eval_config" "$mode" "$model" "$guard" "$twin" "$llm" "$attack" "attack" "$run_id" || return 1
+    restart_control_loop || return 1
 
     local cmd
     cmd="$(attack_cmd "$attack")"
 
     if [ -n "$cmd" ]; then
-        mn_send "$cmd"
+        mn_send "$cmd" || return 1
     else
-        echo "[INFO] normal traffic: no attack command"
+        log "normal traffic: no attack command"
     fi
 
     sleep "$ATTACK_SECONDS"
 
-    # -------------------------
-    # RECOVERY
-    # -------------------------
-    echo
-    echo "[PHASE] RECOVERY ${RECOVERY_SECONDS}s"
-
-    set_control_env "$eval_config" "$mode" "$model" "$guard" "$twin" "$llm" "$attack" "recovery" "$run_id"
-    restart_control_loop
-
+    log "PHASE RECOVERY ${RECOVERY_SECONDS}s"
+    set_control_env "$eval_config" "$mode" "$model" "$guard" "$twin" "$llm" "$attack" "recovery" "$run_id" || return 1
+    restart_control_loop || return 1
     mn_send "py net.manager.stop_all()" || true
     sleep "$RECOVERY_SECONDS"
 
-    # Cleanup sau mỗi case như bạn yêu cầu.
     cleanup_mininet
+
+    local rows_after
+    rows_after="$(count_rows)"
+
+    log "CASE END run=$run_id attack=$attack config=$eval_config rows_before=$rows_before rows_after=$rows_after"
+    return 0
 }
 
-function copy_logs_from_pod_if_needed() {
-    echo
-    echo "========== COPY LOGS FROM POD IF NEEDED =========="
+log "========== BENCHMARK START =========="
+log "RUNS=$RUNS"
+log "WARMUP_SECONDS=$WARMUP_SECONDS"
+log "ATTACK_SECONDS=$ATTACK_SECONDS"
+log "RECOVERY_SECONDS=$RECOVERY_SECONDS"
+log "ACTION_DRY_RUN=$ACTION_DRY_RUN"
+log "PROGRESS_LOG=$PROGRESS_LOG"
 
-    mkdir -p "$REPO/logs"
+kubectl -n "$NS" scale deployment/"$CONTROL_DEPLOY" --replicas=1 || true
 
-    local pod
-    pod="$(kubectl -n "$NS" get pods -l app=control-loop -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-
-    if [ -z "$pod" ]; then
-        echo "[WARN] cannot find control-loop pod by label app=control-loop"
-        return 0
-    fi
-
-    kubectl -n "$NS" cp "$pod:/app/logs/runtime_eval.csv" "$REPO/logs/runtime_eval.csv" 2>/dev/null || true
-    kubectl -n "$NS" cp "$pod:/app/logs/transition_log.csv" "$REPO/logs/transition_log.csv" 2>/dev/null || true
-}
-
-# =========================================================
-# MAIN
-# =========================================================
-trap cleanup_mininet EXIT
-
-echo
-echo "========== BENCHMARK START =========="
-echo "[INFO] RUNS=$RUNS"
-echo "[INFO] WARMUP_SECONDS=$WARMUP_SECONDS"
-echo "[INFO] ATTACK_SECONDS=$ATTACK_SECONDS"
-echo "[INFO] RECOVERY_SECONDS=$RECOVERY_SECONDS"
-echo "[INFO] ACTION_DRY_RUN=$ACTION_DRY_RUN"
+FAILED_CASES=0
+PASSED_CASES=0
 
 for run_id in $(seq 1 "$RUNS"); do
     for attack in "${ATTACKS[@]}"; do
         for config in "${CONFIGS[@]}"; do
-            run_one_case "$attack" "$run_id" "$config"
+            if run_one_case "$attack" "$run_id" "$config"; then
+                PASSED_CASES=$((PASSED_CASES + 1))
+                log "CASE PASSED attack=$attack config=$config"
+            else
+                FAILED_CASES=$((FAILED_CASES + 1))
+                log "CASE FAILED attack=$attack config=$config"
+                cleanup_mininet
+                reset_control_loop_idle
+                sleep 5
+            fi
         done
     done
 done
 
-copy_logs_from_pod_if_needed
+log "========== BENCHMARK DONE =========="
+log "PASSED_CASES=$PASSED_CASES"
+log "FAILED_CASES=$FAILED_CASES"
 
-echo
-echo "========== SUMMARY =========="
 if [ -f logs/runtime_eval.csv ]; then
-    echo "[INFO] runtime rows:"
+    log "runtime rows:"
     wc -l logs/runtime_eval.csv || true
 else
-    echo "[ERROR] logs/runtime_eval.csv not found"
+    log "ERROR: logs/runtime_eval.csv not found"
 fi
 
-echo
-echo "[DONE] Benchmark completed."
+log "Progress log saved at: $PROGRESS_LOG"
