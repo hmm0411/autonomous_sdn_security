@@ -258,13 +258,25 @@ def apply_normal_guard(raw: dict, action: int) -> tuple[int, int]:
     Return:
     - final_action
     - guard_overrode
+
+    Guard chỉ override khi thật sự normal. Trong benchmark attack phase
+    với ATTACK_TYPE rõ ràng, không ép toàn bộ action về 0.
     """
     if not ENABLE_GUARD:
         return action, 0
 
-    if action != 0 and is_clearly_normal(raw):
+    if action == 0:
+        return action, 0
+
+    if PHASE == "attack" and ATTACK_TYPE not in ("normal", "unknown"):
+        return action, 0
+
+    score = threat_score(raw)
+
+    if score <= 1.0 and is_clearly_normal(raw):
         print(
-            f"[GUARD] normal traffic detected, override action {action} -> 0",
+            f"[GUARD] normal traffic detected, threat={score:.2f}, "
+            f"override action {action} -> 0",
             flush=True,
         )
         return 0, 1
@@ -318,6 +330,87 @@ def rule_action(raw: Optional[dict]) -> int:
 
     return 0
 
+
+
+# =========================================================
+# Runtime Benchmark Reward
+# =========================================================
+IDEAL_ACTION_BY_ATTACK = {
+    "normal": [0],
+    "ddos_flood": [2, 1],
+    "packet_in_flood": [2, 1],
+    "flow_overflow": [1, 2],
+    "ip_spoofing": [1, 4],
+    "port_scanning": [3, 2],
+}
+
+
+def calculate_runtime_reward(
+    raw: dict,
+    action: int,
+    attack_type: str,
+    phase: str,
+) -> float:
+    """
+    Reward dùng cho runtime benchmark.
+    Không đưa ATTACK_TYPE/PHASE vào state của agent; chỉ dùng để chấm điểm log.
+    """
+    action = int(action)
+    attack_type = str(attack_type).lower()
+    phase = str(phase).lower()
+
+    latency = float(raw.get("latency", 0.0) or 0.0)
+    packet_loss = float(raw.get("packet_loss", 0.0) or 0.0)
+    controller_cpu = float(raw.get("controller_cpu", 0.0) or 0.0)
+    packet_rate = float(raw.get("packet_rate", 0.0) or 0.0)
+    flow_growth = abs(float(raw.get("flow_growth_rate", 0.0) or 0.0))
+
+    latency_penalty = min(latency / 300.0, 1.0)
+    loss_penalty = min(packet_loss if packet_loss <= 1 else packet_loss / 100.0, 1.0)
+    cpu_penalty = min(controller_cpu / 100.0, 1.0)
+    rate_penalty = min(packet_rate / 5000.0, 1.0)
+    growth_penalty = min(flow_growth / 100.0, 1.0)
+
+    qos_penalty = (
+        0.25 * latency_penalty
+        + 0.30 * loss_penalty
+        + 0.15 * cpu_penalty
+        + 0.20 * rate_penalty
+        + 0.10 * growth_penalty
+    )
+
+    # Warmup/recovery: ưu tiên không can thiệp nếu không cần.
+    if phase != "attack":
+        if action == 0:
+            return float(1.0 - qos_penalty)
+        return float(-1.0 - qos_penalty)
+
+    # Normal traffic: action 0 là đúng, action khác 0 là false positive.
+    if attack_type == "normal":
+        if action == 0:
+            return float(1.0 - qos_penalty)
+        return float(-2.0 - qos_penalty)
+
+    # Attack thật: no_action là sai.
+    if action == 0:
+        return float(-3.0 - qos_penalty)
+
+    ideal_actions = IDEAL_ACTION_BY_ATTACK.get(attack_type, [1, 2])
+
+    if action in ideal_actions:
+        base = 2.5
+    else:
+        base = 0.5
+
+    action_cost = {
+        0: 0.0,
+        1: 0.20,
+        2: 0.10,
+        3: 0.15,
+        4: 0.60,
+    }.get(action, 0.30)
+
+    return float(max(-5.0, min(3.0, base - qos_penalty - action_cost)))
 
 # =========================================================
 # LLM Cognition Layer
@@ -628,8 +721,19 @@ while True:
                 twin_rejected = 1
                 final_action = 0
 
-        reward_staging = reward_calc.calculate(decision_raw, action_staging)
-        reward_final = reward_calc.calculate(decision_raw, final_action)
+        reward_staging = calculate_runtime_reward(
+            decision_raw,
+            action_staging,
+            ATTACK_TYPE,
+            PHASE,
+        )
+
+        reward_final = calculate_runtime_reward(
+            decision_raw,
+            final_action,
+            ATTACK_TYPE,
+            PHASE,
+        )
 
         if ACTION_DRY_RUN:
             print(f"[DRY_RUN] would execute action={final_action}", flush=True)

@@ -13,10 +13,6 @@ OUT_DIR = os.getenv("EVAL_OUT_DIR", "results/evaluation")
 # Basic helpers
 # =========================================================
 def to_num(df: pd.DataFrame, col: str, default: float | None = None) -> pd.Series:
-    """
-    Convert a column to numeric.
-    If the column does not exist, return an empty Series by default.
-    """
     if col not in df.columns:
         if default is None:
             return pd.Series(dtype="float64")
@@ -26,10 +22,6 @@ def to_num(df: pd.DataFrame, col: str, default: float | None = None) -> pd.Serie
 
 
 def clean_numeric(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
-    """
-    Convert a column to numeric and replace NaN with default.
-    This is safer for action/rate calculations.
-    """
     return to_num(df, col, default=default).fillna(default)
 
 
@@ -37,55 +29,52 @@ def safe_mean(df: pd.DataFrame, col: str, default: float = 0.0) -> float:
     values = to_num(df, col)
     if values.empty:
         return default
-
     value = values.mean()
-    if pd.isna(value):
-        return default
-
-    return float(value)
+    return default if pd.isna(value) else float(value)
 
 
 def safe_std(df: pd.DataFrame, col: str, default: float = 0.0) -> float:
     values = to_num(df, col)
     if values.empty:
         return default
-
     value = values.std()
-    if pd.isna(value):
-        return default
-
-    return float(value)
+    return default if pd.isna(value) else float(value)
 
 
 def safe_var(df: pd.DataFrame, col: str, default: float = 0.0) -> float:
     values = to_num(df, col)
     if values.empty:
         return default
-
     value = values.var()
-    if pd.isna(value):
-        return default
-
-    return float(value)
+    return default if pd.isna(value) else float(value)
 
 
 def safe_sum(df: pd.DataFrame, col: str, default: float = 0.0) -> float:
     values = to_num(df, col)
     if values.empty:
         return default
-
     value = values.sum()
-    if pd.isna(value):
-        return default
+    return default if pd.isna(value) else float(value)
 
-    return float(value)
+
+def phase_filter(group: pd.DataFrame, phase_name: str) -> pd.DataFrame:
+    if "phase" not in group.columns:
+        return pd.DataFrame(columns=group.columns)
+    return group[group["phase"].astype(str).str.lower() == phase_name].copy()
+
+
+def metric_phase_group(group: pd.DataFrame) -> pd.DataFrame:
+    """
+    Main benchmark metrics are computed on attack phase only.
+    If there is no phase column or no attack rows, fall back to full group.
+    """
+    attack = phase_filter(group, "attack")
+    if attack.empty:
+        return group
+    return attack
 
 
 def get_action_series(group: pd.DataFrame, preferred_col: str = "action_final") -> pd.Series:
-    """
-    Prefer action_final because this is the action after Guard/Twin validation.
-    Fall back to legacy action if old runtime logs are used.
-    """
     if preferred_col in group.columns:
         return clean_numeric(group, preferred_col, default=0.0).astype(int)
 
@@ -99,7 +88,6 @@ def switching_rate(actions: pd.Series) -> float:
     values = pd.to_numeric(actions, errors="coerce").dropna().astype(int).tolist()
     if len(values) < 2:
         return 0.0
-
     switches = sum(a != b for a, b in zip(values, values[1:]))
     return float(switches / (len(values) - 1))
 
@@ -108,7 +96,6 @@ def action_entropy(actions: pd.Series) -> float:
     values = pd.to_numeric(actions, errors="coerce").dropna().astype(int)
     if values.empty:
         return 0.0
-
     probs = values.value_counts(normalize=True).values
     return float(-(probs * np.log2(probs + 1e-12)).sum())
 
@@ -117,18 +104,10 @@ def action_entropy(actions: pd.Series) -> float:
 # Phase-based metrics
 # =========================================================
 def recovery_time_steps(group: pd.DataFrame) -> float:
-    """
-    Recovery time proxy:
-    number of recovery steps where SLA is still violated.
-
-    Requires:
-    - phase column
-    - sla_violation column
-    """
     if "phase" not in group.columns or "sla_violation" not in group.columns:
         return 0.0
 
-    rec = group[group["phase"].astype(str).str.lower() == "recovery"]
+    rec = phase_filter(group, "recovery")
     if rec.empty:
         return 0.0
 
@@ -136,14 +115,10 @@ def recovery_time_steps(group: pd.DataFrame) -> float:
 
 
 def mitigation_success_rate(group: pd.DataFrame) -> float:
-    """
-    Simple mitigation success proxy:
-    During attack phase, success = no SLA violation.
-    """
     if "phase" not in group.columns or "sla_violation" not in group.columns:
         return 0.0
 
-    attack = group[group["phase"].astype(str).str.lower() == "attack"]
+    attack = phase_filter(group, "attack")
     if attack.empty:
         return 0.0
 
@@ -151,25 +126,16 @@ def mitigation_success_rate(group: pd.DataFrame) -> float:
     return float(1.0 - violations.mean())
 
 
-def attack_phase_mean(group: pd.DataFrame, col: str, default: float = 0.0) -> float:
-    if "phase" not in group.columns:
-        return safe_mean(group, col, default=default)
-
-    attack = group[group["phase"].astype(str).str.lower() == "attack"]
-    if attack.empty:
-        return safe_mean(group, col, default=default)
-
-    return safe_mean(attack, col, default=default)
-
-
 # =========================================================
 # Group summarization
 # =========================================================
 def summarize_group(group: pd.DataFrame) -> dict[str, Any]:
-    actions_final = get_action_series(group, preferred_col="action_final")
+    metric_group = metric_phase_group(group)
 
-    if "action_requested" in group.columns:
-        actions_requested = clean_numeric(group, "action_requested", default=0.0).astype(int)
+    actions_final = get_action_series(metric_group, preferred_col="action_final")
+
+    if "action_requested" in metric_group.columns:
+        actions_requested = clean_numeric(metric_group, "action_requested", default=0.0).astype(int)
     else:
         actions_requested = actions_final.copy()
 
@@ -179,78 +145,85 @@ def summarize_group(group: pd.DataFrame) -> dict[str, Any]:
         else "unknown"
     )
 
-    action_changed_rate = float((actions_requested != actions_final).mean()) if len(group) else 0.0
-    action_nonzero_rate = float((actions_final != 0).mean()) if len(group) else 0.0
-    action_requested_nonzero_rate = float((actions_requested != 0).mean()) if len(group) else 0.0
+    action_changed_rate = (
+        float((actions_requested != actions_final).mean()) if len(metric_group) else 0.0
+    )
+    action_nonzero_rate = float((actions_final != 0).mean()) if len(metric_group) else 0.0
+    action_requested_nonzero_rate = (
+        float((actions_requested != 0).mean()) if len(metric_group) else 0.0
+    )
 
     out: dict[str, Any] = {
         "samples": int(len(group)),
+        "attack_phase_samples": int(len(metric_group)),
 
-        # Reward
-        "mean_reward": safe_mean(group, "reward"),
-        "std_reward": safe_std(group, "reward"),
-        "cumulative_reward": safe_sum(group, "reward"),
+        # Main metrics: attack phase only when available.
+        "mean_reward": safe_mean(metric_group, "reward"),
+        "std_reward": safe_std(metric_group, "reward"),
+        "cumulative_reward": safe_sum(metric_group, "reward"),
 
-        # QoS overall
-        "mean_latency": safe_mean(group, "latency"),
-        "std_latency": safe_std(group, "latency"),
-        "latency_var": safe_var(group, "latency"),
-        "mean_packet_loss": safe_mean(group, "packet_loss"),
-        "std_packet_loss": safe_std(group, "packet_loss"),
-        "mean_packet_rate": safe_mean(group, "packet_rate"),
-        "mean_byte_rate": safe_mean(group, "byte_rate"),
-        "mean_flow_count": safe_mean(group, "flow_count"),
-        "mean_flow_growth_rate": safe_mean(group, "flow_growth_rate"),
-        "mean_src_ip_entropy": safe_mean(group, "src_ip_entropy"),
-        "mean_controller_cpu": safe_mean(group, "controller_cpu"),
+        "mean_latency": safe_mean(metric_group, "latency"),
+        "std_latency": safe_std(metric_group, "latency"),
+        "latency_var": safe_var(metric_group, "latency"),
+        "mean_packet_loss": safe_mean(metric_group, "packet_loss"),
+        "std_packet_loss": safe_std(metric_group, "packet_loss"),
+        "mean_packet_rate": safe_mean(metric_group, "packet_rate"),
+        "mean_byte_rate": safe_mean(metric_group, "byte_rate"),
+        "mean_flow_count": safe_mean(metric_group, "flow_count"),
+        "mean_flow_growth_rate": safe_mean(metric_group, "flow_growth_rate"),
+        "mean_src_ip_entropy": safe_mean(metric_group, "src_ip_entropy"),
+        "mean_controller_cpu": safe_mean(metric_group, "controller_cpu"),
 
-        # Attack phase QoS
-        "attack_mean_latency": attack_phase_mean(group, "latency"),
-        "attack_mean_packet_loss": attack_phase_mean(group, "packet_loss"),
-        "attack_mean_packet_rate": attack_phase_mean(group, "packet_rate"),
-        "attack_mean_controller_cpu": attack_phase_mean(group, "controller_cpu"),
+        # Overall metrics kept for diagnostics.
+        "overall_mean_reward": safe_mean(group, "reward"),
+        "overall_mean_latency": safe_mean(group, "latency"),
+        "overall_mean_packet_loss": safe_mean(group, "packet_loss"),
+        "overall_mean_packet_rate": safe_mean(group, "packet_rate"),
+        "overall_mean_controller_cpu": safe_mean(group, "controller_cpu"),
 
-        # Decision behavior
+        # Decision behavior: attack phase when available.
         "switching_rate": switching_rate(actions_final),
         "action_entropy": action_entropy(actions_final),
         "action_nonzero_rate": action_nonzero_rate,
         "action_requested_nonzero_rate": action_requested_nonzero_rate,
         "action_changed_rate": action_changed_rate,
 
-        # SLA / mitigation
-        "sla_violation_rate": safe_mean(group, "sla_violation"),
+        # SLA / mitigation.
+        "sla_violation_rate": safe_mean(metric_group, "sla_violation"),
+        "overall_sla_violation_rate": safe_mean(group, "sla_violation"),
         "recovery_time_steps": recovery_time_steps(group),
         "mitigation_success_rate": mitigation_success_rate(group),
 
-        # Guard
-        "guard_enabled_rate": safe_mean(group, "guard_enabled"),
-        "guard_overrode_rate": safe_mean(group, "guard_overrode"),
+        # Guard.
+        "guard_enabled_rate": safe_mean(metric_group, "guard_enabled"),
+        "guard_overrode_rate": safe_mean(metric_group, "guard_overrode"),
 
-        # Digital Twin
-        "twin_enabled_rate": safe_mean(group, "twin_enabled"),
-        "twin_checked_rate": safe_mean(group, "twin_checked"),
-        "twin_safe_rate": safe_mean(group, "twin_safe", default=1.0),
-        "twin_reject_rate": safe_mean(group, "twin_rejected"),
-        "mean_gap_latency": safe_mean(group, "gap_latency"),
-        "mean_gap_loss": safe_mean(group, "gap_loss"),
-        "mean_pred_latency": safe_mean(group, "pred_latency"),
-        "mean_pred_loss": safe_mean(group, "pred_loss"),
+        # Digital Twin.
+        "twin_enabled_rate": safe_mean(metric_group, "twin_enabled"),
+        "twin_checked_rate": safe_mean(metric_group, "twin_checked"),
+        "twin_safe_rate": safe_mean(metric_group, "twin_safe", default=1.0),
+        "twin_reject_rate": safe_mean(metric_group, "twin_rejected"),
+        "mean_gap_latency": safe_mean(metric_group, "gap_latency"),
+        "mean_gap_loss": safe_mean(metric_group, "gap_loss"),
+        "mean_pred_latency": safe_mean(metric_group, "pred_latency"),
+        "mean_pred_loss": safe_mean(metric_group, "pred_loss"),
 
-        # LLM runtime overhead
-        "llm_enabled_rate": safe_mean(group, "llm_enabled"),
-        "mean_llm_latency": safe_mean(group, "llm_latency"),
+        # LLM runtime overhead.
+        "llm_enabled_rate": safe_mean(metric_group, "llm_enabled"),
+        "mean_llm_latency": safe_mean(metric_group, "llm_latency"),
     }
 
     for action in range(5):
         out[f"action_{action}_count"] = int((actions_final == action).sum())
-        out[f"action_{action}_rate"] = float((actions_final == action).mean()) if len(group) else 0.0
+        out[f"action_{action}_rate"] = (
+            float((actions_final == action).mean()) if len(metric_group) else 0.0
+        )
         out[f"requested_action_{action}_count"] = int((actions_requested == action).sum())
         out[f"requested_action_{action}_rate"] = (
-            float((actions_requested == action).mean()) if len(group) else 0.0
+            float((actions_requested == action).mean()) if len(metric_group) else 0.0
         )
 
-    # False positive is meaningful for normal traffic:
-    # any non-zero final action in normal traffic is considered unnecessary mitigation.
+    # False positive: any non-zero final action during normal traffic is unnecessary mitigation.
     out["false_positive_rate"] = action_nonzero_rate if attack_type == "normal" else 0.0
 
     return out
@@ -271,11 +244,9 @@ def build_group_summary(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("No grouping columns found. Expected at least eval_config/mode/model.")
 
     rows: list[dict[str, Any]] = []
-
     for keys, group in df.groupby(group_cols, dropna=False):
         if not isinstance(keys, tuple):
             keys = (keys,)
-
         row = {col: value for col, value in zip(group_cols, keys)}
         row.update(summarize_group(group))
         rows.append(row)
@@ -295,10 +266,7 @@ def minmax_good(series: pd.Series, higher_is_better: bool) -> pd.Series:
         return pd.Series([0.5] * len(values), index=values.index, dtype="float64")
 
     norm = (values - min_v) / (max_v - min_v)
-    if higher_is_better:
-        return norm.fillna(0.0)
-
-    return (1.0 - norm).fillna(0.0)
+    return norm.fillna(0.0) if higher_is_better else (1.0 - norm).fillna(0.0)
 
 
 def add_defense_score(summary: pd.DataFrame) -> pd.DataFrame:
@@ -326,21 +294,6 @@ def add_defense_score(summary: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_improvement_vs_no_defense(summary: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add percentage improvement relative to no_defense for each:
-    attack_type x intensity x run_id group.
-
-    Lower is better:
-    - mean_latency
-    - mean_packet_loss
-    - recovery_time_steps
-    - sla_violation_rate
-
-    Higher is better:
-    - mean_reward
-    - cumulative_reward
-    - defense_score
-    """
     summary = summary.copy()
 
     compare_cols = [
@@ -352,7 +305,6 @@ def add_improvement_vs_no_defense(summary: pd.DataFrame) -> pd.DataFrame:
         "cumulative_reward_gain_vs_no_defense",
         "defense_score_gain_vs_no_defense",
     ]
-
     for col in compare_cols:
         summary[col] = np.nan
 
@@ -366,7 +318,6 @@ def add_improvement_vs_no_defense(summary: pd.DataFrame) -> pd.DataFrame:
     for _, group_idx in summary.groupby(base_group_cols, dropna=False).groups.items():
         group = summary.loc[group_idx]
         baseline = group[group["eval_config"].astype(str) == "no_defense"]
-
         if baseline.empty:
             continue
 
@@ -417,7 +368,6 @@ def save_outputs(summary: pd.DataFrame) -> None:
     by_config_path = os.path.join(OUT_DIR, "summary_by_config.csv")
     by_config.to_csv(by_config_path, index=False)
 
-    # Backward-compatible name for old report scripts.
     summary_4_modes_path = os.path.join(OUT_DIR, "summary_4_modes.csv")
     by_config.to_csv(summary_4_modes_path, index=False)
 
@@ -449,6 +399,7 @@ def save_outputs(summary: pd.DataFrame) -> None:
             "mode",
             "model",
             "samples",
+            "attack_phase_samples",
             "switching_rate",
             "action_entropy",
             "action_nonzero_rate",
@@ -529,11 +480,9 @@ def main() -> None:
         )
 
     df = pd.read_csv(INPUT_PATH)
-
     if df.empty:
         raise RuntimeError(f"Runtime log is empty: {INPUT_PATH}")
 
-    # Compatibility for older runtime logs.
     if "eval_config" not in df.columns:
         if "mode" in df.columns and "model" in df.columns:
             df["eval_config"] = df["mode"].astype(str) + "_" + df["model"].astype(str)
@@ -542,7 +491,6 @@ def main() -> None:
         else:
             raise ValueError("Missing eval_config column and cannot infer from mode/model.")
 
-    # Normalize text columns for grouping.
     for col in ["attack_type", "intensity", "phase", "mode", "model", "eval_config"]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.lower()
