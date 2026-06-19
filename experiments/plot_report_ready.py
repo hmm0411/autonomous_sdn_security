@@ -173,10 +173,10 @@ def plot_heatmap(df, metric, title, filename, fmt=".2f"):
 
 def add_vs_no_defense(df):
     df = df.copy()
-
     rows = []
 
     for attack, g in df.groupby("attack_type"):
+        g = g.copy()
         base = g[g["eval_config"] == "no_defense"]
 
         if base.empty:
@@ -184,42 +184,48 @@ def add_vs_no_defense(df):
 
         base = base.iloc[0]
 
+        base_latency = float(base.get("mean_latency", np.nan))
+        base_loss = float(base.get("mean_packet_loss", np.nan))
+        base_reward = float(base.get("mean_reward", np.nan))
+        base_recovery = float(base.get("recovery_time_steps", np.nan))
+
         for _, row in g.iterrows():
             r = row.copy()
-
-            base_latency = float(base.get("mean_latency", np.nan))
-            base_loss = float(base.get("mean_packet_loss", np.nan))
-            base_reward = float(base.get("mean_reward", np.nan))
-            base_recovery = float(base.get("recovery_time_steps", np.nan))
 
             latency = float(row.get("mean_latency", np.nan))
             loss = float(row.get("mean_packet_loss", np.nan))
             reward = float(row.get("mean_reward", np.nan))
             recovery = float(row.get("recovery_time_steps", np.nan))
 
-            r["latency_reduction_vs_no_defense_pct"] = (
-                (base_latency - latency) / base_latency * 100
-                if base_latency and not np.isnan(base_latency)
-                else np.nan
-            )
+            if row["eval_config"] == "no_defense":
+                r["latency_reduction_vs_no_defense_pct"] = 0.0
+                r["packet_loss_reduction_vs_no_defense_pct"] = 0.0
+                r["reward_gain_vs_no_defense"] = 0.0
+                r["recovery_reduction_vs_no_defense_pct"] = 0.0
+            else:
+                r["latency_reduction_vs_no_defense_pct"] = (
+                    (base_latency - latency) / base_latency * 100.0
+                    if base_latency and not np.isnan(base_latency)
+                    else np.nan
+                )
 
-            r["packet_loss_reduction_vs_no_defense_pct"] = (
-                (base_loss - loss) / base_loss * 100
-                if base_loss and not np.isnan(base_loss)
-                else np.nan
-            )
+                r["packet_loss_reduction_vs_no_defense_pct"] = (
+                    (base_loss - loss) / base_loss * 100.0
+                    if base_loss and not np.isnan(base_loss)
+                    else np.nan
+                )
 
-            r["reward_gain_vs_no_defense"] = (
-                reward - base_reward
-                if not np.isnan(base_reward)
-                else np.nan
-            )
+                r["reward_gain_vs_no_defense"] = (
+                    reward - base_reward
+                    if not np.isnan(base_reward)
+                    else np.nan
+                )
 
-            r["recovery_reduction_vs_no_defense_pct"] = (
-                (base_recovery - recovery) / base_recovery * 100
-                if base_recovery and not np.isnan(base_recovery)
-                else np.nan
-            )
+                r["recovery_reduction_vs_no_defense_pct"] = (
+                    (base_recovery - recovery) / base_recovery * 100.0
+                    if base_recovery and not np.isnan(base_recovery)
+                    else np.nan
+                )
 
             rows.append(r)
 
@@ -305,7 +311,17 @@ def main():
 
     df = pd.read_csv(SUMMARY_PATH)
     df = clean_summary(df)
+    
     attack_df = build_attack_only(df)
+
+    # Gộp trước theo attack_type + eval_config để mỗi cấu hình chỉ còn 1 dòng / attack.
+    numeric_cols = attack_df.select_dtypes(include=[np.number]).columns.tolist()
+    attack_df = (
+        attack_df
+        .groupby(["attack_type", "eval_config"], as_index=False)[numeric_cols]
+        .mean()
+    )
+
     attack_df = add_normalized_scores(attack_df)
     attack_df = add_vs_no_defense(attack_df)
 
