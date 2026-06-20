@@ -18,7 +18,7 @@ plt.title("Final Reward per Seed Comparison")
 plt.ylabel("Final Episode Reward")
 plt.grid(True)
 
-out_path = os.path.join(RESULT_DIR, "boxplot_final_reward.png")
+out_path = os.path.join(RESULT_DIR, "hello_boxplot_final_reward.png")
 plt.savefig(out_path, dpi=300)
 print("Saved to:", out_path)
 
