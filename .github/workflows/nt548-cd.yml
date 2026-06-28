@@ -50,9 +50,9 @@ jobs:
           import yaml
 
           files = [
-              "k8s/base.yaml",
-              "k8s/serving.yaml",
-              "k8s/monitoring-jobs.yaml",
+              "k3s/base.yaml",
+              "k3s/serving.yaml",
+              "k3s/monitoring-jobs.yaml",
           ]
 
           for path in files:

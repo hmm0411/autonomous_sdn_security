@@ -1,10 +1,16 @@
-import requests
+import os
+
 import numpy as np
+import requests
+
+
+STRICT_RL = os.getenv("STRICT_RL", "false").lower() == "true"
 
 RL_ENDPOINTS = {
-    "dqn": "http://rl-serving-dqn:8000/predict",
-    "ppo": "http://rl-serving-ppo:8001/predict",
+    "dqn": os.getenv("DQN_ENDPOINT", "http://rl-serving-dqn:8000/predict"),
+    "ppo": os.getenv("PPO_ENDPOINT", "http://rl-serving-ppo:8001/predict"),
 }
+
 
 def get_action(state, model_type="dqn"):
     model_type = str(model_type).lower()
@@ -12,22 +18,35 @@ def get_action(state, model_type="dqn"):
 
     try:
         payload = {
-            "state": state.tolist() if isinstance(state, np.ndarray) else state
+            "state": state.tolist()
+            if isinstance(state, np.ndarray)
+            else list(state)
         }
 
-        res = requests.post(url, json=payload, timeout=2.0)
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=float(os.getenv("RL_TIMEOUT", "2")),
+        )
 
-        if res.status_code == 200:
-            data = res.json()
+        if response.status_code == 200:
+            data = response.json()
+
             return (
                 int(data.get("action", 0)),
                 int(data.get("action_staging", 0)),
-                str(data.get("model", model_type)).lower()
+                str(data.get("model", model_type)).lower(),
             )
 
-        print(f"RL API returned status={res.status_code}, body={res.text}")
+        print(
+            f"[RL_API_ERROR] status={response.status_code} body={response.text}",
+            flush=True,
+        )
 
     except Exception as e:
-        print(f"RL API connection error for {model_type}: {e}")
+        print(f"[RL_API_CONN_ERROR] model={model_type} error={e}", flush=True)
 
-    return 0, 0, model_type
+    if STRICT_RL:
+        raise RuntimeError(f"Failed to get action from RL model: {model_type}")
+
+    return 0, 0, f"{model_type}_fallback"

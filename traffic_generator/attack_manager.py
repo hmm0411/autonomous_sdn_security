@@ -68,7 +68,6 @@ class AttackManager:
             host.cmd("pkill -9 iperf 2>/dev/null || true")
             host.cmd("pkill -9 ping 2>/dev/null || true")
             host.cmd("pkill -9 nmap 2>/dev/null || true")
-            host.cmd("pkill -9 python3 2>/dev/null || true")
 
         print("[+] All traffic stopped.")
 

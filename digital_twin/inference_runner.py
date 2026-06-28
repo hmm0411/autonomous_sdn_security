@@ -1,6 +1,6 @@
 import os
 import time
-from xml.parsers.expat import model
+# from xml.parsers.expat import model
 import torch
 import numpy as np
 import torch.nn as nn
@@ -48,7 +48,7 @@ def load_model():
 
     # model.eval()
     # return model
-    state_dim = 10  # Số lượng features của state
+    state_dim = 8  # Số lượng features của state
     action_dim = 5  # Số lượng action (ví dụ: 0,1,2)
     model = QNetwork(state_dim, action_dim)
     state_dict = torch.load(MODEL_DQN_PATH)
@@ -56,14 +56,13 @@ def load_model():
     model.eval()
     return model
 
-def select_action(model, state, previous_action):
-    # 1. Chuyển state thành list
-    state_list = list(state)
-    
-    # 2. Thêm hành động trước đó vào làm feature thứ 10
-    state_list.append(float(previous_action)) 
+FIELDS = ["packet_rate","byte_rate","flow_count","flow_growth_rate",
+          "src_ip_entropy","latency","packet_loss","controller_cpu"]
 
-    # 3. Đưa vào PyTorch
+def select_action(model, state, previous_action):
+    # Lấy đúng thứ tự values từ dict
+    state_list = [state[f] for f in FIELDS]
+    # Không ghép previous_action vào vì model chỉ nhận 8 dim
     state_tensor = torch.FloatTensor(state_list).unsqueeze(0)
     with torch.no_grad():
         action = model(state_tensor).argmax().item()
@@ -139,7 +138,7 @@ def run():
             next_state = collector.get_state()
             
             logger.log(state, action, next_state, "mixed")
-            print(f"Đã ghi Log: Action={action} | Next Latency={next_state[4]}ms | Next Loss={next_state[5]}")
+            print(f"Đã ghi Log: Action={action} | Next Latency={next_state['latency']}ms | Next Loss={next_state['packet_loss']}")
             
             time.sleep(2)
             

@@ -15,16 +15,16 @@ mlflow.set_tracking_uri("http://mlflow.sdn-security.svc.cluster.local:5000")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-K8S_API_SERVER = "https://kubernetes.default.svc"
+K3S_API_SERVER = "https://kubernetes.default.svc"
 SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 
 app = Flask(__name__)
 
-# 2. Khởi tạo K8s & MLflow Client
+# 2. Khởi tạo K3s & MLflow Client
 def get_job_api():
     """
-    Load lại Kubernetes in-cluster config mỗi lần cần gọi API.
+    Load lại K3s in-cluster config mỗi lần cần gọi API.
     Tránh lỗi client/token cũ sau khi rollout pod hoặc đổi ServiceAccount.
     """
     config.load_incluster_config()
@@ -34,10 +34,10 @@ def get_job_api():
 try:
     job_api = get_job_api()
     mlflow_client = MlflowClient()
-    logger.info("[+] Đã load cấu hình Kubernetes thành công.")
+    logger.info("[+] Đã load cấu hình K3s thành công.")
 except Exception as e:
     job_api = None
-    logger.exception(f"[-] Lỗi load cấu hình K8s: {e}")
+    logger.exception(f"[-] Lỗi load cấu hình K3s: {e}")
 
 NAMESPACE = "sdn-security"
 
@@ -139,7 +139,7 @@ def create_training_job(model_name):
         with open(SA_TOKEN_PATH, "r") as f:
             token = f.read().strip()
 
-        url = f"{K8S_API_SERVER}/apis/batch/v1/namespaces/{NAMESPACE}/jobs"
+        url = f"{K3S_API_SERVER}/apis/batch/v1/namespaces/{NAMESPACE}/jobs"
 
         headers = {
             "Authorization": f"Bearer {token}",

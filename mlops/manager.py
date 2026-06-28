@@ -6,7 +6,7 @@ from mlflow.tracking import MlflowClient
 import requests
 from kubernetes import client, config
 
-config.load_incluster_config()
+# config.load_incluster_config()
 job_api = client.BatchV1Api()
 mlflow_client = MlflowClient()
 
