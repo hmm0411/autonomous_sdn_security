@@ -1,221 +1,124 @@
----
-# Autonomous SDN Security System
+# Autonomous SDN Security
 
-An intelligent network defense system using **Software-Defined Networking (SDN)** and **Reinforcement Learning (RL)**.
+Autonomous SDN Security is a research and engineering project for **AI-driven network defense** in Software-Defined Networking (SDN). It combines reinforcement learning (DQN/PPO), runtime control logic, attack traffic simulation, and MLOps components for model lifecycle and monitoring.
 
----
+## Purpose of this repository
 
-## What This Project Demonstrates
+This repository is built to:
+- train RL agents that map SDN telemetry to mitigation actions,
+- evaluate those agents against attack scenarios,
+- serve trained models as inference APIs,
+- run a control loop that applies safe actions to the SDN controller,
+- support observability and retraining/promotion workflows.
 
-- Real-time network traffic monitoring & control  
-- AI-driven decision making (DQN / PPO)  
-- Automated attack mitigation (DDoS, Packet in Flood, Flow Table Exhaustion, IP spoofing, Porrt Scanning)  
-- Digital Twin validation before deployment  
-- Full system observability (Prometheus, Grafana, MLflow)  
-- Containerized, reproducible environment  
+## What the project outputs
 
----
+Depending on what you run, the project produces:
+- **Trained models**: `models/dqn_model.pth`, `models/ppo_model.pth`
+- **Training logs/artifacts**: `runs/`, `mlruns/`, `logs/`
+- **Evaluation reports**: CSV files under `results/` (for example `results/evaluation/offline_eval_results.csv`)
+- **Serving/API output**: JSON responses from `/health`, `/predict`, `/reload`
+- **Runtime metrics**: Prometheus-compatible metrics from training/serving/control-loop processes
 
-## Overview
+## Repository structure (current)
 
-This project models network defense as a **reinforcement learning problem**:
+- `rl_engine/` - RL environments, agents, training, serving
+- `control_loop/` - runtime decision loop and controller execution layer
+- `digital_twin/` - surrogate/twin utilities and transition logging
+- `traffic_generator/` - Mininet topology and attack generation
+- `experiments/` - offline evaluation and scenario benchmarking scripts
+- `mlops/` - alert webhook, retrain trigger, and promotion orchestration
+- `k3s/`, `prometheus/`, `grafana/`, `alertmanager/` - deployment and observability configs
 
-```bash
-
-State → RL Agent → Action → SDN Controller → Network → Feedback → Reward
-
-```
-
-The system continuously monitors network conditions and learns optimal policies to defend against attacks.
-
----
-
-## System Architecture
-
-### High-level
-
-```bash
-
-Mininet → Controller → RL Agent → Action → Network
-↓
-Digital Twin
-↓
-Monitoring
-
-```
-
----
-
-### Layered Design
-
-```bash
-
-Training & Evaluation   (experiments/)
-↓
-RL Agent                (rl_engine/)
-↓
-Digital Twin            (digital_twin/)
-↓
-Environment             (env + state_builder + reward)
-↓
-Controller Client
-↓
-SDN Controller          (mock Flask / ONOS)
-↓
-Network (Mininet + attacks)
-
-```
-
----
-
-## Project Structure
-
-```bash
-
-autonomous_sdn_security/
-├── infra/               # Mock SDN controller + Mininet
-├── rl_engine/           # RL agent (DQN / PPO)
-├── digital_twin/        # Validation layer
-├── mlops/               # MLflow + monitoring
-├── experiments/         # Baselines & evaluation
-├── traffic_generator/   # Attack simulation
-└── docker-compose.yml
-
-````
-
----
-
-## Tech Stack
-
-|  Area |  Technology |
-|--------|-------------|
-| **RL Framework** | PyTorch, Gymnasium |
-| **Network Simulation** | Mininet, OpenFlow 1.3 |
-| **Attack Simulation** | hping3, Scapy |
-| **SDN Controller** | ONOS |
-| **ML Tracking** | MLflow |
-| **Monitoring** | Prometheus, Grafana |
-| **Deployment** | Docker, K3s |
-
----
-## Getting Started
-
-### 1. Clone repository
+## How to clone
 
 ```bash
 git clone https://github.com/hmm0411/autonomous_sdn_security.git
 cd autonomous_sdn_security
-````
+```
 
----
+## Setup
 
-### 2. Install dependencies
+Use Python 3.10+.
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
----
-
-### 3. Run system
+Create runtime folders:
 
 ```bash
-docker compose up --build
+mkdir -p data/processed models results logs mlruns runs
 ```
 
----
+## How to run
 
-## How It Works
+### 1) Train RL models (offline)
 
-### Controller
+The training scripts expect `data/processed/train_data.csv`.
 
-* Flask-based SDN controller mock
-* Exposes `/state` API returning network metrics
+```bash
+python -m rl_engine.agent.train_dqn
+python -m rl_engine.agent.train_ppo
+```
 
-### RL Agent
+### 2) Run model serving API
 
-* DQN / PPO agents
-* Observes 10-dimensional state vector
-* Chooses actions:
+```bash
+# DQN serving (default MODEL_TYPE=dqn)
+python -m rl_engine.agent.api_serving --port 8000
 
-  * block traffic
-  * limit bandwidth
-  * redirect
-  * isolate
+# PPO serving
+MODEL_TYPE=ppo python -m rl_engine.agent.api_serving --port 8001
+```
 
-### Digital Twin
+### 3) Run the runtime control loop
 
-* Simulates action effects before deployment
-* Prevents unsafe decisions
+```bash
+MODE=rl MODEL_TYPE=dqn ACTION_DRY_RUN=true python -m control_loop.main_loop
+```
 
-### Traffic Generator
+### 4) Run offline evaluation
 
-* Simulates attacks:
+Requires evaluation datasets (for example `data/processed/val_data.csv` and `data/processed/test_data.csv`).
 
-  * DDoS
-  * Packet in Flood
-  * Flow table exhaustion
-  * IP spoofing
-  * Port Scanning
+```bash
+python -m experiments.evaluate_offline
+```
 
-### MLOps
+### 5) Run Mininet attack simulation (optional, system-level)
 
-* MLflow tracks experiments
-* Prometheus collects system metrics
+Requires Mininet/Open vSwitch and an SDN controller endpoint.
 
----
+```bash
+sudo python -m traffic_generator.run
+```
 
-## Key Design Decisions
+## Typical API output
 
-* **Mock-first development** → RL training without real SDN dependency
-* **Digital Twin safety layer** → validate actions before execution
-* **Hybrid reward function**:
+Example `/predict` response:
 
-  * QoS (latency, packet loss penalties)
-  * Security (attack detection accuracy)
-  * Stability (penalty for rapid switching)
-* **Fully containerized system** → reproducible deployment
+```json
+{
+  "action": 2,
+  "action_staging": 2,
+  "model": "dqn",
+  "latency_seconds": 0.002
+}
+```
 
----
+## Action semantics used by the system
 
-## Example Outputs
-
-* RL reward convergence
-* Reduced network latency under attack
-* Detection of abnormal traffic patterns
-* Automated mitigation actions
-
----
-
-## Development Roadmap
-
-### Phase 1
-
-* Mock controller
-* Random agent
-
-### Phase 2
-
-* DQN training
-* QoS-based reward
-
-### Phase 3
-
-* Digital Twin (ML-based)
-* Stability analysis
-
-### Phase 4
-
-* CI/CD pipeline
-* Cloud deployment
-
----
+- `0`: no_action
+- `1`: block_suspicious_flow
+- `2`: limit_bandwidth
+- `3`: redirect_traffic
+- `4`: isolate_device
 
 ## Notes
 
-This project focuses on **real-world system design**, combining:
-
-* Network infrastructure
-* Intelligent decision-making
-* Observability and monitoring
-* Automation and deployment
+- This branch currently provides Dockerfiles and K3s manifests, but no root `docker-compose.yml`.
+- For safe experiments, keep `ACTION_DRY_RUN=true` in the control loop unless you explicitly want to enforce controller actions.
