@@ -21,3 +21,4 @@ autonomous_sdn_security/
 experiments/
 models/
 analysis/
+*.pth
