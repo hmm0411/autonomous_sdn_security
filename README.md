@@ -1,34 +1,64 @@
-# Autonomous SDN Security
+# Autonomous SDN Security (RL + SDN + MLOps)
 
-Autonomous SDN Security is a research and engineering project for **AI-driven network defense** in Software-Defined Networking (SDN). It combines reinforcement learning (DQN/PPO), runtime control logic, attack traffic simulation, and MLOps components for model lifecycle and monitoring.
+## What this repository is
 
-## Purpose of this repository
+This project builds an **autonomous defense loop for Software-Defined Networking (SDN)**.
+It uses reinforcement learning to choose mitigation actions from live network signals, then evaluates and serves those models with MLOps tooling.
 
-This repository is built to:
-- train RL agents that map SDN telemetry to mitigation actions,
-- evaluate those agents against attack scenarios,
-- serve trained models as inference APIs,
-- run a control loop that applies safe actions to the SDN controller,
-- support observability and retraining/promotion workflows.
+## Main purpose
 
-## What the project outputs
+The repository is intended to answer this practical question:
 
-Depending on what you run, the project produces:
-- **Trained models**: `models/dqn_model.pth`, `models/ppo_model.pth`
-- **Training logs/artifacts**: `runs/`, `mlruns/`, `logs/`
-- **Evaluation reports**: CSV files under `results/` (for example `results/evaluation/offline_eval_results.csv`)
-- **Serving/API output**: JSON responses from `/health`, `/predict`, `/reload`
-- **Runtime metrics**: Prometheus-compatible metrics from training/serving/control-loop processes
+**Can an RL agent detect abnormal SDN traffic patterns and choose useful mitigation actions automatically, with measurable QoS/security impact?**
 
-## Repository structure (current)
+It supports that goal by providing:
+- offline training pipelines (DQN and PPO),
+- runtime control loop integration,
+- attack traffic generation in Mininet,
+- experiment/evaluation scripts,
+- model serving and monitoring components.
 
-- `rl_engine/` - RL environments, agents, training, serving
-- `control_loop/` - runtime decision loop and controller execution layer
-- `digital_twin/` - surrogate/twin utilities and transition logging
-- `traffic_generator/` - Mininet topology and attack generation
-- `experiments/` - offline evaluation and scenario benchmarking scripts
-- `mlops/` - alert webhook, retrain trigger, and promotion orchestration
-- `k3s/`, `prometheus/`, `grafana/`, `alertmanager/` - deployment and observability configs
+## What output you get from this project
+
+When running this repository, typical outputs are:
+
+1. **Model files**
+   - `models/dqn_model.pth`
+   - `models/ppo_model.pth`
+
+2. **Evaluation artifacts**
+   - CSV reports under `results/`
+   - Example: `results/evaluation/offline_eval_results.csv`
+
+3. **Runtime and training logs**
+   - `logs/`, `runs/`, `mlruns/`
+
+4. **Inference outputs (API JSON)**
+   - `/health`, `/predict`, `/reload` from `rl_engine.agent.api_serving`
+
+5. **Prometheus metrics**
+   - training/serving/control-loop metrics for monitoring dashboards
+
+## High-level architecture
+
+```text
+Traffic/Telemetry -> State Builder -> RL Model (DQN/PPO) -> Action
+        ^                                                |
+        |                                                v
+   Controller Metrics <- Control Loop <- SDN Controller Execution
+```
+
+## Repository layout
+
+- `rl_engine/` - RL configs, environments, agents, training, serving API
+- `control_loop/` - runtime loop, state collection, action execution
+- `traffic_generator/` - Mininet topology + attack scenario generation
+- `experiments/` - benchmarking and offline evaluation scripts
+- `digital_twin/` - transition collection and twin/safety-related utilities
+- `mlops/` - alert webhook, retrain trigger, promotion helpers
+- `k3s/`, `prometheus/`, `grafana/`, `alertmanager/` - deployment/observability configs
+
+---
 
 ## How to clone
 
@@ -37,9 +67,9 @@ git clone https://github.com/hmm0411/autonomous_sdn_security.git
 cd autonomous_sdn_security
 ```
 
-## Setup
+## Local setup
 
-Use Python 3.10+.
+Use Python 3.10+:
 
 ```bash
 python -m venv .venv
@@ -48,56 +78,40 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Create runtime folders:
+Create working directories:
 
 ```bash
 mkdir -p data/processed models results logs mlruns runs
 ```
 
-## How to run
+---
 
-### 1) Train RL models (offline)
+## How to run (core workflows)
 
-The training scripts expect `data/processed/train_data.csv`.
+### A) Train models (offline)
+
+Requirement: `data/processed/train_data.csv`
 
 ```bash
 python -m rl_engine.agent.train_dqn
 python -m rl_engine.agent.train_ppo
 ```
 
-### 2) Run model serving API
+Expected result:
+- trained checkpoints in `models/`
+- run artifacts in `runs/`, `mlruns/`, `logs/`
 
+### B) Start serving APIs for inference
+
+DQN service:
 ```bash
-# DQN serving (default MODEL_TYPE=dqn)
 python -m rl_engine.agent.api_serving --port 8000
+```
 
-# PPO serving
+PPO service:
+```bash
 MODEL_TYPE=ppo python -m rl_engine.agent.api_serving --port 8001
 ```
-
-### 3) Run the runtime control loop
-
-```bash
-MODE=rl MODEL_TYPE=dqn ACTION_DRY_RUN=true python -m control_loop.main_loop
-```
-
-### 4) Run offline evaluation
-
-Requires evaluation datasets (for example `data/processed/val_data.csv` and `data/processed/test_data.csv`).
-
-```bash
-python -m experiments.evaluate_offline
-```
-
-### 5) Run Mininet attack simulation (optional, system-level)
-
-Requires Mininet/Open vSwitch and an SDN controller endpoint.
-
-```bash
-sudo python -m traffic_generator.run
-```
-
-## Typical API output
 
 Example `/predict` response:
 
@@ -110,15 +124,46 @@ Example `/predict` response:
 }
 ```
 
-## Action semantics used by the system
+### C) Run runtime control loop
 
-- `0`: no_action
-- `1`: block_suspicious_flow
-- `2`: limit_bandwidth
-- `3`: redirect_traffic
-- `4`: isolate_device
+```bash
+MODE=rl MODEL_TYPE=dqn ACTION_DRY_RUN=true python -m control_loop.main_loop
+```
 
-## Notes
+`ACTION_DRY_RUN=true` is recommended for safe testing.
 
-- This branch currently provides Dockerfiles and K3s manifests, but no root `docker-compose.yml`.
-- For safe experiments, keep `ACTION_DRY_RUN=true` in the control loop unless you explicitly want to enforce controller actions.
+### D) Run offline evaluation
+
+Requirements:
+- `data/processed/val_data.csv`
+- `data/processed/test_data.csv`
+
+```bash
+python -m experiments.evaluate_offline
+```
+
+Expected result:
+- offline comparison metrics in `results/evaluation/`
+
+### E) Run Mininet attack simulation (optional)
+
+Requires Mininet + Open vSwitch + reachable SDN controller.
+
+```bash
+sudo python -m traffic_generator.run
+```
+
+---
+
+## Action IDs used by agents/control loop
+
+- `0` = `no_action`
+- `1` = `block_suspicious_flow`
+- `2` = `limit_bandwidth`
+- `3` = `redirect_traffic`
+- `4` = `isolate_device`
+
+## Important notes
+
+- This branch has Dockerfiles and K3s manifests, but **no root `docker-compose.yml`**.
+- For experiments, run in dry-run mode first, then enable real enforcement only when controller mappings are verified.
