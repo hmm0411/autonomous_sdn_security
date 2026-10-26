@@ -1,4 +1,4 @@
-import os
+﻿import os
 import random
 import logging
 import collections
@@ -71,7 +71,7 @@ def run_single_seed_dqn(seed_value, df_train, parent_run=False):
     seed_rewards, seed_losses, seed_epsilons = [], [], []
     recent_rewards = collections.deque(maxlen=WINDOW_SIZE)
     best_reward_so_far = float('-inf')
-    total_episodes = 2 if IS_CI else MAX_EPISODES
+    total_episodes = MAX_EPISODES
 
     # Khởi tạo nested run nếu không phải môi trường CI
     active_run = mlflow.start_run(run_name=f"Seed_{seed_value}", nested=True) if (not IS_CI and parent_run) else None

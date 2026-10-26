@@ -1,4 +1,4 @@
-import os
+﻿import os
 import logging
 import collections
 import shutil
@@ -70,7 +70,7 @@ def run_single_seed_ppo(seed_value, df_train, parent_run=False):
     recent_rewards = collections.deque(maxlen=WINDOW_SIZE)
     best_reward_so_far = float('-inf')
 
-    total_episodes = 2 if IS_CI else MAX_EPISODES
+    total_episodes = MAX_EPISODES
     scheduler = LinearLR(agent.optimizer, start_factor=1.0, end_factor=0.05, total_iters=total_episodes)
 
     # Khởi tạo nested run
