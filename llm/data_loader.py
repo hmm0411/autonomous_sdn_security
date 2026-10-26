@@ -168,7 +168,35 @@ def _load_dqn():
     from rl_engine.config import ACTION_DIM, STATE_DIM
 
     agent = DQNAgent(STATE_DIM, ACTION_DIM)
-    path = os.path.join(MODELS_DIR, "dqn_model.pth")
+    requested_seed = os.getenv("RL_MODEL_SEED")
+    candidates = []
+
+    if requested_seed:
+        candidates.extend(
+            [
+                os.path.join(MODELS_DIR, f"dqn_seed{requested_seed}.pth"),
+                os.path.join(ROOT, "out", f"dqn_seed{requested_seed}.pth"),
+            ]
+        )
+
+    candidates.extend(
+        [
+            os.path.join(MODELS_DIR, "dqn_model.pth"),
+            os.path.join(ROOT, "out", "dqn_seed42.pth"),
+        ]
+    )
+
+    path = next((candidate for candidate in candidates if os.path.exists(candidate)), None)
+    if path is None:
+        searched = "\n".join(f"  - {candidate}" for candidate in candidates)
+        raise FileNotFoundError(
+            "No DQN checkpoint found. Searched:\n"
+            f"{searched}\n"
+            "Set RL_MODEL_SEED to select a seed checkpoint, or train/export "
+            "models\\dqn_model.pth."
+        )
+
+    print(f"[Data Loading] Using DQN checkpoint: {path}")
 
     checkpoint = torch.load(path, map_location=agent.device)
 

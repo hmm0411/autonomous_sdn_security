@@ -8,7 +8,8 @@ from huggingface_hub import InferenceClient
 
 
 HF_TOKEN = os.getenv("HF_TOKEN")
-HF_MODEL = os.getenv("HF_MODEL", "meta-llama/Meta-Llama-3-8B-Instruct")
+HF_MODEL = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+HF_PROVIDER = os.getenv("HF_PROVIDER")
 
 
 SYSTEM_PROMPT = """You are an expert SDN network security analyst.
@@ -36,10 +37,14 @@ def _get_client():
             "HF_TOKEN is not set. Export it first: export HF_TOKEN='your_token'"
         )
 
-    _client = InferenceClient(
-        model=HF_MODEL,
-        token=HF_TOKEN,
-    )
+    client_options = {
+        "model": HF_MODEL,
+        "token": HF_TOKEN,
+    }
+    if HF_PROVIDER:
+        client_options["provider"] = HF_PROVIDER
+
+    _client = InferenceClient(**client_options)
 
     return _client
 
@@ -79,7 +84,13 @@ def call_llm(
         text = response.choices[0].message.content
 
     except Exception as exc:
-        text = f"LLM_ERROR: {exc}"
+        message = str(exc)
+        if "model_not_supported" in message or "not supported by any provider" in message:
+            message = (
+                f"{message} Set HF_MODEL to a model available through your "
+                "Hugging Face Inference Provider, and optionally set HF_PROVIDER."
+            )
+        text = f"LLM_ERROR: {message}"
 
     latency_ms = (time.time() - start) * 1000.0
 
