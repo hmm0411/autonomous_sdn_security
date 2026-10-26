@@ -4,7 +4,7 @@ B.3: tác dụng của guard (RL có/không có guard).
 Hàm threat_score / is_clearly_normal / rule_action lấy NGUYÊN VĂN từ control_loop/main_loop.py (qua ast).
 Cách dùng: python3 eval_baselines.py <đường dẫn main_loop.py>
 """
-import ast, glob, re, sys
+import ast, glob, os, re, sys
 import joblib, numpy as np, pandas as pd, torch, torch.nn as nn
 
 F = ["packet_rate", "byte_rate", "flow_count", "flow_growth_rate",
@@ -14,7 +14,7 @@ BEST = {0: {0}, 1: {2}, 2: {1}, 3: {1, 4}, 4: {2}, 5: {3}}
 OK = {0: {0}, 1: {2, 1}, 2: {1, 2}, 3: {1, 4}, 4: {2, 1}, 5: {3}}
 
 # ---- lấy hàm gốc từ main_loop.py ----
-src = open(sys.argv[1]).read()
+src = open(sys.argv[1], encoding="utf-8").read()
 tree = ast.parse(src)
 keep = [n for n in tree.body if isinstance(n, ast.FunctionDef)
         and n.name in ("_f", "threat_score", "is_clearly_normal", "rule_action")]
@@ -72,21 +72,23 @@ guard_cal = np.array([threat_score(r) <= 1.0 and clearly_normal_cal(r) for r in 
 print(f"Calibrated flow_count threshold (val, normal, p99): <= {FLOW_T:.1f}")
 X = torch.tensor(te[F].values, dtype=torch.float32)
 for f in sorted(glob.glob("out/*_seed*.pth")):
-    algo, seed = re.match(r"out/(\w+)_seed(\d+).pth", f).groups()
+    algo, seed = re.match(r"(\w+)_seed(\d+).pth", os.path.basename(f)).groups()
     net = Q() if algo == "dqn" else AC(); net.load_state_dict(torch.load(f, map_location="cpu")); net.eval()
     with torch.no_grad(): a = net(X).argmax(1).numpy()
     rows.append({"method": algo.upper(), "seed": int(seed), **metrics(a)})
     rows.append({"method": algo.upper() + "+Guard", "seed": int(seed), **metrics(np.where(guard_mask, 0, a))})
     rows.append({"method": algo.upper() + "+GuardCal", "seed": int(seed), **metrics(np.where(guard_cal, 0, a))})
 
-df = pd.DataFrame(rows); df.to_csv("table_all_methods_per_seed.csv", index=False)
+TABLES_DIR = os.path.join("figures", "tables")
+os.makedirs(TABLES_DIR, exist_ok=True)
+df = pd.DataFrame(rows); df.to_csv(os.path.join(TABLES_DIR, "table_all_methods_per_seed.csv"), index=False)
 cols = [c for c in df.columns if c not in ("method", "seed")]
 def ms(x): return f"{x.mean()*100:.1f} ± {x.std(ddof=1)*100 if len(x) > 1 else 0:.1f}"
 order = [m for m in ["Random", "Rule", "DQN", "DQN+Guard", "DQN+GuardCal", "PPO", "PPO+Guard", "PPO+GuardCal"]
          if m in df.method.unique()]
 agg = df.groupby("method")[cols].agg(ms).loc[order]
 agg.insert(0, "n", df.groupby("method").size().loc[order])
-agg.T.to_csv("table_all_methods.csv")
+agg.T.to_csv(os.path.join(TABLES_DIR, "table_all_methods.csv"))
 pd.set_option("display.width", 250)
 print(f"=== Held-out test (N={len(y)}), % , mean ± std over seeds ===\n", agg.T.to_string())
 print(f"\nGuard fires on {guard_mask.mean()*100:.1f}% of test states "

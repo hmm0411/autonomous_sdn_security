@@ -5,7 +5,7 @@ Không train lại, không cần testbed. Chạy mất vài giây.
 """
 import warnings; warnings.filterwarnings("ignore")
 import numpy as np, pandas as pd, joblib
-import make_figures as mf
+from scripts import make_figures as mf
 
 PATH = "models/surrogate_model.pkl"
 LAT_T, LOSS_T = 150.0, 0.10                        # digital_twin/safety.py

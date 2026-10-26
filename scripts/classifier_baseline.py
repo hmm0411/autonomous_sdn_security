@@ -15,7 +15,7 @@ import numpy as np, pandas as pd, torch
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import balanced_accuracy_score
-import make_figures as mf
+from scripts import make_figures as mf
 
 F = mf.F; SEEDS = [42, 101, 123, 456, 789]
 tr = pd.read_csv("data/processed/train_data.csv"); te = pd.read_csv("data/processed/test_data.csv")

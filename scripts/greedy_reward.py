@@ -1,6 +1,6 @@
 """Reward trung bình mỗi bước của chính sách GREEDY trên tập test, tính bằng đúng hàm reward huấn luyện
 (OfflineSDNEnv._compute_reward), duyệt tuần tự toàn bộ tập test (có tính switching penalty)."""
-import glob, re, sys, ast, joblib, numpy as np, pandas as pd, torch, torch.nn as nn
+import glob, os, re, sys, ast, joblib, numpy as np, pandas as pd, torch, torch.nn as nn
 from typing import Optional
 from rl_engine.offline_env import OfflineSDNEnv
 F=["packet_rate","byte_rate","flow_count","flow_growth_rate","src_ip_entropy","latency","packet_loss","controller_cpu"]
@@ -19,7 +19,7 @@ def mean_reward(actions):
     return tot/len(actions)
 X=torch.tensor(te[F].values,dtype=torch.float32); rows=[]
 for f in sorted(glob.glob("out/*_seed*.pth")):
-    algo,seed=re.match(r"out/(\w+)_seed(\d+).pth",f).groups()
+    algo,seed=re.match(r"(\w+)_seed(\d+).pth",os.path.basename(f)).groups()
     net=Q() if algo=="dqn" else AC(); net.load_state_dict(torch.load(f,map_location="cpu")); net.eval()
     with torch.no_grad(): a=net(X).argmax(1).numpy()
     dist=np.bincount(a,minlength=5)/len(a)
@@ -34,6 +34,7 @@ rows.append({"method":"Rule","seed":0,"mean_step_reward":mean_reward(ra),**{f"sh
 for s in [42,101,123,456,789]:
     a=np.random.default_rng(s).integers(0,5,len(te))
     rows.append({"method":"Random","seed":s,"mean_step_reward":mean_reward(a),**{f"share_a{k}":round(np.mean(a==k),3) for k in range(5)}})
-df=pd.DataFrame(rows); df.to_csv("table_greedy_reward_per_seed.csv",index=False)
+os.makedirs(os.path.join("figures", "tables"), exist_ok=True)
+df=pd.DataFrame(rows); df.to_csv(os.path.join("figures", "tables", "table_greedy_reward_per_seed.csv"),index=False)
 print(df.to_string(index=False))
-g=df.groupby("method").mean_step_reward.agg(["mean","std","count"]); g.to_csv("table_greedy_reward.csv"); print(g.round(3))
+g=df.groupby("method").mean_step_reward.agg(["mean","std","count"]); g.to_csv(os.path.join("figures", "tables", "table_greedy_reward.csv")); print(g.round(3))

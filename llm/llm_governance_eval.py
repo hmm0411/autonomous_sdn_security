@@ -18,7 +18,7 @@ Kết quả: figures/tables/llm_governance_records.csv, llm_governance_summary.c
 import argparse, re, time
 from pathlib import Path
 import numpy as np, pandas as pd, torch, joblib
-import make_figures as mf
+from scripts import make_figures as mf
 from llm.prompt_builder import build_explanation_prompt, ACTION_MAP
 
 ap = argparse.ArgumentParser()

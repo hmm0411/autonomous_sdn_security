@@ -73,13 +73,13 @@ Network (Mininet + attacks)
 ```bash
 
 autonomous_sdn_security/
-├── infra/               # Mock SDN controller + Mininet
 ├── rl_engine/           # RL agent (DQN / PPO)
 ├── digital_twin/        # Validation layer
 ├── mlops/               # MLflow + monitoring
-├── experiments/         # Baselines & evaluation
+├── scripts/             # Training, evaluation, and reporting utilities
+├── figures/             # Generated figures and evaluation tables
 ├── traffic_generator/   # Attack simulation
-└── docker-compose.yml
+└── Dockerfile
 
 ````
 
@@ -114,6 +114,23 @@ cd autonomous_sdn_security
 ```bash
 pip install -r requirements.txt
 ```
+
+---
+
+### Evaluation scripts
+
+Run evaluation commands from the repository root:
+
+```bash
+python scripts/run_seeds.py ppo 42
+python scripts/summarize_seeds.py
+python scripts/eval_baselines.py control_loop/main_loop.py
+python scripts/plot_per_class.py
+python -m llm.llm_governance_eval --dry-run
+```
+
+Generated figures are saved in `figures/`, and CSV reports are saved in
+`figures/tables/`. Training checkpoints and curves are saved in `out/`.
 
 ---
 
